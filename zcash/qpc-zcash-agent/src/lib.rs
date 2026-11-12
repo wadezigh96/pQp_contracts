@@ -1,10 +1,23 @@
-//! Minimal, fail-closed address policy for the QPC Zcash payment adapter.
+//! QPC's fail-closed Zcash adapter boundary.
 //!
-//! This crate validates recipient address shape and network only. It does not
-//! create wallets, hold keys, select a route, build transactions, or broadcast.
+//! Implemented today: Unified Address validation, privacy policy, intent
+//! lifecycle tracking, and a wallet observation interface.
+//! Not implemented: wallet synchronization, key custody, shielded transaction
+//! construction, signing, broadcasting, cross-chain routing, or settlement.
 
 use zcash_address::unified::{self, Encoding};
 use zcash_protocol::{consensus::NetworkType, PoolType};
+
+pub mod payment;
+pub mod privacy_policy;
+pub mod wallet;
+
+pub use payment::{
+    IntentError, PaymentId, PaymentIntent, PaymentReceipt, PaymentState, PaymentTracker,
+    SourceChain,
+};
+pub use privacy_policy::{PaymentMemo, PrivacyPolicy, PrivacyPolicyError, PrivateRecipient};
+pub use wallet::{WalletBackend, WalletCapabilities, WalletError, WalletObservation};
 
 /// The network an agent payment is intended to settle on.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -1,0 +1,32 @@
+name: QPC Zcash Adapter Checks
+
+on:
+  push:
+    branches: ["qpc/**"]
+    paths:
+      - "zcash/qpc-zcash-agent/**"
+      - ".github/workflows/zcash-adapter.yml"
+  pull_request:
+    paths:
+      - "zcash/qpc-zcash-agent/**"
+      - ".github/workflows/zcash-adapter.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  zcash-adapter:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: zcash/qpc-zcash-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: zcash/qpc-zcash-agent
+      - name: Run adapter tests
+        run: cargo test
+      - name: Check adapter
+        run: cargo check
