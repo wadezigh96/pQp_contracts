@@ -1,0 +1,12 @@
+[package]
+name = "qpc-zcash-agent"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Fail-closed Zcash Unified Address policy checks for QPC agent payment routing"
+
+[dependencies]
+zcash_address = "0.13.0"
+zcash_protocol = "0.10.6"
+
+[dev-dependencies]
