@@ -4,7 +4,7 @@
 //! point amounts, raw destination addresses, transaction IDs, or keys are
 //! included in public intent/receipt structures.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct PaymentId([u8; 32]);
@@ -19,7 +19,7 @@ impl PaymentId {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum SourceChain {
     Near,
     Ethereum,
@@ -53,6 +53,7 @@ pub enum IntentError {
     ZeroAmount,
     Expired,
     DuplicatePaymentId,
+    DuplicateNonce,
     UnknownPaymentId,
     InvalidTransition,
 }
@@ -101,6 +102,7 @@ impl PaymentState {
 #[derive(Default)]
 pub struct PaymentTracker {
     states: HashMap<PaymentId, PaymentState>,
+    consumed_nonces: HashSet<(SourceChain, u64)>,
 }
 
 impl PaymentTracker {
@@ -113,7 +115,13 @@ impl PaymentTracker {
         if self.states.contains_key(&intent.id) {
             return Err(IntentError::DuplicatePaymentId);
         }
+        let nonce_key = (intent.source_chain, intent.nonce);
+        if self.consumed_nonces.contains(&nonce_key) {
+            return Err(IntentError::DuplicateNonce);
+        }
+
         self.states.insert(intent.id, PaymentState::Created);
+        self.consumed_nonces.insert(nonce_key);
         Ok(())
     }
 

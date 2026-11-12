@@ -2,28 +2,28 @@ use qpc_zcash_agent::{
     IntentError, PaymentId, PaymentIntent, PaymentState, PaymentTracker, SourceChain,
 };
 
-fn intent() -> PaymentIntent {
+fn intent(id: u8, nonce: u64) -> PaymentIntent {
     PaymentIntent {
-        id: PaymentId::new([7; 32]),
+        id: PaymentId::new([id; 32]),
         source_chain: SourceChain::Near,
         amount_zatoshis: 25_000,
-        nonce: 1,
+        nonce,
         expires_at_unix: 2_000,
     }
 }
 
 #[test]
 fn rejects_zero_amount_and_expired_intents() {
-    let mut zero = intent();
+    let mut zero = intent(7, 1);
     zero.amount_zatoshis = 0;
     assert_eq!(zero.validate(1_000), Err(IntentError::ZeroAmount));
-    assert_eq!(intent().validate(2_000), Err(IntentError::Expired));
+    assert_eq!(intent(7, 1).validate(2_000), Err(IntentError::Expired));
 }
 
 #[test]
 fn rejects_duplicate_payment_ids() {
     let mut tracker = PaymentTracker::default();
-    let payment = intent();
+    let payment = intent(7, 1);
     tracker.register(&payment, 1_000).unwrap();
     assert_eq!(
         tracker.register(&payment, 1_000),
@@ -32,21 +32,29 @@ fn rejects_duplicate_payment_ids() {
 }
 
 #[test]
+fn rejects_replayed_nonce_for_same_source_chain() {
+    let mut tracker = PaymentTracker::default();
+    tracker.register(&intent(7, 1), 1_000).unwrap();
+    assert_eq!(
+        tracker.register(&intent(8, 1), 1_000),
+        Err(IntentError::DuplicateNonce)
+    );
+}
+
+#[test]
 fn enforces_ordered_lifecycle_and_idempotent_duplicate_callback() {
     let mut tracker = PaymentTracker::default();
-    let payment = intent();
+    let payment = intent(7, 1);
     tracker.register(&payment, 1_000).unwrap();
 
     assert_eq!(
         tracker.transition(payment.id, PaymentState::PolicyApproved),
         Ok(PaymentState::PolicyApproved)
     );
-    // Replayed callback does not change state or fail.
     assert_eq!(
         tracker.transition(payment.id, PaymentState::PolicyApproved),
         Ok(PaymentState::PolicyApproved)
     );
-    // Cannot skip route quote and claim a destination was validated.
     assert_eq!(
         tracker.transition(payment.id, PaymentState::DestinationValidated),
         Err(IntentError::InvalidTransition)
