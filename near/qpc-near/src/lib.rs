@@ -503,7 +503,7 @@ mod tests {
     #[should_panic(expected = "caller is not the policy agent")]
     fn unrelated_account_cannot_dispatch() {
         let mut contract = setup();
-        set_context("attacker.near", NOW, 0);
+        set_context("attacker.near", NOW, 1);
         let _promise = contract.dispatch_action(request(0, "req_1", 1));
     }
 
@@ -511,7 +511,7 @@ mod tests {
     #[should_panic(expected = "invalid or replayed nonce")]
     fn nonce_replay_is_rejected() {
         let mut contract = setup();
-        set_context("agent.near", NOW);
+        set_context("agent.near", NOW, 1);
         let _first = contract.dispatch_action(request(0, "req_1", 1));
         let _second = contract.dispatch_action(request(0, "req_2", 1));
     }
@@ -520,7 +520,7 @@ mod tests {
     #[should_panic(expected = "arguments hash mismatch")]
     fn argument_substitution_is_rejected() {
         let mut contract = setup();
-        set_context("agent.near", NOW);
+        set_context("agent.near", NOW, 1);
         let mut malicious = request(0, "req_1", 1);
         malicious.args = br#"{"recipient":"attacker.near"}"#.to_vec();
         let _promise = contract.dispatch_action(malicious);
@@ -530,7 +530,7 @@ mod tests {
     #[should_panic(expected = "action budget exceeded")]
     fn cumulative_action_budget_is_enforced() {
         let mut contract = setup();
-        set_context("agent.near", NOW);
+        set_context("agent.near", NOW, 10);
         let _first = contract.dispatch_action(request(0, "req_1", 10));
         let _second = contract.dispatch_action(request(1, "req_2", 10));
         let _third = contract.dispatch_action(request(2, "req_3", 1));
@@ -541,7 +541,7 @@ mod tests {
     fn paused_policy_fails_closed() {
         let mut contract = setup();
         contract.set_paused("policy_1".to_string(), true);
-        set_context("agent.near", NOW);
+        set_context("agent.near", NOW, 1);
         let _promise = contract.dispatch_action(request(0, "req_1", 1));
     }
 
@@ -549,7 +549,7 @@ mod tests {
     #[should_panic(expected = "policy expired")]
     fn expired_policy_fails_closed() {
         let mut contract = setup();
-        set_context("agent.near", NOW + 10_000_000_000, 0);
+        set_context("agent.near", NOW + 10_000_000_000, 1);
         let _promise = contract.dispatch_action(request(0, "req_1", 1));
     }
 }
