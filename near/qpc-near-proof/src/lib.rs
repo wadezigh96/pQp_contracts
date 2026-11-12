@@ -3,10 +3,13 @@
 //! Verifies an execution outcome proof against a caller-supplied trusted block
 //! Merkle root. It does NOT authenticate that root as a finalized NEAR head;
 //! consensus light-client verification is a separate required component.
+//!
+//! The Merkle/hash procedure follows the NEAR light-client protocol implementation:
+//! near/near-light-client, crates/protocol/src/lib.rs and merkle_util.rs.
 
 use near_jsonrpc_primitives::types::light_client::RpcLightClientExecutionProofResponse;
-use near_light_client_protocol::{Proof, Protocol};
-use near_primitives_core::hash::CryptoHash;
+use near_primitives::merkle::{combine_hash, Direction, MerklePathItem};
+use near_primitives_core::{borsh::BorshSerialize, hash::CryptoHash};
 use serde::Deserialize;
 use std::{fmt, str::FromStr};
 
@@ -68,6 +71,48 @@ struct QpcPayment {
     amount: String,
     created_at_ns: String,
     expires_at_ns: String,
+}
+
+fn compute_root_from_path<'a>(
+    path: impl Iterator<Item = &'a MerklePathItem>,
+    item_hash: CryptoHash,
+) -> CryptoHash {
+    let mut hash = item_hash;
+    for node in path {
+        hash = match node.direction {
+            Direction::Left => combine_hash(&node.hash, &hash),
+            Direction::Right => combine_hash(&hash, &node.hash),
+        };
+    }
+    hash
+}
+
+fn verify_execution_inclusion(
+    proof: &RpcLightClientExecutionProofResponse,
+    trusted_head_block_merkle_root: CryptoHash,
+) -> bool {
+    let block_hash = proof.block_header_lite.hash();
+    if block_hash != proof.outcome_proof.block_hash {
+        return false;
+    }
+
+    let outcome_hash = CryptoHash::hash_borsh(proof.outcome_proof.to_hashes());
+    let shard_outcome_root = compute_root_from_path(
+        proof.outcome_proof.proof.iter(),
+        outcome_hash,
+    );
+    let outcome_leaf = CryptoHash::hash_borsh(shard_outcome_root);
+    let block_outcome_root = compute_root_from_path(
+        proof.outcome_root_proof.iter(),
+        outcome_leaf,
+    );
+    let outcome_verified = block_outcome_root == proof.block_header_lite.inner_lite.outcome_root;
+    let block_verified = compute_root_from_path(
+        proof.block_proof.iter(),
+        block_hash,
+    ) == trusted_head_block_merkle_root;
+
+    outcome_verified && block_verified
 }
 
 fn parse_qpc_escrow_event(logs: &[String]) -> Result<QpcPayment, VerifyError> {
@@ -135,15 +180,14 @@ pub fn verify_qpc_payment_proof(
 
     let outcome_id = proof.outcome_proof.id.to_string();
     let block_hash = proof.outcome_proof.block_hash.to_string();
-    let logs = proof.outcome_proof.outcome.logs.clone();
+    let payment = {
+        let payment = parse_qpc_escrow_event(&proof.outcome_proof.outcome.logs)?;
+        if !verify_execution_inclusion(&proof, trusted_root) {
+            return Err(VerifyError::InvalidMerkleProof);
+        }
+        payment
+    };
 
-    let proof_valid = Protocol::inclusion_proof_verify(Proof::Basic {
-        head_block_root: trusted_root,
-        proof: Box::new(proof),
-    }).map_err(|e| VerifyError::Json(e.to_string()))?;
-    if !proof_valid { return Err(VerifyError::InvalidMerkleProof); }
-
-    let payment = parse_qpc_escrow_event(&logs)?;
     Ok(VerifiedPayment {
         payment_id: payment.payment_id,
         token_id: payment.token_id,
@@ -171,9 +215,7 @@ mod tests {
     fn official_near_fixture_proof_is_included_in_trusted_root() {
         let root = CryptoHash::from_str(ROOT).unwrap();
         let proof: RpcLightClientExecutionProofResponse = serde_json::from_str(FIXTURE).unwrap();
-        assert!(Protocol::inclusion_proof_verify(Proof::Basic {
-            head_block_root: root, proof: Box::new(proof),
-        }).unwrap());
+        assert!(verify_execution_inclusion(&proof, root));
     }
 
     #[test]
@@ -183,9 +225,7 @@ mod tests {
             "11111111111111111111111111111111".into());
         let root = CryptoHash::from_str(ROOT).unwrap();
         let proof: RpcLightClientExecutionProofResponse = serde_json::from_value(value).unwrap();
-        assert!(!Protocol::inclusion_proof_verify(Proof::Basic {
-            head_block_root: root, proof: Box::new(proof),
-        }).unwrap());
+        assert!(!verify_execution_inclusion(&proof, root));
     }
 
     fn log(event: &str, amount: &str) -> String {
@@ -198,23 +238,19 @@ mod tests {
         assert_eq!(payment.payment_id, "pay-1");
         assert_eq!(payment.amount, "1000000");
     }
-
     #[test]
     fn rejects_non_decimal_amount() {
         assert!(parse_qpc_escrow_event(&[log("payment_escrowed", "1e9")]).is_err());
     }
-
     #[test]
     fn rejects_duplicate_qpc_events() {
         assert!(parse_qpc_escrow_event(&[
             log("payment_escrowed", "10"), log("payment_escrowed", "10")
         ]).is_err());
     }
-
     #[test]
     fn rejects_unknown_event_fields() {
         let payload = r#"{"standard":"qpc","version":"1.0.0","event":"payment_escrowed","extra":true,"data":[]}"#;
-        let parsed = serde_json::from_str::<QpcEvent>(payload);
-        assert!(parsed.is_err());
+        assert!(serde_json::from_str::<QpcEvent>(payload).is_err());
     }
 }
