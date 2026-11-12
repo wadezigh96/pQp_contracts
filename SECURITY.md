@@ -1,106 +1,70 @@
-# Security Model
+# PQP Security Model
 
 ## Scope
 
-POA Agent Finance is a policy-control layer for agentic finance. It does not attempt to make an agent trustworthy. Instead, it limits what an agent key can do on-chain.
+PQP is a proposed on-chain policy and agent-protection framework with a post-quantum migration strategy. This document describes intended controls, not a claim that they are already implemented.
 
-## Security boundary
+## Trust boundaries
 
-The owner controls:
+| Component | Trust assumption |
+|---|---|
+| Owner/governance | Root authority; must use multisig, hardware-backed keys and recovery |
+| Agent | Potentially compromised; least privilege only |
+| PQP contract/program | Deterministic enforcement, subject to bugs and host-chain behavior |
+| L1 consensus | External dependency; PQP cannot repair consensus vulnerabilities |
+| RPC/indexer | Untrusted for authorization unless independently verified |
+| Monitor/AI detector | Advisory and fallible; no unrestricted custody |
+| Bridge/relayer/MPC | Independent trust boundary |
+| External protocol | May be malicious, compromised or economically unsafe |
 
-- agent activation and revocation
-- native spending caps and per-transaction limits
-- token spending policies
-- target/function-selector permissions
-- token recipient permissions
-- emergency pause
-- ownership transfer
-
-The agent controls only actions explicitly permitted by the active policy.
-
-## Threat model
+## Threats and required controls
 
 ### Compromised agent key
+Short expiry, per-action and cumulative limits, explicit target/method/argument constraints, destination restrictions, nonce/replay domain, revoke and pause. Agent never receives owner privileges.
 
-Expected result: the attacker can only use permissions that are currently active, subject to expiry, allowlists, per-transaction limits and cumulative caps.
+### Malicious destination
+Avoid unrestricted generic call forwarding. Validate security-critical calldata arguments, not only selectors. Bound attached value and token approvals. Restrict approval, role-change, admin and upgrade methods by default.
 
-The agent cannot:
+### Replay and duplicate requests
+Bind chain/network domain, contract ID, policy ID/version, agent identity and nonce into signed requests. Nonce consumption must be atomic with authorization. Cross-chain messages need source/destination domains, unique message IDs and finality validation.
 
-- change policy
-- change owner
-- withdraw native assets as owner
-- bypass the target/selector allowlist
-- bypass token recipient allowlists
-- reset its own spending counters
+### Reentrancy and asynchronous callbacks
+EVM adapters require reentrancy protection and checks-effects-interactions. NEAR adapters must model asynchronous receipts, callback authentication, duplicate callbacks and partial failures. Solana adapters must validate account ownership, signer status, PDA seeds and writable account constraints.
 
-### Malicious destination contract
+### Owner/governance compromise
+Use multisig or threshold governance, timelock for high-impact changes, separate emergency pause from asset withdrawal, and rehearse recovery. Do not claim protection against a fully compromised root authority.
 
-A destination contract can attempt reentrancy or return failure data.
+### Quantum-capable adversary
+Inventory all signature and key-agreement dependencies. Prefer standardized PQ signatures where the chain's native transaction layer supports them. Provide versioned crypto-agility and key-rotation metadata. Do not confuse ML-KEM key establishment with digital signatures. Verify the full path: wallet, account key, transaction validation, validators/consensus, bridge and dependent services.
 
-Mitigations:
+### Monitor or AI compromise
+Monitoring is not a source of truth. Alerts may trigger only explicitly granted narrow pause powers. No monitor-controlled transfer, withdrawal or policy expansion.
 
-- non-reentrant execution
-- accounting before external call
-- revert on failed external calls
-- explicit target + selector permissions
+## Inherited POA prototype — audit findings
 
-### Malicious or non-standard ERC-20
+The legacy Solidity POAAgentFinance contract is retained as an audit input, not PQP production code.
 
-Token transfer handling accepts either no return data or an explicit true. Failed transfers revert.
+1. HIGH — generic call arguments are not validated. execute() checks only target and 4-byte selector. An allowed selector can still carry attacker-controlled recipient, spender, amount or other dangerous arguments.
+2. HIGH — generic call forwarding is too broad for a security product. There is no per-method argument schema or typed action adapter. Sensitive methods such as token approvals, role changes, arbitrary transfers and upgrade calls need explicit denial or dedicated validation.
+3. MEDIUM — invariant configuration contains an unsupported key. foundry.toml uses target_contracts; Foundry CI reports it as unknown, so intended invariant targeting is not configured.
+4. BUILD BLOCKER — latest observed stateful test cast fails. GitHub Actions fails at test/POAAgentFinance.stateful.t.sol:14 because a non-payable address is cast to a contract with a payable receive function. The test step is skipped after build failure.
+5. TEST GAP — handler scaffolding is not proof of meaningful invariant campaigns. The handler has a construction test; the invariant harness does not cover all action paths or malicious argument combinations.
+6. ROOT TRUST — owner can change policies and withdraw native funds. This must be protected with multisig/timelock and documented.
 
-A malformed return payload fails closed rather than being accepted as a successful transfer.
+These findings are based on source and the latest observed GitHub Actions run for main commit 76e23e1a50a6d23f188c6954c07bb78d8c28fa9e (26 September 2026). They have not been independently audited.
 
-### Compromised owner
+## Security acceptance criteria
 
-The owner is the root authority. A compromised owner can change policies, permissions, pause the system, or withdraw native funds.
-
-This is an intentional trust boundary, not something the agent policy can solve.
-
-Operational protection of the owner key is therefore critical.
-
-### Replay / duplicate execution
-
-Each successful execution consumes a monotonic contract nonce and emits an execution event. The contract itself does not accept off-chain signed intents; replay protection for future signed application layers must be implemented at that layer.
-
-## Policy lifecycle
-
-An active agent policy cannot be overwritten to reset native spending.
-
-An active agent's token policy cannot be overwritten to reset token spending.
-
-The intended lifecycle is:
-
-Configure -> Execute -> Revoke/Expire -> Reconfigure
-
-## Emergency response
-
-The owner can pause the contract. Pause blocks agent execution and deposits through the explicit deposit() function. Native transfers sent directly to receive() remain accepted so funds cannot become permanently stuck solely because the contract is paused.
-
-The owner can revoke an individual agent without affecting other agents.
+- No arbitrary call forwarding without typed argument validation.
+- No policy mutation by agent identities.
+- No spending counter reset through policy edits.
+- Expiry, revocation and pause fail closed.
+- Signatures bind to domain, policy version and nonce.
+- Async/cross-chain states are explicit and idempotent.
+- Upgrade and recovery authority are threshold-controlled.
+- Adversarial tests cover malformed inputs, callbacks, replays, malicious targets and compromised agents.
+- Independent audit before production funds.
 
 ## Audit status
 
-This repository is not independently audited. Tests are security evidence, not a guarantee of correctness.
-
-Before production deployment:
-
-1. run forge build
-2. run forge test
-3. run invariant/stateful campaigns
-4. run static analysis
-5. review deployment configuration
-6. obtain independent security review
-7. verify the deployed bytecode and constructor owner
-
-## Out of scope
-
-The core contract does not provide:
-
-- AI model safety
-- oracle correctness
-- protocol-specific economic safety
-- private-key custody
-- off-chain authentication
-- UI security
-- cross-chain replay protection
-- automatic recovery from a compromised owner
+PQP is not independently audited. The inherited POA prototype has known issues listed above. No claim of production readiness, hack-proof security or end-to-end post-quantum security is made.

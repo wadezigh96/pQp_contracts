@@ -1,305 +1,87 @@
-# POA --- Proof Of Action
+# PQP — Post-Quantum Persistence
 
-<div align="center">
+**Universal On-Chain Cybersecurity & Agent Protection Protocol**
 
-**Policy-Controlled Agentic Finance Infrastructure**
+PQP is a chain-adaptable security framework for smart contracts, digital assets, and autonomous agents. It combines deterministic on-chain policy enforcement with post-quantum cryptographic agility and chain-specific security adapters.
 
-**Human intent → Policy → Agent execution → On-chain settlement → Audit**
+> Agents may act within explicit policy. They never receive unlimited authority.
 
-</div>
+## What PQP is — and is not
 
----
+PQP is designed to provide reusable security controls across multiple Layer-1 networks. It is not a promise that any blockchain, application, wallet, bridge, or contract is unhackable or fully quantum-safe.
 
-## About
+PQP separates three jobs:
+1. On-chain enforcement: permissions, spending limits, expiry, replay protection, pause/revoke, and auditable state transitions.
+2. Post-quantum readiness: crypto-agile identity and authorization interfaces that can adopt standardized post-quantum signatures where the host chain supports them.
+3. Threat monitoring: off-chain detection and alerting. Monitoring can recommend or request a pause, but it is not a substitute for deterministic contract checks or authorized governance.
 
-POA Agent Finance is a standalone smart-contract foundation for autonomous and AI-assisted finance.
-
-The core principle is simple:
-
-> **The agent may execute within a policy, but the agent never becomes the owner.**
-
-The contract separates **human authority** from **agent execution authority**. Policies define what an agent can do, how much it can spend, where it can send funds, which contract functions it can call, and when its authority expires.
-
-
-
-## Core workflow
-
-```mermaid
-flowchart TB
-    U[Human / Owner] --> P[Create Agent Policy]
-    P --> G[Guardrails]
-
-    G --> A[Agent Authority]
-    G --> C[Call Allowlist]
-    G --> R[Recipient Allowlist]
-    G --> T[Token Policy]
-    G --> E[Expiry]
-
-    A --> X[Agent Request]
-
-    X --> V{Policy Check}
-    V -->|blocked| B[Reject]
-    V -->|allowed| S[State Accounting]
-
-    S --> Q[On-chain Execution]
-    Q --> L[Nonce + Events]
-    L --> Z[Settlement]
-
-    U -->|Pause / Revoke| G
-```
-
-### Execution path
-
-**Configure → Activate → Request → Validate → Account → Execute → Emit event**
-
-1. Owner configures an agent.
-2. Agent receives limited authority.
-3. Agent submits an execution request.
-4. Contract checks expiry, pause state, target, selector, recipient and spending limits.
-5. Spending accounting is updated.
-6. The approved call or token transfer executes.
-7. Nonce and event data provide an on-chain execution trail.
-8. Owner can pause or revoke authority at any time.
-
----
-
-## Security architecture
-
-```mermaid
-flowchart LR
-    O[Owner] -->|policy control| PC[POA Policy Controller]
-
-    PC --> AP[Agent Policy]
-    PC --> CL[Call Allowlist]
-    PC --> RL[Recipient Allowlist]
-    PC --> TP[Token Policy]
-    PC --> EX[Expiry]
-    PC --> PP[Emergency Pause]
-
-    AG[Agent Key] -->|limited request| G{Guardrails}
-    AP --> G
-    CL --> G
-    RL --> G
-    TP --> G
-    EX --> G
-    PP --> G
-
-    G -->|pass| CE[Contract Execution]
-    G -->|fail| RE[Revert]
-
-    CE --> EV[Nonce + Events]
-    CE --> SET[Settlement]
-```
-
-### Security boundaries
+## Security layers
 
 | Layer | Responsibility |
 |---|---|
-| Owner | Creates, changes, pauses and revokes policies |
-| Agent | Requests permitted execution only |
-| Policy | Defines limits and permissions |
-| Contract | Enforces policy deterministically |
-| Nonce | Provides monotonic execution sequencing |
-| Events | Provide an on-chain audit trail |
-| Pause | Emergency global execution stop |
-| Expiry | Automatic authority termination |
-| Reentrancy guard | Prevents nested execution |
+| PQP Policy Core | Least-privilege roles, limits, allowlists, expiry, nonces, pause/revoke |
+| PQP Crypto Agility | Versioned key/signature schemes and migration paths |
+| PQP Agent Guard | Bounded agent actions, budgets, destinations, method permissions |
+| PQP Contract Guard | Contract-call constraints and fail-closed validation |
+| PQP Monitor | Off-chain anomaly detection, alerting, incident evidence |
+| PQP Chain Adapters | Native enforcement and account semantics per L1 |
+| PQP Recovery | Timelock, multisig, key rotation, emergency controls |
 
-AI logic is **not trusted as a security boundary**. The smart contract remains the final enforcement layer.
+## Initial implementation: NEAR
 
----
+The first native implementation will target NEAR using Rust and the NEAR SDK.
 
-## Project structure
+Planned modules:
+- pqp-policy: policy lifecycle, roles, limits, expiry and revocation.
+- pqp-agent-guard: constrained agent requests and per-action accounting.
+- pqp-audit: events and versioned policy records.
+- pqp-crypto-agility: algorithm identifiers and migration metadata; no home-grown cryptography.
+- pqp-near-adapter: NEAR account, access-key and cross-contract-call integration.
 
-```
-poa_contracts/
-├── contracts/
-│   └── POAAgentFinance.sol       # Core policy + execution contract
-│
-├── test/
-│   ├── POAAgentFinance.security.t.sol
-│   │                              # Security regression tests
-│   ├── POAAgentFinance.invariant.t.sol
-│   │                              # State/invariant checks
-│   └── POAAgentFinance.stateful.t.sol
-│                                  # Stateful handler scenarios
-│
-├── script/                        # Deployment scripts
-├── foundry.toml                   # Foundry compiler/test configuration
-├── README.md                      # Architecture + usage overview
-└── ARCHITECTURE.md                # Detailed system design
-```
+NEAR's published post-quantum roadmap reports ML-DSA account-signing support and describes Chain Signatures / NEAR Intents, while explaining that validator-consensus migration is a separate and harder task. PQP will rely only on capabilities verified in the actual target network and SDK version. A PQP contract alone does not upgrade NEAR consensus.
 
-The repository keeps the **security-critical policy layer small and isolated**. Application-specific agents, APIs, wallets and protocol adapters can be built above it later without changing the core security model.
+## Multi-L1 strategy
 
----
+PQP uses a shared policy specification, not one supposedly universal bytecode contract.
 
-## Policy model
+| Network family | Adapter direction |
+|---|---|
+| NEAR | Native Rust contract and NEAR account/access-key model |
+| EVM (Ethereum, BNB Chain, Avalanche, etc.) | Solidity policy guard and chain-specific signature/verifier support |
+| Solana | Native Rust program and Solana instruction/account model |
+| Other L1s | Separate adapter after capability and threat-model review |
 
-### Native assets
+Each adapter must pass shared policy conformance cases plus chain-specific security tests. A bridge or relayer is a separate trust boundary.
 
-Each agent receives:
+## Repository status
 
-- maximum policy duration: **30 days**
-- total native spending cap
-- per-transaction native limit
-- active / revoked state
+The existing Solidity POAAgentFinance contract is retained as a legacy EVM prototype and audit input. It is not the PQP implementation and does not provide post-quantum cryptography.
 
-### ERC-20 assets
+This branch is a design and implementation workspace. No production deployment, external audit, or post-quantum verification claim is made.
 
-Each agent/token pair can define:
+## Security-first development
 
-- cumulative token cap
-- per-transaction token limit
-- cumulative spending accounting
+1. Audit the inherited EVM prototype and preserve findings.
+2. Define a chain-neutral policy specification and threat model.
+3. Implement the smallest NEAR-native policy core in Rust.
+4. Add unit, property, adversarial and integration tests.
+5. Verify crypto capabilities and gas/storage costs on the target network.
+6. Build EVM and Solana adapters only after the NEAR policy model is stable.
+7. Obtain independent security review before handling real assets.
 
-### Contract calls
+## Important limitations
 
-Calls require an explicit:
+- A policy contract cannot prevent vulnerabilities in L1 consensus, validators, wallets, RPCs, bridges, oracles, or external protocols.
+- Off-chain AI anomaly detection is probabilistic. It must not silently gain authority to move funds.
+- ML-DSA, SLH-DSA and ML-KEM have different purposes. Digital signatures and key establishment are not interchangeable.
+- A chain is post-quantum ready only to the extent its transaction authentication, account keys, consensus, bridges, and dependent infrastructure have migrated.
+- Passing tests is evidence, not a security guarantee.
 
-**agent + target + function selector**
+## Standards and primary references
 
-allowlist entry.
+- NIST FIPS 203 — ML-KEM: https://csrc.nist.gov/pubs/fips/203/final
+- NIST FIPS 204 — ML-DSA: https://csrc.nist.gov/pubs/fips/204/final
+- NIST FIPS 205 — SLH-DSA: https://csrc.nist.gov/pubs/fips/205/final
+- NEAR quantum-safe roadmap (24 August 2026): https://www.near.org/blog/near-quantum-safe-roadmap
 
-### Token recipients
-
-Token transfers require an explicit:
-
-**agent + recipient**
-
-allowlist entry.
-
----
-
-## Owner lifecycle
-
-```
-Create Policy
-     ↓
-Activate Agent
-     ↓
-Agent Executes
-     ↓
- ┌───────────────┐
- │ Active Policy │
- └───────────────┘
-     ↓
-  Pause / Revoke / Expire
-     ↓
-Authority Ends
-```
-
-The owner remains the root authority throughout the lifecycle.
-
----
-
-## Agent execution lifecycle
-
-```
-Agent
-  │
-  ▼
-Request
-  │
-  ▼
-Is active?
-  │ no ─────► Revert
-  │ yes
-  ▼
-Is paused?
-  │ yes ────► Revert
-  │ no
-  ▼
-Policy validation
-  │
-  ├── expiry
-  ├── target + selector
-  ├── recipient
-  ├── per-tx limit
-  └── cumulative cap
-  │
-  ▼
-Accounting
-  │
-  ▼
-On-chain call
-  │
-  ▼
-Nonce + event
-  │
-  ▼
-Settlement
-```
-
----
-
-## Security status
-
-Current defenses include:
-
-- two-step ownership transfer
-- agent expiry
-- native spending caps
-- native per-transaction limits
-- ERC-20 spending caps
-- ERC-20 per-transaction limits
-- target/function-selector allowlisting
-- recipient allowlisting
-- emergency pause
-- monotonic nonce
-- reentrancy protection
-- defensive ERC-20 transfer handling
-- policy validation
-- security regression tests
-- invariant/stateful test scaffolding
-
-This repository has **not been independently audited**. Passing local or CI tests does not constitute a security audit. Production funds should not be deployed until independent review, fuzzing, static analysis and deployment validation are complete.
-
----
-
-## Development
-
-```bash
-forge build
-forge test
-```
-
-The intended development loop is:
-
-**Change → Build → Security tests → Invariant/stateful tests → Review → Deploy**
-
----
-
-## Future application layer
-
-The core contract intentionally does not contain protocol-specific logic.
-
-A future application can sit above it:
-
-```
-User / AI Agent
-      │
-      ▼
-Application / API
-      │
-      ▼
-Policy Builder
-      │
-      ▼
-POAAgentFinance
-      │
-      ├── DEX
-      ├── Lending
-      ├── Payments
-      └── Other protocols
-```
-
-This keeps integrations replaceable while the security boundary remains centralized in the POA contract.
-
----
-
-<div align="center">
-
-**Policy first. Agent second. Settlement last.**
-
-</div>
+**Policy first. Verify cryptography. Execute only within bounds.**

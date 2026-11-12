@@ -1,270 +1,125 @@
-# POA Agent Finance — Architecture
+# PQP Architecture
 
-## 1. Design goal
+## 1. Mission and bounded security claim
 
-POA is a policy enforcement layer for agentic finance.
+PQP (Post-Quantum Persistence) is a modular security framework for on-chain assets and agentic execution across Layer-1 networks.
 
-It is designed around one separation:
+PQP can enforce explicit policy in a contract or native program, integrate post-quantum account/signature capabilities where the host chain supports them, and provide monitoring and recovery controls. It cannot guarantee that an L1, bridge, wallet, oracle, RPC, external protocol or operator is immune to compromise.
 
-- **Human = authority**
-- **Agent = constrained executor**
-- **Contract = deterministic enforcement**
+Human/governance is the authority. The agent is a constrained requester. The PQP adapter is the deterministic policy enforcement point.
 
-The AI does not receive the owner's private key and does not get unrestricted contract access.
+## 2. Layered architecture
 
-## 2. High-level architecture
+Human / Governance
+  -> Chain-neutral PQP Policy Specification
+  -> NEAR Adapter (Rust) | EVM Adapter (Solidity) | Solana Adapter (Rust)
+  -> Native execution and chain-local policy state
+  -> Events and audit data
+  -> Off-chain PQP Monitor (alerts; no implicit custody)
 
-```
-                    HUMAN
-                      │
-                      ▼
-              ┌───────────────┐
-              │ Policy Builder│
-              └───────┬───────┘
-                      │
-          ┌───────────┴───────────┐
-          ▼           ▼           ▼
-       Limits      Allowlist    Expiry
-          │           │           │
-          └───────────┬───────────┘
-                      ▼
-              ┌───────────────┐
-              │ POA CONTRACT  │
-              │ Enforcement   │
-              └───────┬───────┘
-                      │
-              ┌───────┴───────┐
-              ▼               ▼
-        Agent Execution    Rejection
-              │
-              ▼
-          Settlement
-              │
-              ▼
-       Events + Nonce
-```
+The policy specification is shared. Execution code, signature verification, account permissions, finality assumptions and storage models remain chain-specific.
 
-## 3. Component responsibilities
+## 3. Policy model
 
-### POAAgentFinance.sol
+Every policy should define:
+- stable policy ID scoped to chain and contract;
+- monotonically increasing policy version;
+- owner/governance authority and agent identity;
+- valid-after and expiry;
+- paused and revoked state;
+- allowed action identifiers (target + method/instruction, not display label only);
+- allowed assets and destinations where applicable;
+- per-action and cumulative spend limits;
+- maximum attached value/deposit;
+- nonce or sequence domain;
+- policy update and recovery threshold.
 
-The contract is the security boundary.
+A policy update must not reset consumed limits unless a new policy version explicitly defines a safe reset and emits an auditable event. Expiry and revocation fail closed.
 
-It owns:
+## 4. Agent request pipeline
 
-- agent activation state
-- expiry
-- native spending accounting
-- ERC-20 spending accounting
-- call permissions
-- recipient permissions
-- pause state
-- ownership lifecycle
-- execution nonce
-- execution events
+1. Authenticate the requester using the host chain's native transaction/account model.
+2. Resolve the current policy and version.
+3. Reject if paused, revoked, not-yet-valid or expired.
+4. Validate action ID, target, method, arguments and attached value.
+5. Validate asset, destination, per-action limit and cumulative budget.
+6. Consume a chain-specific nonce and update accounting before external interaction.
+7. Execute only the validated action.
+8. Record result status and emit an audit event.
 
-It does not decide investment strategy.
+NEAR cross-contract calls use asynchronous receipts/promises. The contract must distinguish authorized/dispatched from completed successfully. Callback design, callback access control and partial-failure accounting require dedicated tests.
 
-### Agent
+## 5. NEAR-native implementation
 
-The agent may:
+- Rust + NEAR SDK.
+- Contract account owns policy state.
+- Agent requests are authenticated by NEAR transaction signer/predecessor rules and, where appropriate, scoped Function Call Access Keys.
+- Access keys are an additional least-privilege control, not a replacement for contract policy checks.
+- Cross-contract calls are asynchronous; callbacks must be authenticated and idempotent.
+- Storage usage and attached deposit must be accounted for explicitly.
 
-- request an allowed contract call
-- request an allowed token transfer
+Proposed workspace:
+- near/Cargo.toml
+- near/pqp-near/Cargo.toml
+- near/pqp-near/src/lib.rs
+- near/pqp-near/src/policy.rs
+- near/pqp-near/src/agent.rs
+- near/pqp-near/src/execution.rs
+- near/pqp-near/src/events.rs
+- near/pqp-near/src/crypto_agility.rs
+- near/pqp-near/tests/
 
-The agent may not:
+Start with a policy registry and constrained action dispatcher. Do not add arbitrary contract-call forwarding until method arguments and attached deposits can be validated safely. A generic method-name allowlist alone is insufficient for methods whose arguments can redirect funds or grant approvals.
 
-- change its own policy
-- activate itself
-- increase its limits
-- bypass expiry
-- bypass pause
-- change recipients
-- change call permissions
+## 6. Post-quantum boundary
 
-### Owner
+NEAR's published roadmap (24 August 2026) describes ML-DSA account signing support and explains that validator consensus migration is a distinct, harder workstream. PQP must verify exact mainnet/testnet support, SDK serialization, key type, wallet support, fees and transaction compatibility before advertising a capability.
 
-The owner may:
+Application-level signature verification is separate from native transaction authentication. Do not assume a Rust contract can cheaply or natively verify ML-DSA unless the runtime exposes a supported host function/precompile or a reviewed verifier is integrated and benchmarked.
 
-- configure agents
-- revoke agents
-- configure call permissions
-- configure recipients
-- configure token policies
-- pause/unpause execution
-- withdraw native funds
-- transfer ownership
+## 7. Crypto agility
 
-## 4. Guardrail pipeline
+Use standardized algorithms; do not design custom cryptography.
 
-Every agent execution follows:
+| Standard | Correct role |
+|---|---|
+| FIPS 204 ML-DSA | Post-quantum digital signatures |
+| FIPS 205 SLH-DSA | Hash-based post-quantum digital signatures |
+| FIPS 203 ML-KEM | Key establishment/encapsulation, not transaction signing |
 
-```
-REQUEST
-  │
-  ▼
-Agent active?
-  │
-  ├── NO → REVERT
-  │
-  ▼
-Expired?
-  │
-  ├── YES → REVERT
-  │
-  ▼
-Paused?
-  │
-  ├── YES → REVERT
-  │
-  ▼
-Permission check
-  │
-  ├── FAIL → REVERT
-  │
-  ▼
-Spending check
-  │
-  ├── FAIL → REVERT
-  │
-  ▼
-Accounting
-  │
-  ▼
-External call
-  │
-  ▼
-Event + nonce
-```
+Represent algorithm ID/version, public-key and signature encoding versions, key activation/retirement, migration status and chain-native verification status. Never store private keys in PQP contracts. Key migration requires tested recovery and replay behavior.
 
-## 5. Native execution
+## 8. Threat monitoring and incident response
 
-Native execution requires:
+The on-chain contract enforces deterministic invariants. An off-chain monitor can inspect events, RPC data where available, contract changes and behavior baselines.
 
-- active agent
-- valid expiry
-- unpaused contract
-- target allowlist
-- selector allowlist
-- amount <= per-transaction limit
-- cumulative amount <= policy cap
-- sufficient contract balance
+Monitor outputs are advisory unless a separately authorized guardian mechanism is configured. Guardian powers should be narrow (for example, pause only), threshold-controlled, rate-limited and time-bounded. A monitor must never unilaterally withdraw or redirect assets.
 
-Accounting is updated before the external call. If the call reverts, the entire transaction reverts, including the accounting update.
+## 9. Multi-L1 adapter contract
 
-## 6. Token execution
+Every adapter implements shared policy test vectors:
+- authorization and role separation;
+- expiry and revocation;
+- pause behavior;
+- per-action and cumulative budgets;
+- destination and method constraints;
+- replay/duplicate resistance;
+- reentrancy or callback safety;
+- failure and partial-settlement accounting;
+- upgrade and key-rotation rules;
+- event completeness.
 
-Token execution requires:
+Adapter order: NEAR native Rust first; EVM Solidity second; Solana Rust third; additional L1s only after runtime, cryptography, finality and recovery review.
 
-- active agent
-- valid expiry
-- unpaused contract
-- recipient allowlist
-- configured token policy
-- amount <= per-transaction limit
-- cumulative amount <= token cap
+Cross-chain messaging, bridges, relayers and MPC signers are separate threat domains. Future messages must bind source/destination domains, message ID, nonce, expiry and proof/finality state.
 
-The low-level ERC-20 call accepts both standard boolean-returning tokens and tokens that return no data, while rejecting failed calls and explicit false returns.
+## 10. Validation gates
 
-## 7. Emergency model
+A: specification and invariants reviewed.
+B: unit, property, fuzz and adversarial tests pass.
+C: testnet integration, callbacks, storage and gas/compute costs measured.
+D: cryptographic key formats and signing/verification paths independently validated.
+E: pause, recovery, upgrade and monitoring drills completed.
+F: independent audit and remediation completed before production funds.
 
-The owner can pause execution globally.
-
-When paused:
-
-- agent execution stops
-- token transfers through the agent stop
-- deposits through the guarded deposit function stop
-
-Owner withdrawal remains available so funds can be recovered during an emergency.
-
-## 8. Lifecycle
-
-```
-CONFIGURE
-    │
-    ▼
-ACTIVE
-    │
-    ├── EXECUTE ──► ACCOUNT ──► SETTLE
-    │
-    ├── PAUSE ────► STOP
-    │
-    ├── REVOKE ───► INACTIVE
-    │
-    └── EXPIRY ───► EXPIRED
-```
-
-## 9. Application architecture
-
-POA should remain protocol-agnostic.
-
-A future application can provide:
-
-```
-Frontend
-   │
-   ▼
-Agent / API
-   │
-   ▼
-Policy Builder
-   │
-   ▼
-POAAgentFinance
-   │
-   ├── DEX adapter
-   ├── Lending adapter
-   ├── Payment adapter
-   └── Other protocol adapters
-```
-
-The application chooses **what the agent wants to do**.
-
-POA decides **whether the agent is allowed to do it**.
-
-## 10. Testing architecture
-
-The test layers should remain separate:
-
-```
-Unit / Security
-      │
-      ▼
-Regression tests
-      │
-      ▼
-Invariant tests
-      │
-      ▼
-Stateful handler tests
-      │
-      ▼
-Static analysis
-      │
-      ▼
-External audit
-```
-
-A passing test suite is not equivalent to an independent security audit.
-
-## 11. Design principles
-
-1. Least privilege.
-2. Human-controlled authority.
-3. Deterministic enforcement.
-4. Fail closed.
-5. Short-lived agent authority.
-6. Explicit allowlists.
-7. Bounded spending.
-8. Emergency stop.
-9. No AI custody of owner keys.
-10. Keep the core contract small and protocol-agnostic.
-
-## 12. Flitzr-style application flow
-
-The intended user-facing flow can later be presented as:
-
-**Intent → Policy → Preview → Approval → Agent Request → POA Guardrails → Settlement → Audit**
-
-Unlike an application-specific agent, POA does not need to know how the strategy was generated. Its job is to enforce the final security policy on-chain.
+A green CI pipeline is not an audit and is not evidence of quantum resistance by itself.
