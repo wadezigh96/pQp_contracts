@@ -171,7 +171,7 @@ fn zero_deposit_calls_are_still_bounded_by_policy() {
 #[should_panic(expected = "Method on_action_result is private")]
 fn external_account_cannot_forge_execution_callback() {
     let mut contract = setup();
-    context("attacker.near", NOW + 1);
+    context("attacker.near", NOW + 1, 0);
     contract.on_action_result(
         "policy_1".to_string(),
         "req_1".to_string(),
