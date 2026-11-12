@@ -28,7 +28,7 @@ contract QPCPolicyCoreHandler {
     constructor() {
         qpc = new QPCPolicyCore(address(this));
         target = new StatefulTarget();
-        agent = new StatefulAgentActor(address(qpc));
+        agent = new StatefulAgentActor(payable(address(qpc)));
     }
 
     function configure(uint256 cap, uint256 txLimit) external {
