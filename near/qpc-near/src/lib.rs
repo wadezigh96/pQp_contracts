@@ -431,7 +431,7 @@ fn request_key(policy_id: &str, request_id: &str) -> String {
 
 fn log_event(event: &str, policy_id: &str, version: u32) {
     env::log_str(&format!(
-        "EVENT_JSON:{{\"standard\":\"pqp\",\"version\":\"1.0.0\",\"event\":\"{}\",\"data\":[{{\"policy_id\":\"{}\",\"policy_version\":{}}}]}}",
+        "EVENT_JSON:{{\"standard\":\"qpc\",\"version\":\"1.0.0\",\"event\":\"{}\",\"data\":[{{\"policy_id\":\"{}\",\"policy_version\":{}}}]}}",
         event, policy_id, version
     ));
 }
@@ -533,7 +533,7 @@ mod tests {
         set_context("agent.near", NOW, 10);
         let _first = contract.dispatch_action(request(0, "req_1", 10));
         let _second = contract.dispatch_action(request(1, "req_2", 10));
-        let _third = contract.dispatch_action(request(2, "req_3", 1));
+        let _third = contract.dispatch_action(request(2, "req_3", 10));
     }
 
     #[test]
