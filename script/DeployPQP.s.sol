@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {POAAgentFinance} from "../contracts/POAAgentFinance.sol";
+import {PQPAgentSecurity} from "../contracts/PQPAgentSecurity.sol";
 
 interface Vm {
     function envAddress(string calldata name) external returns (address);
@@ -9,18 +9,18 @@ interface Vm {
     function stopBroadcast() external;
 }
 
-/// @title POA Agent Finance deployment
+/// @title PQP Agent Finance deployment
 /// @notice Minimal Foundry deployment script without external library dependencies.
 /// @dev Set OWNER before running: forge script script/Deploy.s.sol --rpc-url <RPC> --broadcast
-contract DeployPOAAgentFinance {
+contract DeployPQPAgentSecurity {
     Vm internal constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
-    function run() external returns (POAAgentFinance deployed) {
+    function run() external returns (PQPAgentSecurity deployed) {
         address owner = vm.envAddress("OWNER");
         require(owner != address(0), "OWNER is zero");
 
         vm.startBroadcast(owner);
-        deployed = new POAAgentFinance(owner);
+        deployed = new PQPAgentSecurity(owner);
         vm.stopBroadcast();
     }
 }
