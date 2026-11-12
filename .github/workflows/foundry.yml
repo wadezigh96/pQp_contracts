@@ -1,18 +1,18 @@
-name: Foundry
+name: QPC EVM Checks
 
 on:
   push:
-    branches: [main]
+    branches: [main, "qpc/**"]
   pull_request:
 
 jobs:
-  test:
+  evm:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
-      - name: Build
+      - name: Build EVM contracts
         run: forge build --sizes
-      - name: Test
+      - name: Run EVM tests
         run: forge test -vvv
