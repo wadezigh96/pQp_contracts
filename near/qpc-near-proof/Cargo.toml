@@ -9,6 +9,5 @@ publish = false
 near-jsonrpc-primitives = "0.20"
 near-primitives = "0.20"
 near-primitives-core = "0.20"
-near-light-client-protocol = { git = "https://github.com/near/near-light-client", rev = "522f94003fbbedfdc1e7a7de6284f5a1d25d8134" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
