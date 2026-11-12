@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {POAAgentFinance} from "../contracts/POAAgentFinance.sol";
+import {QPCPolicyCore} from "../../contracts/shared/QPCPolicyCore.sol";
 
 interface Vm {
     function prank(address) external;
@@ -23,10 +23,10 @@ contract MockToken {
 }
 
 contract ReentrantTarget {
-    POAAgentFinance internal immutable poa;
+    QPCPolicyCore internal immutable poa;
     bool public attempted;
 
-    constructor(address payable _poa) { poa = POAAgentFinance(_poa); }
+    constructor(address payable _poa) { poa = QPCPolicyCore(_poa); }
 
     function attack() external payable {
         attempted = true;
@@ -42,9 +42,9 @@ contract ReentrantTarget {
     }
 }
 
-contract POAAgentFinanceSecurityTest {
+contract QPCPolicyCoreSecurityTest {
     Vm internal constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
-    POAAgentFinance internal poa;
+    QPCPolicyCore internal poa;
     ReentrantTarget internal target;
 
     address internal constant OWNER = address(0x1001);
@@ -55,7 +55,7 @@ contract POAAgentFinanceSecurityTest {
     MockToken internal token;
 
     function setUp() public {
-        poa = new POAAgentFinance(OWNER);
+        poa = new QPCPolicyCore(OWNER);
         target = new ReentrantTarget(payable(address(poa)));
         token = new MockToken();
     }
@@ -271,9 +271,9 @@ contract POAAgentFinanceSecurityTest {
 }
 
 
-contract POAAgentFinanceTokenSecurityTest {
+contract QPCPolicyCoreTokenSecurityTest {
     Vm internal constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
-    POAAgentFinance internal poa;
+    QPCPolicyCore internal poa;
     MockToken internal token;
 
     address internal constant OWNER = address(0x5001);
@@ -281,7 +281,7 @@ contract POAAgentFinanceTokenSecurityTest {
     address internal constant RECIPIENT = address(0x5003);
 
     function setUp() public {
-        poa = new POAAgentFinance(OWNER);
+        poa = new QPCPolicyCore(OWNER);
         token = new MockToken();
     }
 

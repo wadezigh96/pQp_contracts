@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {POAAgentFinance} from "../contracts/POAAgentFinance.sol";
+import {QPCPolicyCore} from "../../contracts/shared/QPCPolicyCore.sol";
 
 contract StatefulTarget {
     uint256 public calls;
@@ -9,24 +9,24 @@ contract StatefulTarget {
 }
 
 contract StatefulAgentActor {
-    POAAgentFinance public immutable poa;
+    QPCPolicyCore public immutable poa;
 
-    constructor(address _poa) { poa = POAAgentFinance(_poa); }
+    constructor(address _poa) { poa = QPCPolicyCore(_poa); }
 
     function execute(address target, uint256 value, bytes calldata data) external {
         poa.execute(target, value, data);
     }
 }
 
-contract POAAgentFinanceHandler {
-    POAAgentFinance public immutable poa;
+contract QPCPolicyCoreHandler {
+    QPCPolicyCore public immutable poa;
     StatefulTarget public immutable target;
     StatefulAgentActor public immutable agent;
     uint256 public configuredCap;
     uint256 public configuredSpent;
 
     constructor() {
-        poa = new POAAgentFinance(address(this));
+        poa = new QPCPolicyCore(address(this));
         target = new StatefulTarget();
         agent = new StatefulAgentActor(address(poa));
     }
@@ -81,10 +81,10 @@ contract POAAgentFinanceHandler {
     receive() external payable {}
 }
 
-contract POAAgentFinanceStatefulTest {
+contract QPCPolicyCoreStatefulTest {
     function testStatefulHandlerCanBeConstructed() public {
-        POAAgentFinanceHandler handler = new POAAgentFinanceHandler();
-        require(address(handler.poa()) != address(0), "POA not deployed");
+        QPCPolicyCoreHandler handler = new QPCPolicyCoreHandler();
+        require(address(handler.poa()) != address(0), "QPC not deployed");
         require(address(handler.target()) != address(0), "target not deployed");
         require(address(handler.agent()) != address(0), "agent not deployed");
     }

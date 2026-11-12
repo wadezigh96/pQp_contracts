@@ -1,305 +1,64 @@
-# QPC --- QUANTUM PERSISTENCE CONTRACT
+# QPC — Quantum Persistence Contract
 
-<div align="center">
+**A chain-separated security architecture for Ethereum, BNB Smart Chain, Solana, and post-quantum cryptography.**
 
-**Policy-Controlled Agentic Finance Infrastructure**
+QPC is a security protocol project. Its goal is to enforce explicit, least-privilege policies around agent-initiated on-chain actions and to prepare cryptographic identity and authorization for post-quantum standards.
 
-**Human intent → Policy → Agent execution → On-chain settlement → Audit**
+> **Important status:** the current Solidity implementation is an EVM policy prototype. It is not yet a post-quantum cryptographic implementation, is not a Solana program, and has not been independently audited. Do not use it to protect production funds.
 
-</div>
+## Four deliberately separated components
 
----
+| Component | Directory | Role |
+|---|---|---|
+| Ethereum | `contracts/ethereum/` | Ethereum-specific QPC deployment adapter |
+| BNB Smart Chain | `contracts/bsc/` | BSC-specific QPC deployment adapter |
+| Solana | `contracts/solana/` | Independent Rust/Anchor program workspace boundary |
+| Post-quantum cryptography | `contracts/pqc/` | PQ signature/key-establishment design and integration boundary |
 
-## About
+The Ethereum and BSC adapters share only the reviewed EVM policy core in `contracts/shared/`. They have separate entry-point contracts, deployment scripts, chain configuration and test targets. Solana is a separate Rust program; it must not import Solidity or inherit EVM assumptions. PQC is a separate cryptographic subsystem and must not be confused with a chain-specific token or contract.
 
-POA Agent Finance is a standalone smart-contract foundation for autonomous and AI-assisted finance.
+## Security principles
 
-The core principle is simple:
+- Human or governance authority defines policy; agents receive only bounded execution permissions.
+- Least privilege, expiry, allowlists, spending caps, nonce sequencing and emergency pause.
+- Chain-specific adapters are isolated; no cross-chain execution is implied.
+- Fail closed when authorization or cryptographic verification is unavailable.
+- No claim of being unhackable or quantum-proof.
 
-> **The agent may execute within a policy, but the agent never becomes the owner.**
+## Post-quantum standards
 
-The contract separates **human authority** from **agent execution authority**. Policies define what an agent can do, how much it can spend, where it can send funds, which contract functions it can call, and when its authority expires.
+The intended standards track is NIST FIPS 204 (ML-DSA) and FIPS 205 (SLH-DSA) for digital signatures. FIPS 203 (ML-KEM) is for key establishment, not transaction signing. No algorithm is considered active until a maintained implementation, test vectors, key formats, domain separation, replay protection and chain-specific verification costs have been independently reviewed.
 
-
-
-## Core workflow
-
-```mermaid
-flowchart TB
-    U[Human / Owner] --> P[Create Agent Policy]
-    P --> G[Guardrails]
-
-    G --> A[Agent Authority]
-    G --> C[Call Allowlist]
-    G --> R[Recipient Allowlist]
-    G --> T[Token Policy]
-    G --> E[Expiry]
-
-    A --> X[Agent Request]
-
-    X --> V{Policy Check}
-    V -->|blocked| B[Reject]
-    V -->|allowed| S[State Accounting]
-
-    S --> Q[On-chain Execution]
-    Q --> L[Nonce + Events]
-    L --> Z[Settlement]
-
-    U -->|Pause / Revoke| G
-```
-
-### Execution path
-
-**Configure → Activate → Request → Validate → Account → Execute → Emit event**
-
-1. Owner configures an agent.
-2. Agent receives limited authority.
-3. Agent submits an execution request.
-4. Contract checks expiry, pause state, target, selector, recipient and spending limits.
-5. Spending accounting is updated.
-6. The approved call or token transfer executes.
-7. Nonce and event data provide an on-chain execution trail.
-8. Owner can pause or revoke authority at any time.
-
----
-
-## Security architecture
-
-```mermaid
-flowchart LR
-    O[Owner] -->|policy control| PC[POA Policy Controller]
-
-    PC --> AP[Agent Policy]
-    PC --> CL[Call Allowlist]
-    PC --> RL[Recipient Allowlist]
-    PC --> TP[Token Policy]
-    PC --> EX[Expiry]
-    PC --> PP[Emergency Pause]
-
-    AG[Agent Key] -->|limited request| G{Guardrails}
-    AP --> G
-    CL --> G
-    RL --> G
-    TP --> G
-    EX --> G
-    PP --> G
-
-    G -->|pass| CE[Contract Execution]
-    G -->|fail| RE[Revert]
-
-    CE --> EV[Nonce + Events]
-    CE --> SET[Settlement]
-```
-
-### Security boundaries
-
-| Layer | Responsibility |
-|---|---|
-| Owner | Creates, changes, pauses and revokes policies |
-| Agent | Requests permitted execution only |
-| Policy | Defines limits and permissions |
-| Contract | Enforces policy deterministically |
-| Nonce | Provides monotonic execution sequencing |
-| Events | Provide an on-chain audit trail |
-| Pause | Emergency global execution stop |
-| Expiry | Automatic authority termination |
-| Reentrancy guard | Prevents nested execution |
-
-AI logic is **not trusted as a security boundary**. The smart contract remains the final enforcement layer.
-
----
-
-## Project structure
+## Repository layout
 
 ```
-poa_contracts/
-├── contracts/
-│   └── POAAgentFinance.sol       # Core policy + execution contract
-│
-├── test/
-│   ├── POAAgentFinance.security.t.sol
-│   │                              # Security regression tests
-│   ├── POAAgentFinance.invariant.t.sol
-│   │                              # State/invariant checks
-│   └── POAAgentFinance.stateful.t.sol
-│                                  # Stateful handler scenarios
-│
-├── script/                        # Deployment scripts
-├── foundry.toml                   # Foundry compiler/test configuration
-├── README.md                      # Architecture + usage overview
-└── ARCHITECTURE.md                # Detailed system design
+contracts/
+  shared/       # EVM policy core shared by ETH and BSC adapters
+  ethereum/     # Ethereum-only adapter and deployment config
+  bsc/          # BNB Smart Chain-only adapter and deployment config
+  solana/       # Independent Rust program workspace boundary
+  pqc/          # PQ signature and key-establishment integration boundary
+test/
+  ethereum/     # Ethereum adapter tests
+  bsc/          # BSC adapter tests
+  shared/       # Shared EVM core tests
+script/
+  ethereum/     # Ethereum deployment script
+  bsc/          # BSC deployment script
 ```
 
-The repository keeps the **security-critical policy layer small and isolated**. Application-specific agents, APIs, wallets and protocol adapters can be built above it later without changing the core security model.
+## Build and test
 
----
-
-## Policy model
-
-### Native assets
-
-Each agent receives:
-
-- maximum policy duration: **30 days**
-- total native spending cap
-- per-transaction native limit
-- active / revoked state
-
-### ERC-20 assets
-
-Each agent/token pair can define:
-
-- cumulative token cap
-- per-transaction token limit
-- cumulative spending accounting
-
-### Contract calls
-
-Calls require an explicit:
-
-**agent + target + function selector**
-
-allowlist entry.
-
-### Token recipients
-
-Token transfers require an explicit:
-
-**agent + recipient**
-
-allowlist entry.
-
----
-
-## Owner lifecycle
-
-```
-Create Policy
-     ↓
-Activate Agent
-     ↓
-Agent Executes
-     ↓
- ┌───────────────┐
- │ Active Policy │
- └───────────────┘
-     ↓
-  Pause / Revoke / Expire
-     ↓
-Authority Ends
-```
-
-The owner remains the root authority throughout the lifecycle.
-
----
-
-## Agent execution lifecycle
-
-```
-Agent
-  │
-  ▼
-Request
-  │
-  ▼
-Is active?
-  │ no ─────► Revert
-  │ yes
-  ▼
-Is paused?
-  │ yes ────► Revert
-  │ no
-  ▼
-Policy validation
-  │
-  ├── expiry
-  ├── target + selector
-  ├── recipient
-  ├── per-tx limit
-  └── cumulative cap
-  │
-  ▼
-Accounting
-  │
-  ▼
-On-chain call
-  │
-  ▼
-Nonce + event
-  │
-  ▼
-Settlement
-```
-
----
-
-## Security status
-
-Current defenses include:
-
-- two-step ownership transfer
-- agent expiry
-- native spending caps
-- native per-transaction limits
-- ERC-20 spending caps
-- ERC-20 per-transaction limits
-- target/function-selector allowlisting
-- recipient allowlisting
-- emergency pause
-- monotonic nonce
-- reentrancy protection
-- defensive ERC-20 transfer handling
-- policy validation
-- security regression tests
-- invariant/stateful test scaffolding
-
-This repository has **not been independently audited**. Passing local or CI tests does not constitute a security audit. Production funds should not be deployed until independent review, fuzzing, static analysis and deployment validation are complete.
-
----
-
-## Development
-
+EVM (requires Foundry):
 ```bash
 forge build
 forge test
 ```
 
-The intended development loop is:
+Solana workspace and PQC integrations are not production-ready and are not included in the EVM test command. Each must gain its own reproducible build, unit tests, integration tests and security review before being advertised as implemented.
 
-**Change → Build → Security tests → Invariant/stateful tests → Review → Deploy**
+## Audit and deployment policy
 
----
+This repository has not received an independent audit. Passing tests do not prove safety. No deployment is authorized by this repository change. Before any testnet or mainnet deployment, review the exact chain, bytecode, constructor authority, RPC, environment variables, gas assumptions and upgrade/governance model.
 
-## Future application layer
-
-The core contract intentionally does not contain protocol-specific logic.
-
-A future application can sit above it:
-
-```
-User / AI Agent
-      │
-      ▼
-Application / API
-      │
-      ▼
-Policy Builder
-      │
-      ▼
-POAAgentFinance
-      │
-      ├── DEX
-      ├── Lending
-      ├── Payments
-      └── Other protocols
-```
-
-This keeps integrations replaceable while the security boundary remains centralized in the POA contract.
-
----
-
-<div align="center">
-
-**Policy first. Agent second. Settlement last.**
-
-</div>
+**Separate chains. Separate contracts. Separate cryptographic trust boundaries.**

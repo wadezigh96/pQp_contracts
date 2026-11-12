@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {POAAgentFinance} from "../contracts/POAAgentFinance.sol";
+import {QPCPolicyCore} from "../../contracts/shared/QPCPolicyCore.sol";
 
 /// @notice Minimal invariant harness. Intended for Foundry invariant/fuzz execution.
-contract POAAgentFinanceInvariantHarness {
-    POAAgentFinance public immutable poa;
+contract QPCPolicyCoreInvariantHarness {
+    QPCPolicyCore public immutable poa;
     address public immutable owner;
     address public agent;
 
     constructor() {
         owner = address(this);
-        poa = new POAAgentFinance(owner);
+        poa = new QPCPolicyCore(owner);
         agent = address(0xA11CE);
     }
 

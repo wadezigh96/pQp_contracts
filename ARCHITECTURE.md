@@ -1,270 +1,56 @@
-# POA Agent Finance — Architecture
+# QPC — Architecture
 
-## 1. Design goal
+## Purpose
 
-POA is a policy enforcement layer for agentic finance.
+QPC (Quantum Persistence Contract) is designed as a chain-separated security protocol. It aims to enforce least-privilege policies for agent-initiated actions and to provide a reviewed path toward post-quantum authorization.
 
-It is designed around one separation:
+The repository intentionally separates four components: Ethereum, BNB Smart Chain, Solana, and post-quantum cryptography (PQC).
 
-- **Human = authority**
-- **Agent = constrained executor**
-- **Contract = deterministic enforcement**
+## Component boundaries
 
-The AI does not receive the owner's private key and does not get unrestricted contract access.
+### Ethereum
+Path: `contracts/ethereum/`
 
-## 2. High-level architecture
+An Ethereum-specific Solidity adapter. It may use the shared EVM policy core, but deployment configuration, chain ID checks, addresses and release validation remain Ethereum-specific.
 
-```
-                    HUMAN
-                      │
-                      ▼
-              ┌───────────────┐
-              │ Policy Builder│
-              └───────┬───────┘
-                      │
-          ┌───────────┴───────────┐
-          ▼           ▼           ▼
-       Limits      Allowlist    Expiry
-          │           │           │
-          └───────────┬───────────┘
-                      ▼
-              ┌───────────────┐
-              │ POA CONTRACT  │
-              │ Enforcement   │
-              └───────┬───────┘
-                      │
-              ┌───────┴───────┐
-              ▼               ▼
-        Agent Execution    Rejection
-              │
-              ▼
-          Settlement
-              │
-              ▼
-       Events + Nonce
-```
+### BNB Smart Chain
+Path: `contracts/bsc/`
 
-## 3. Component responsibilities
+A separate BSC Solidity adapter. It may use the shared EVM policy core, but must have independent chain ID checks, deployment configuration, addresses, tests and release validation. Sharing source code does not mean sharing deployments or state.
 
-### POAAgentFinance.sol
+### Solana
+Path: `contracts/solana/`
 
-The contract is the security boundary.
+An independent Rust program boundary. Solana account ownership, PDA derivation, signer checks, instruction data, CPI behavior, rent and compute limits must be implemented and tested natively. Solidity code is not reused here.
 
-It owns:
+### Post-quantum cryptography
+Path: `contracts/pqc/`
 
-- agent activation state
-- expiry
-- native spending accounting
-- ERC-20 spending accounting
-- call permissions
-- recipient permissions
-- pause state
-- ownership lifecycle
-- execution nonce
-- execution events
+A separate cryptographic subsystem specification and integration boundary. It covers signature verification and key establishment, not a fourth blockchain. FIPS 204 ML-DSA and FIPS 205 SLH-DSA are signature standards; FIPS 203 ML-KEM is key establishment and is not a signature scheme. No cryptographic algorithm is claimed to be implemented until a maintained implementation and test vectors are integrated and reviewed.
 
-It does not decide investment strategy.
+## EVM source sharing
 
-### Agent
+`contracts/shared/QPCPolicyCore.sol` contains chain-neutral EVM policy logic. Ethereum and BSC adapters inherit this core through separate contract entry points. Chain-specific deployment scripts and configuration must verify the expected chain ID before broadcast.
 
-The agent may:
+## Trust model
 
-- request an allowed contract call
-- request an allowed token transfer
+- Human owner or governance defines policies.
+- Agents can request only explicitly permitted actions.
+- The contract validates policy, expiry, target/function permission and spending constraints.
+- AI model output is never a security boundary.
+- PQ signatures, once integrated, authenticate authorization material; they do not make unsafe contract logic safe.
 
-The agent may not:
+## Current implementation limits
 
-- change its own policy
-- activate itself
-- increase its limits
-- bypass expiry
-- bypass pause
-- change recipients
-- change call permissions
+The inherited EVM prototype is not a complete universal cybersecurity system. It does not protect validators, consensus, RPC providers, wallets, bridges, or external contracts. Its selector allowlist does not validate all semantic arguments. It is not post-quantum and has not been independently audited.
 
-### Owner
+## Testing strategy
 
-The owner may:
+Keep tests separated by trust boundary:
+- shared EVM core unit/security/invariant tests
+- Ethereum adapter and chain-ID tests
+- BSC adapter and chain-ID tests
+- Solana program unit and validator-based integration tests
+- PQC known-answer tests, malformed-input tests, replay/domain-separation tests and cross-language test vectors
 
-- configure agents
-- revoke agents
-- configure call permissions
-- configure recipients
-- configure token policies
-- pause/unpause execution
-- withdraw native funds
-- transfer ownership
-
-## 4. Guardrail pipeline
-
-Every agent execution follows:
-
-```
-REQUEST
-  │
-  ▼
-Agent active?
-  │
-  ├── NO → REVERT
-  │
-  ▼
-Expired?
-  │
-  ├── YES → REVERT
-  │
-  ▼
-Paused?
-  │
-  ├── YES → REVERT
-  │
-  ▼
-Permission check
-  │
-  ├── FAIL → REVERT
-  │
-  ▼
-Spending check
-  │
-  ├── FAIL → REVERT
-  │
-  ▼
-Accounting
-  │
-  ▼
-External call
-  │
-  ▼
-Event + nonce
-```
-
-## 5. Native execution
-
-Native execution requires:
-
-- active agent
-- valid expiry
-- unpaused contract
-- target allowlist
-- selector allowlist
-- amount <= per-transaction limit
-- cumulative amount <= policy cap
-- sufficient contract balance
-
-Accounting is updated before the external call. If the call reverts, the entire transaction reverts, including the accounting update.
-
-## 6. Token execution
-
-Token execution requires:
-
-- active agent
-- valid expiry
-- unpaused contract
-- recipient allowlist
-- configured token policy
-- amount <= per-transaction limit
-- cumulative amount <= token cap
-
-The low-level ERC-20 call accepts both standard boolean-returning tokens and tokens that return no data, while rejecting failed calls and explicit false returns.
-
-## 7. Emergency model
-
-The owner can pause execution globally.
-
-When paused:
-
-- agent execution stops
-- token transfers through the agent stop
-- deposits through the guarded deposit function stop
-
-Owner withdrawal remains available so funds can be recovered during an emergency.
-
-## 8. Lifecycle
-
-```
-CONFIGURE
-    │
-    ▼
-ACTIVE
-    │
-    ├── EXECUTE ──► ACCOUNT ──► SETTLE
-    │
-    ├── PAUSE ────► STOP
-    │
-    ├── REVOKE ───► INACTIVE
-    │
-    └── EXPIRY ───► EXPIRED
-```
-
-## 9. Application architecture
-
-POA should remain protocol-agnostic.
-
-A future application can provide:
-
-```
-Frontend
-   │
-   ▼
-Agent / API
-   │
-   ▼
-Policy Builder
-   │
-   ▼
-POAAgentFinance
-   │
-   ├── DEX adapter
-   ├── Lending adapter
-   ├── Payment adapter
-   └── Other protocol adapters
-```
-
-The application chooses **what the agent wants to do**.
-
-POA decides **whether the agent is allowed to do it**.
-
-## 10. Testing architecture
-
-The test layers should remain separate:
-
-```
-Unit / Security
-      │
-      ▼
-Regression tests
-      │
-      ▼
-Invariant tests
-      │
-      ▼
-Stateful handler tests
-      │
-      ▼
-Static analysis
-      │
-      ▼
-External audit
-```
-
-A passing test suite is not equivalent to an independent security audit.
-
-## 11. Design principles
-
-1. Least privilege.
-2. Human-controlled authority.
-3. Deterministic enforcement.
-4. Fail closed.
-5. Short-lived agent authority.
-6. Explicit allowlists.
-7. Bounded spending.
-8. Emergency stop.
-9. No AI custody of owner keys.
-10. Keep the core contract small and protocol-agnostic.
-
-## 12. Flitzr-style application flow
-
-The intended user-facing flow can later be presented as:
-
-**Intent → Policy → Preview → Approval → Agent Request → POA Guardrails → Settlement → Audit**
-
-Unlike an application-specific agent, POA does not need to know how the strategy was generated. Its job is to enforce the final security policy on-chain.
+A passing suite is not an independent audit.
