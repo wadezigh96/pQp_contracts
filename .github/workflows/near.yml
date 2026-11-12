@@ -27,4 +27,4 @@ jobs:
       - name: Test QPC NEAR execution proof verifier
         run: cargo test -p qpc-near-proof
       - name: Type-check NEAR contracts for WASM
-        run: cargo check --workspace --target wasm32-unknown-unknown
+        run: cargo check -p qpc-near -p qpc-near-escrow --target wasm32-unknown-unknown

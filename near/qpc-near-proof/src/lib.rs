@@ -9,7 +9,7 @@
 
 use near_jsonrpc_primitives::types::light_client::RpcLightClientExecutionProofResponse;
 use near_primitives::merkle::{combine_hash, Direction, MerklePathItem};
-use near_primitives_core::{borsh::BorshSerialize, hash::CryptoHash};
+use near_primitives_core::hash::CryptoHash;
 use serde::Deserialize;
 use std::{fmt, str::FromStr};
 
