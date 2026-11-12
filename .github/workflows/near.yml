@@ -24,5 +24,7 @@ jobs:
           workspaces: near
       - name: Run NEAR workspace tests
         run: cargo test --workspace
+      - name: Test QPC NEAR execution proof verifier
+        run: cargo test -p qpc-near-proof
       - name: Type-check NEAR contracts for WASM
         run: cargo check --workspace --target wasm32-unknown-unknown

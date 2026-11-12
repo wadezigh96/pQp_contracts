@@ -1,5 +1,5 @@
 [workspace]
-members = ["qpc-near", "qpc-near-escrow"]
+members = ["qpc-near", "qpc-near-escrow", "qpc-near-proof"]
 resolver = "2"
 
 [workspace.package]
