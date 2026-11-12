@@ -1,4 +1,4 @@
-# PQP --- POST QUANTUM PERSISTENCE
+# QPC --- QUANTUM PERSISTENCE CONTRACT
 
 <div align="center">
 
