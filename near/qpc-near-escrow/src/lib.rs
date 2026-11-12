@@ -150,10 +150,11 @@ impl QpcNearEscrow {
             expires_at_ns: intent.expires_at_ns,
             status: PaymentStatus::Pending,
         };
+        // Emit complete canonical payment fields for future light-client proof verification.
+        log_payment("payment_escrowed", &record);
         self.payments.insert(intent.payment_id.clone(), record);
         self.lifetime_created = self.lifetime_created.checked_add(1)
             .expect("lifetime escrow counter overflow");
-        log_payment("payment_escrowed", &intent.payment_id);
         PromiseOrValue::Value(U128(0))
     }
 
@@ -165,7 +166,7 @@ impl QpcNearEscrow {
         assert!(env::block_timestamp() < payment.expires_at_ns, "payment expired");
         payment.status = PaymentStatus::ReleasePending;
         self.payments.insert(payment_id.clone(), payment.clone());
-        log_payment("payment_release_started", &payment_id);
+        log_payment("payment_release_started", &payment);
         let recipient = payment.recipient.clone();
         self.payout(payment, recipient, PayoutKind::Release)
     }
@@ -178,7 +179,7 @@ impl QpcNearEscrow {
         assert!(env::block_timestamp() >= payment.expires_at_ns, "payment has not expired");
         payment.status = PaymentStatus::RefundPending;
         self.payments.insert(payment_id.clone(), payment.clone());
-        log_payment("payment_refund_started", &payment_id);
+        log_payment("payment_refund_started", &payment);
         self.payout(payment.clone(), payment.payer.clone(), PayoutKind::Refund)
     }
 
@@ -206,7 +207,7 @@ impl QpcNearEscrow {
             PaymentStatus::Pending => "payment_payout_failed",
             PaymentStatus::ReleasePending => "payment_release_started",
             PaymentStatus::RefundPending => "payment_refund_started",
-        }, &payment_id);
+        }, &payment);
         payment.status
     }
 
@@ -268,11 +269,22 @@ fn validate_payment_id(value: &str) {
     );
 }
 
-fn log_payment(event: &str, payment_id: &str) {
-    env::log_str(&format!(
-        "EVENT_JSON:{{\"standard\":\"qpc\",\"version\":\"1.0.0\",\"event\":\"{}\",\"data\":[{{\"payment_id\":\"{}\"}}]}}",
-        event, payment_id
-    ));
+fn log_payment(event: &str, payment: &PaymentRecord) {
+    let payload = near_sdk::serde_json::json!({
+        "standard": "qpc",
+        "version": "1.0.0",
+        "event": event,
+        "data": [{
+            "payment_id": payment.payment_id,
+            "token_id": payment.token_id,
+            "payer": payment.payer,
+            "recipient": payment.recipient,
+            "amount": payment.amount.to_string(),
+            "created_at_ns": payment.created_at_ns.to_string(),
+            "expires_at_ns": payment.expires_at_ns.to_string(),
+        }]
+    });
+    env::log_str(&format!("EVENT_JSON:{}", payload));
 }
 
 #[cfg(test)]
