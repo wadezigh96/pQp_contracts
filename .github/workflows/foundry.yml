@@ -23,7 +23,7 @@ jobs:
       - name: Run adversarial unit tests
         run: cargo test --manifest-path near/Cargo.toml --workspace
       - name: Check Rust workspace
-        run: cargo check --manifest-path near/Cargo.toml --workspace
+        run: cargo check --manifest-path near/Cargo.toml --workspace --target wasm32-unknown-unknown
       - name: Build NEAR WASM
         run: cargo build --manifest-path near/Cargo.toml --release --target wasm32-unknown-unknown -p pqp-near
 
