@@ -22,60 +22,60 @@ The policy specification is shared. Execution code, signature verification, acco
 ## 3. Policy model
 
 Every policy should define:
-- stable policy ID scoped to chain and contract;
+- stable policy ID scoped by chain and contract;
 - monotonically increasing policy version;
 - owner/governance authority and agent identity;
 - valid-after and expiry;
 - paused and revoked state;
-- allowed action identifiers (target + method/instruction, not display label only);
+- allowed action identifiers (target + method + canonical argument digest);
 - allowed assets and destinations where applicable;
-- per-action and cumulative spend limits;
+- per-action and cumulative spend/deposit limits;
 - maximum attached value/deposit;
 - nonce or sequence domain;
 - policy update and recovery threshold.
 
-A policy update must not reset consumed limits unless a new policy version explicitly defines a safe reset and emits an auditable event. Expiry and revocation fail closed.
+A policy update must not reset consumed limits or replay sequence. Expiry and revocation fail closed.
 
 ## 4. Agent request pipeline
 
 1. Authenticate the requester using the host chain's native transaction/account model.
 2. Resolve the current policy and version.
 3. Reject if paused, revoked, not-yet-valid or expired.
-4. Validate action ID, target, method, arguments and attached value.
+4. Validate action ID, target, method, canonical argument digest and attached value.
 5. Validate asset, destination, per-action limit and cumulative budget.
-6. Consume a chain-specific nonce and update accounting before external interaction.
-7. Execute only the validated action.
+6. Consume a chain-specific nonce and update accounting atomically.
+7. Execute only the validated action in the execution-adapter milestone.
 8. Record result status and emit an audit event.
-
-NEAR cross-contract calls use asynchronous receipts/promises. The contract must distinguish authorized/dispatched from completed successfully. Callback design, callback access control and partial-failure accounting require dedicated tests.
 
 ## 5. NEAR-native implementation
 
-- Rust + NEAR SDK.
-- Contract account owns policy state.
-- Agent requests are authenticated by NEAR transaction signer/predecessor rules and, where appropriate, scoped Function Call Access Keys.
-- Access keys are an additional least-privilege control, not a replacement for contract policy checks.
-- Cross-contract calls are asynchronous; callbacks must be authenticated and idempotent.
-- Storage usage and attached deposit must be accounted for explicitly.
+The initial implementation is in `near/pqp-near` and uses the NEAR Rust SDK. The current milestone provides a policy registry and authorization ledger:
+- owner-only create/update/pause/revoke;
+- immutable agent identity;
+- version-checked updates;
+- 90-day maximum policy duration;
+- exact target/method/argument-digest rules;
+- per-call, per-action and policy-wide deposit accounting;
+- sequential nonce and unique request-ID enforcement;
+- fail-closed handling of paused, revoked, inactive and expired policies.
 
-Proposed workspace:
-- near/Cargo.toml
-- near/pqp-near/Cargo.toml
-- near/pqp-near/src/lib.rs
-- near/pqp-near/src/policy.rs
-- near/pqp-near/src/agent.rs
-- near/pqp-near/src/execution.rs
-- near/pqp-near/src/events.rs
-- near/pqp-near/src/crypto_agility.rs
-- near/pqp-near/tests/
+The initial `authorize_action` method records a permit and consumes budget. It intentionally does not dispatch a promise or move assets. This prevents the first security milestone from introducing an unreviewed arbitrary-call executor.
 
-Start with a policy registry and constrained action dispatcher. Do not add arbitrary contract-call forwarding until method arguments and attached deposits can be validated safely. A generic method-name allowlist alone is insufficient for methods whose arguments can redirect funds or grant approvals.
+Next milestone:
+- NEAR-native cross-contract promise adapter;
+- explicit dispatched, succeeded and failed states;
+- authenticated, idempotent callbacks;
+- callback replay protection;
+- storage and attached-deposit accounting;
+- local sandbox integration and measured gas.
+
+NEAR Function Call Access Keys are an additional least-privilege control, not a replacement for contract policy checks.
 
 ## 6. Post-quantum boundary
 
-NEAR's published roadmap (24 August 2026) describes ML-DSA account signing support and explains that validator consensus migration is a distinct, harder workstream. PQP must verify exact mainnet/testnet support, SDK serialization, key type, wallet support, fees and transaction compatibility before advertising a capability.
+NEAR's published roadmap and SDK release notes describe ML-DSA account-signing and verification capabilities, but PQP must verify exact mainnet/testnet support, SDK serialization, key type, wallet support, fees and transaction compatibility before advertising a capability.
 
-Application-level signature verification is separate from native transaction authentication. Do not assume a Rust contract can cheaply or natively verify ML-DSA unless the runtime exposes a supported host function/precompile or a reviewed verifier is integrated and benchmarked.
+Application-level signature verification is separate from native transaction authentication. Do not assume a Rust contract can cheaply or natively verify a signature unless the runtime exposes a supported host function/precompile or a reviewed verifier is integrated and benchmarked.
 
 ## 7. Crypto agility
 

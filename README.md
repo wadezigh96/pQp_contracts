@@ -27,18 +27,18 @@ PQP separates three jobs:
 | PQP Chain Adapters | Native enforcement and account semantics per L1 |
 | PQP Recovery | Timelock, multisig, key rotation, emergency controls |
 
-## Initial implementation: NEAR
+## NEAR implementation status
 
-The first native implementation will target NEAR using Rust and the NEAR SDK.
+The first native Rust implementation now lives in `near/pqp-near`. Its initial policy-core slice implements:
+- owner-controlled policy creation, versioned updates, pause and irreversible revocation;
+- immutable agent identity per policy;
+- bounded validity windows;
+- exact target, method and 32-byte argument-hash matching;
+- per-call, per-action cumulative and policy-wide deposit limits;
+- sequential nonces and unique request IDs;
+- structured policy and authorization events.
 
-Planned modules:
-- pqp-policy: policy lifecycle, roles, limits, expiry and revocation.
-- pqp-agent-guard: constrained agent requests and per-action accounting.
-- pqp-audit: events and versioned policy records.
-- pqp-crypto-agility: algorithm identifiers and migration metadata; no home-grown cryptography.
-- pqp-near-adapter: NEAR account, access-key and cross-contract-call integration.
-
-NEAR's published post-quantum roadmap reports ML-DSA account-signing support and describes Chain Signatures / NEAR Intents, while explaining that validator-consensus migration is a separate and harder task. PQP will rely only on capabilities verified in the actual target network and SDK version. A PQP contract alone does not upgrade NEAR consensus.
+**Important:** this first slice records authorization and consumes policy budget. It does not yet dispatch cross-contract calls or transfer assets. It is not a production execution or custody layer. See [NEAR Core](near/README.md).
 
 ## Multi-L1 strategy
 
@@ -53,21 +53,17 @@ PQP uses a shared policy specification, not one supposedly universal bytecode co
 
 Each adapter must pass shared policy conformance cases plus chain-specific security tests. A bridge or relayer is a separate trust boundary.
 
-## Repository status
+## Existing EVM code
 
-The existing Solidity PQPAgentSecurity contract is retained as a legacy EVM prototype and audit input. It is not the PQP implementation and does not provide post-quantum cryptography.
-
-This branch is a design and implementation workspace. No production deployment, external audit, or post-quantum verification claim is made.
+The Solidity `PQPAgentSecurity` contract is retained as a legacy EVM prototype and audit input. It is not the NEAR implementation and does not provide post-quantum cryptography.
 
 ## Security-first development
 
-1. Audit the inherited EVM prototype and preserve findings.
-2. Define a chain-neutral policy specification and threat model.
-3. Implement the smallest NEAR-native policy core in Rust.
-4. Add unit, property, adversarial and integration tests.
-5. Verify crypto capabilities and gas/storage costs on the target network.
-6. Build EVM and Solana adapters only after the NEAR policy model is stable.
-7. Obtain independent security review before handling real assets.
+1. Implement and adversarially test the NEAR policy core.
+2. Add the NEAR promise execution adapter with authenticated, idempotent callbacks.
+3. Verify crypto capabilities and gas/storage costs on the target network.
+4. Build EVM and Solana adapters only after the policy model and conformance suite are stable.
+5. Obtain independent security review before handling real assets.
 
 ## Important limitations
 
@@ -82,6 +78,7 @@ This branch is a design and implementation workspace. No production deployment, 
 - NIST FIPS 203 — ML-KEM: https://csrc.nist.gov/pubs/fips/203/final
 - NIST FIPS 204 — ML-DSA: https://csrc.nist.gov/pubs/fips/204/final
 - NIST FIPS 205 — SLH-DSA: https://csrc.nist.gov/pubs/fips/205/final
-- NEAR quantum-safe roadmap (24 August 2026): https://www.near.org/blog/near-quantum-safe-roadmap
+- NEAR quantum-safe roadmap: https://www.near.org/blog/near-quantum-safe-roadmap
+- NEAR Rust SDK: https://github.com/near/near-sdk-rs
 
 **Policy first. Verify cryptography. Execute only within bounds.**

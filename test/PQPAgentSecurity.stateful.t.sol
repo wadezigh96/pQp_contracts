@@ -11,7 +11,7 @@ contract StatefulTarget {
 contract StatefulAgentActor {
     PQPAgentSecurity public immutable pqp;
 
-    constructor(address _pqp) { pqp = PQPAgentSecurity(_pqp); }
+    constructor(address _pqp) { pqp = PQPAgentSecurity(payable(_pqp)); }
 
     function execute(address target, uint256 value, bytes calldata data) external {
         pqp.execute(target, value, data);

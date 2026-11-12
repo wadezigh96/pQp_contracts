@@ -1,12 +1,34 @@
-name: Foundry
+name: PQP Security CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "pqp/**"]
   pull_request:
+    branches: [main, "pqp/**"]
+
+permissions:
+  contents: read
 
 jobs:
-  test:
+  near-policy-core:
+    name: NEAR policy core
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+          targets: wasm32-unknown-unknown
+      - name: Run adversarial unit tests
+        run: cargo test --manifest-path near/Cargo.toml --workspace
+      - name: Check Rust workspace
+        run: cargo check --manifest-path near/Cargo.toml --workspace
+      - name: Build NEAR WASM
+        run: cargo build --manifest-path near/Cargo.toml --release --target wasm32-unknown-unknown -p pqp-near
+
+  evm-legacy-audit:
+    name: EVM prototype regression
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
