@@ -11,16 +11,22 @@ contract QPCChainSeparationTest {
 
     function testEthereumAdapterRejectsBSC() public {
         vm.chainId(56);
-        try new EthereumQPC(address(this)) returns (EthereumQPC) {
-            revert("Ethereum adapter accepted BSC");
+        bool deployed;
+        try new EthereumQPC(address(this)) returns (EthereumQPC instance) {
+            instance;
+            deployed = true;
         } catch {}
+        require(!deployed, "Ethereum adapter accepted BSC");
     }
 
     function testBSCAdapterRejectsEthereum() public {
         vm.chainId(1);
-        try new BSCQPC(address(this)) returns (BSCQPC) {
-            revert("BSC adapter accepted Ethereum");
+        bool deployed;
+        try new BSCQPC(address(this)) returns (BSCQPC instance) {
+            instance;
+            deployed = true;
         } catch {}
+        require(!deployed, "BSC adapter accepted Ethereum");
     }
 
     function testEthereumAdapterAcceptsEthereum() public {
