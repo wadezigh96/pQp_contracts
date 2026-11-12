@@ -251,8 +251,8 @@ impl PqpNear {
 
         let mut usage = self.usage.get(&request.policy_id).cloned().unwrap_or_default();
         assert_eq!(request.nonce, usage.next_nonce, "invalid or replayed nonce");
-        let request_key = request_key(&request.policy_id, &request.request_id);
-        assert!(self.used_requests.get(&request_key).is_none(), "duplicate request id");
+        let request_storage_key = request_key(&request.policy_id, &request.request_id);
+        assert!(self.used_requests.get(&request_storage_key).is_none(), "duplicate request id");
 
         let rule = policy.rules.iter().find(|rule| rule.action_id == request.action_id)
             .expect("action is not permitted");
@@ -289,8 +289,8 @@ impl PqpNear {
         self.usage.insert(request.policy_id.clone(), usage);
         self.action_usage.insert(key.clone(), next_action_spent);
         self.action_calls.insert(key, next_calls);
-        self.used_requests.insert(request_key, true);
-        self.executions.insert(request_key(&request.policy_id, &request.request_id), record);
+        self.used_requests.insert(request_storage_key.clone(), true);
+        self.executions.insert(request_storage_key, record);
         log_event("action_dispatched", &request.policy_id, policy.version);
 
         let callback_args = near_sdk::serde_json::json!({
@@ -343,6 +343,8 @@ impl PqpNear {
                     Some(actual_len as u64),
                     None,
                 ),
+                // PromiseError is non-exhaustive; unknown runtime errors fail closed.
+                Err(_) => (ExecutionStatus::Failed, None, None),
             };
 
         execution.status = status.clone();
