@@ -1,22 +1,38 @@
-# QPC NEAR — Open Innovation Prototype
+# QPC NEAR — Chain-Native Contracts
 
-QPC (Quantum Persistence Contract) includes an independent NEAR-native Rust/near-sdk contract. It does not share bytecode or state with Ethereum or BNB Smart Chain.
+QPC NEAR is an independent NEAR-native implementation. It does not share bytecode or state with Ethereum, BNB Smart Chain, or Solana.
 
-## Prototype capabilities
-- Human-owned versioned policies, pause and revocation.
-- Exact agent, target, method and argument-byte hash checks.
-- Per-call, cumulative and policy-wide deposit limits.
-- Sequential nonces and unique request IDs.
-- NEAR asynchronous promise execution and private callback.
-- Failed target calls consume reserved budget; no automatic retry or refund.
+## Contracts
 
-## Build
+- `qpc-near`: policy and constrained asynchronous execution core.
+- `qpc-near-escrow`: separate NEP-141 same-chain agent-to-agent escrow prototype.
+
+## Same-chain escrow flow
+
+1. Owner allowlists NEP-141 token contracts and agent accounts.
+2. Agent A calls the token's `ft_transfer_call` with the QPC escrow contract as receiver and a JSON payment intent.
+3. The escrow verifies the actual token contract (predecessor), authenticated sender, token cap, unique payment ID, recipient, and expiry.
+4. Agent B claims before expiry; or Agent A refunds after expiry.
+5. The contract initiates an NEP-141 `ft_transfer`; a private callback records success or restores Pending after a failed transfer.
+
+The contract accepts only allowlisted tokens and registered payer agents. It holds tokens in custody while a payment is Pending. This is a same-chain escrow, not a bridge, cross-chain messaging protocol, or proof of cross-chain settlement.
+
+## Storage and operations limits
+
+The prototype caps lifetime escrow creations at 10,000 because payment records are retained permanently. The contract account must be funded with enough NEAR for storage and gas before use. This is not a storage-deposit standard and has not been load-tested. Do not enable unrestricted agent registration or token lists.
+
+A payout enters `ReleasePending` or `RefundPending` before the external FT call. If the callback itself cannot execute after a successful FT transfer, the record may require manual reconciliation; never retry a pending payout blindly. This limitation must be resolved with runtime integration tests and recovery design before production.
+
+## Build and test
+
 ```sh
 cd near
 cargo test --workspace
 cargo check --workspace
 cargo build --release --target wasm32-unknown-unknown -p qpc-near
+cargo build --release --target wasm32-unknown-unknown -p qpc-near-escrow
 ```
 
-## Safety
-Initialize atomically with deployment by the intended owner. Never deploy uninitialized WASM and initialize later. This prototype is not audited or production-ready. Argument hashes bind bytes but do not validate semantic intent. Storage growth, callback recovery, refunds and target upgrades need further review. No PQ signature verification or quantum-resistance claim is implemented.
+## Safety boundary
+
+This is an experimental prototype, not audited or production-ready. No mainnet deployment or live payment is authorized. It does not implement ML-DSA/SLH-DSA verification and makes no post-quantum security claim.
