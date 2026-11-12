@@ -29,16 +29,18 @@ PQP separates three jobs:
 
 ## NEAR implementation status
 
-The first native Rust implementation now lives in `near/pqp-near`. Its initial policy-core slice implements:
+The native Rust implementation lives in `near/pqp-near`. It implements:
 - owner-controlled policy creation, versioned updates, pause and irreversible revocation;
-- immutable agent identity per policy;
-- bounded validity windows;
-- exact target, method and 32-byte argument-hash matching;
-- per-call, per-action cumulative and policy-wide deposit limits;
+- immutable agent identity and bounded policy validity;
+- exact target/method matching and on-chain SHA-256 validation of the exact argument bytes;
+- per-call, per-action cumulative, policy-wide deposit limits and per-action call-count limits;
 - sequential nonces and unique request IDs;
-- structured policy and authorization events.
+- bounded-gas NEAR promise dispatch and a private callback;
+- explicit dispatched, succeeded, failed and oversized-result states;
+- callback result reads capped at 256 bytes and immutable terminal results;
+- conservative quota reservation at dispatch, with no refund on target failure.
 
-**Important:** this first slice records authorization and consumes policy budget. It does not yet dispatch cross-contract calls or transfer assets. It is not a production execution or custody layer. See [NEAR Core](near/README.md).
+This is an execution prototype, not a production custody layer. It still needs local runtime/testnet integration, gas/storage measurements, method-specific argument schemas and independent security review. See [NEAR Core](near/README.md).
 
 ## Multi-L1 strategy
 
