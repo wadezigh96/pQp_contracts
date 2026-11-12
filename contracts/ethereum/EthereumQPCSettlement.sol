@@ -2,9 +2,9 @@
 pragma solidity ^0.8.24;
 
 /// @title QPC Ethereum Settlement Vault
-/// @notice Prefunded destination-chain payout vault controlled by a trusted settlement relayer.
-/// @dev This is NOT a trustless bridge. The relayer is responsible for independently verifying
-///      the source-chain escrow/payment and destination route before calling settle().
+/// @notice Prefunded destination payout vault requiring a validator quorum.
+/// @dev EXPERIMENTAL: validators attest to source-chain facts off-chain. This contract
+///      does not verify NEAR light-client proofs and is NOT a trustless bridge.
 interface IQPCToken {
     function transfer(address to, uint256 amount) external returns (bool);
 }
@@ -12,7 +12,6 @@ interface IQPCToken {
 contract EthereumQPCSettlement {
     error NotOwner();
     error NotPendingOwner();
-    error NotRelayer();
     error Paused();
     error WrongChain();
     error InvalidAddress();
@@ -21,13 +20,24 @@ contract EthereumQPCSettlement {
     error TokenNotAllowed();
     error Replay();
     error TransferFailed();
+    error InvalidValidatorSet();
+    error NotValidator();
+    error InvalidSignatures();
+
+    bytes32 private constant ATTESTATION_TYPEHASH = keccak256(
+        "QPCSettlement(bytes32 sourceDomain,bytes32 sourcePaymentId,bytes32 sourceTransactionRef,address token,address recipient,uint256 amount,uint256 deadline,uint256 destinationChainId,address vault)"
+    );
+    uint256 private constant SECP256K1_HALF_ORDER =
+        0x7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a0;
 
     address public owner;
     address public pendingOwner;
-    address public relayer;
     uint256 public immutable destinationChainId;
+    uint256 public validatorThreshold;
+    uint256 public validatorCount;
     bool public paused;
 
+    mapping(address => bool) public isValidator;
     mapping(address => bool) public allowedTokens;
     mapping(bytes32 => bool) public consumedSourcePayments;
     mapping(bytes32 => bool) public consumedSourceTransactions;
@@ -36,7 +46,8 @@ contract EthereumQPCSettlement {
 
     event OwnershipTransferStarted(address indexed owner, address indexed pendingOwner);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
-    event RelayerChanged(address indexed previousRelayer, address indexed newRelayer);
+    event ValidatorChanged(address indexed validator, bool enabled);
+    event ValidatorThresholdChanged(uint256 previousThreshold, uint256 newThreshold);
     event TokenAllowlistChanged(address indexed token, bool allowed);
     event PausedChanged(bool paused);
     event SettlementPaid(
@@ -46,16 +57,12 @@ contract EthereumQPCSettlement {
         address indexed token,
         address recipient,
         uint256 amount,
-        uint256 destinationChainId
+        uint256 destinationChainId,
+        uint256 attestations
     );
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
-        _;
-    }
-
-    modifier onlyRelayer() {
-        if (msg.sender != relayer) revert NotRelayer();
         _;
     }
 
@@ -66,14 +73,31 @@ contract EthereumQPCSettlement {
         _lock = 1;
     }
 
-    constructor(address initialOwner, address initialRelayer, uint256 expectedChainId) {
-        if (initialOwner == address(0) || initialRelayer == address(0)) revert InvalidAddress();
+    constructor(
+        address initialOwner,
+        address[] memory initialValidators,
+        uint256 initialThreshold,
+        uint256 expectedChainId
+    ) {
+        if (initialOwner == address(0)) revert InvalidAddress();
         if (expectedChainId == 0 || block.chainid != expectedChainId) revert WrongChain();
         owner = initialOwner;
-        relayer = initialRelayer;
         destinationChainId = expectedChainId;
         emit OwnershipTransferred(address(0), initialOwner);
-        emit RelayerChanged(address(0), initialRelayer);
+        if (
+            initialValidators.length == 0 ||
+            initialThreshold == 0 ||
+            initialThreshold > initialValidators.length
+        ) revert InvalidValidatorSet();
+        for (uint256 i; i < initialValidators.length; ++i) {
+            address validator = initialValidators[i];
+            if (validator == address(0) || isValidator[validator]) revert InvalidValidatorSet();
+            isValidator[validator] = true;
+            ++validatorCount;
+            emit ValidatorChanged(validator, true);
+        }
+        validatorThreshold = initialThreshold;
+        emit ValidatorThresholdChanged(0, initialThreshold);
     }
 
     function transferOwnership(address nextOwner) external onlyOwner {
@@ -90,11 +114,25 @@ contract EthereumQPCSettlement {
         emit OwnershipTransferred(previous, owner);
     }
 
-    function setRelayer(address nextRelayer) external onlyOwner {
-        if (nextRelayer == address(0)) revert InvalidAddress();
-        address previous = relayer;
-        relayer = nextRelayer;
-        emit RelayerChanged(previous, nextRelayer);
+    function setValidator(address validator, bool enabled) external onlyOwner {
+        if (validator == address(0)) revert InvalidAddress();
+        if (isValidator[validator] == enabled) revert InvalidValidatorSet();
+        if (enabled) {
+            isValidator[validator] = true;
+            ++validatorCount;
+        } else {
+            if (validatorCount - 1 < validatorThreshold) revert InvalidValidatorSet();
+            isValidator[validator] = false;
+            --validatorCount;
+        }
+        emit ValidatorChanged(validator, enabled);
+    }
+
+    function setValidatorThreshold(uint256 nextThreshold) external onlyOwner {
+        if (nextThreshold == 0 || nextThreshold > validatorCount) revert InvalidValidatorSet();
+        uint256 previous = validatorThreshold;
+        validatorThreshold = nextThreshold;
+        emit ValidatorThresholdChanged(previous, nextThreshold);
     }
 
     function setTokenAllowed(address token, bool allowed) external onlyOwner {
@@ -108,11 +146,9 @@ contract EthereumQPCSettlement {
         emit PausedChanged(value);
     }
 
-    /// @notice Release prefunded destination liquidity after off-chain source verification.
-    /// @param sourceDomain Stable domain identifier, e.g. keccak256("near:mainnet").
-    /// @param sourcePaymentId Unique payment ID from the source escrow.
-    /// @param sourceTransactionRef Hash of the canonical source transaction identifier.
-    ///        For NEAR, hash the UTF-8 transaction hash string with keccak256 off-chain.
+    /// @notice Release prefunded liquidity after a threshold of validators attest to source payment.
+    /// @dev Signatures are EIP-191 personal_sign signatures over the domain-bound attestation digest.
+    ///      Signers must be strictly ascending by address; duplicate or non-validator signatures fail.
     function settle(
         bytes32 sourceDomain,
         bytes32 sourcePaymentId,
@@ -120,8 +156,9 @@ contract EthereumQPCSettlement {
         address token,
         address recipient,
         uint256 amount,
-        uint256 deadline
-    ) external onlyRelayer nonReentrant {
+        uint256 deadline,
+        bytes[] calldata signatures
+    ) external nonReentrant {
         if (paused) revert Paused();
         if (
             sourceDomain == bytes32(0) || sourcePaymentId == bytes32(0) ||
@@ -131,13 +168,22 @@ contract EthereumQPCSettlement {
         if (amount == 0) revert InvalidAmount();
         if (deadline < block.timestamp) revert InvalidDeadline();
 
-        bytes32 sourcePaymentKey = keccak256(abi.encode(sourceDomain, sourcePaymentId));
-        if (consumedSourcePayments[sourcePaymentKey] || consumedSourceTransactions[sourceTransactionRef]) {
+        bytes32 paymentKey = keccak256(abi.encode(sourceDomain, sourcePaymentId));
+        if (consumedSourcePayments[paymentKey] || consumedSourceTransactions[sourceTransactionRef]) {
             revert Replay();
         }
 
-        // Consume replay keys before the external token call; revert restores them on failure.
-        consumedSourcePayments[sourcePaymentKey] = true;
+        bytes32 structHash = keccak256(abi.encode(
+            ATTESTATION_TYPEHASH, sourceDomain, sourcePaymentId, sourceTransactionRef,
+            token, recipient, amount, deadline, destinationChainId, address(this)
+        ));
+        bytes32 digest = keccak256(abi.encodePacked(
+            "\x19Ethereum Signed Message:\n32", structHash
+        ));
+        _verifyQuorum(digest, signatures);
+
+        // Replay keys are consumed before token interaction; a failed transfer reverts all state.
+        consumedSourcePayments[paymentKey] = true;
         consumedSourceTransactions[sourceTransactionRef] = true;
 
         (bool ok, bytes memory result) = token.call(
@@ -149,8 +195,53 @@ contract EthereumQPCSettlement {
 
         emit SettlementPaid(
             sourceDomain, sourcePaymentId, sourceTransactionRef,
-            token, recipient, amount, destinationChainId
+            token, recipient, amount, destinationChainId, signatures.length
         );
+    }
+
+    function attestationDigest(
+        bytes32 sourceDomain,
+        bytes32 sourcePaymentId,
+        bytes32 sourceTransactionRef,
+        address token,
+        address recipient,
+        uint256 amount,
+        uint256 deadline
+    ) external view returns (bytes32) {
+        bytes32 structHash = keccak256(abi.encode(
+            ATTESTATION_TYPEHASH, sourceDomain, sourcePaymentId, sourceTransactionRef,
+            token, recipient, amount, deadline, destinationChainId, address(this)
+        ));
+        return keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", structHash));
+    }
+
+    function _verifyQuorum(bytes32 digest, bytes[] calldata signatures) private view {
+        if (signatures.length < validatorThreshold || signatures.length > validatorCount) {
+            revert InvalidSignatures();
+        }
+        address previous;
+        for (uint256 i; i < signatures.length; ++i) {
+            address signer = _recover(digest, signatures[i]);
+            if (signer <= previous || !isValidator[signer]) revert InvalidSignatures();
+            previous = signer;
+        }
+    }
+
+    function _recover(bytes32 digest, bytes calldata signature) private pure returns (address signer) {
+        if (signature.length != 65) revert InvalidSignatures();
+        bytes32 r;
+        bytes32 s;
+        uint8 v;
+        assembly {
+            r := calldataload(signature.offset)
+            s := calldataload(add(signature.offset, 32))
+            v := byte(0, calldataload(add(signature.offset, 64)))
+        }
+        if (uint256(s) > SECP256K1_HALF_ORDER || (v != 27 && v != 28)) {
+            revert InvalidSignatures();
+        }
+        signer = ecrecover(digest, v, r, s);
+        if (signer == address(0)) revert InvalidSignatures();
     }
 
     function availableLiquidity(address token) external view returns (uint256 balance) {
