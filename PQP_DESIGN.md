@@ -67,12 +67,12 @@ The authorization ledger does not yet dispatch external calls or transfer assets
 - `update_policy(policy_id, expected_version, input)`
 - `revoke_policy(policy_id)`
 - `set_paused(policy_id, paused)`
-- `authorize_action(request)`
+- `dispatch_action(request)`\n- `on_action_result(policy_id, request_id, nonce)` (private callback)
 - `get_policy(policy_id)`
 - `get_usage(policy_id)`
 - `get_action_usage(policy_id, action_id)`
 
-The current ABI records an authorization receipt; it does not execute the requested target method. The promise adapter is a separate milestone.
+`dispatch_action` executes one constrained target call through a NEAR promise and private callback. This is a prototype and not yet approved for production assets.
 
 ## Invariants
 

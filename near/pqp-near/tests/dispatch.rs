@@ -10,12 +10,13 @@ use std::collections::HashMap;
 const NOW: u64 = 1_000_000_000_000;
 const ARGS: &[u8] = br#"{}"#;
 
-fn context(predecessor: &str, timestamp: u64) {
+fn context(predecessor: &str, timestamp: u64, deposit: u128) {
     let mut builder = VMContextBuilder::new();
     builder
         .predecessor_account_id(predecessor.parse().unwrap())
         .current_account_id("pqp.near".parse().unwrap())
         .account_balance(NearToken::from_near(100))
+        .attached_deposit(NearToken::from_yoctonear(deposit))
         .block_timestamp(timestamp);
     testing_env!(builder.build());
 }
@@ -55,7 +56,7 @@ fn input() -> PolicyInput {
 }
 
 fn setup() -> PqpNear {
-    context("owner.near", NOW);
+    context("owner.near", NOW, 0);
     let mut contract = PqpNear::new("owner.near".parse().unwrap());
     contract.create_policy("policy_1".to_string(), input());
     contract
@@ -78,7 +79,7 @@ fn request(nonce: u64, request_id: &str, amount: u128) -> ActionRequest {
 #[test]
 fn dispatch_creates_target_call_and_authenticated_callback() {
     let mut contract = setup();
-    context("agent.near", NOW);
+    context("agent.near", NOW, 7);
 
     let _promise = contract.dispatch_action(request(0, "req_1", 7));
 
@@ -103,7 +104,7 @@ fn dispatch_creates_target_call_and_authenticated_callback() {
 #[test]
 fn failed_target_call_is_terminal_and_callback_replay_is_idempotent() {
     let mut contract = setup();
-    context("agent.near", NOW);
+    context("agent.near", NOW, 5);
     let _promise = contract.dispatch_action(request(0, "req_1", 5));
 
     callback_context(PromiseResult::Failed);
@@ -131,7 +132,7 @@ fn failed_target_call_is_terminal_and_callback_replay_is_idempotent() {
 #[test]
 fn oversized_success_result_is_not_misreported_as_target_failure() {
     let mut contract = setup();
-    context("agent.near", NOW);
+    context("agent.near", NOW, 5);
     let _promise = contract.dispatch_action(request(0, "req_1", 5));
 
     callback_context(PromiseResult::Successful(vec![9; 257]));
@@ -150,7 +151,7 @@ fn oversized_success_result_is_not_misreported_as_target_failure() {
 #[should_panic(expected = "arguments hash mismatch")]
 fn dispatch_rejects_argument_bytes_not_committed_by_policy() {
     let mut contract = setup();
-    context("agent.near", NOW);
+    context("agent.near", NOW, 1);
     let mut malicious = request(0, "req_1", 1);
     malicious.args = br#"{"recipient":"attacker.near"}"#.to_vec();
     let _promise = contract.dispatch_action(malicious);
@@ -160,7 +161,7 @@ fn dispatch_rejects_argument_bytes_not_committed_by_policy() {
 #[should_panic(expected = "action call count exceeded")]
 fn zero_deposit_calls_are_still_bounded_by_policy() {
     let mut contract = setup();
-    context("agent.near", NOW);
+    context("agent.near", NOW, 0);
     let _first = contract.dispatch_action(request(0, "req_1", 0));
     let _second = contract.dispatch_action(request(1, "req_2", 0));
     let _third = contract.dispatch_action(request(2, "req_3", 0));

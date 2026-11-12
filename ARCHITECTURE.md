@@ -49,7 +49,7 @@ A policy update must not reset consumed limits or replay sequence. Expiry and re
 
 ## 5. NEAR-native implementation
 
-The initial implementation is in `near/pqp-near` and uses the NEAR Rust SDK. The current milestone provides a policy registry and authorization ledger:
+The implementation is in `near/pqp-near` and uses the NEAR Rust SDK. It provides a policy registry and bounded promise execution:
 - owner-only create/update/pause/revoke;
 - immutable agent identity;
 - version-checked updates;

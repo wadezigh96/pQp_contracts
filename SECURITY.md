@@ -17,7 +17,7 @@ PQP is an on-chain policy and agent-protection framework with a post-quantum mig
 | Bridge/relayer/MPC | Independent trust boundary |
 | External protocol | May be malicious, compromised or economically unsafe |
 
-## Implemented NEAR policy-core controls
+## Implemented NEAR policy and execution controls
 
 The first NEAR vertical slice in `near/pqp-near` enforces:
 - owner-only policy creation, versioned updates, pause and irreversible revocation;
@@ -28,7 +28,7 @@ The first NEAR vertical slice in `near/pqp-near` enforces:
 - sequential nonces and unique request IDs;
 - fail-closed rejection for unauthorized callers, stale versions, paused/revoked/expired policies and over-budget requests.
 
-The current contract records authorization and consumes budget only. It does not call target contracts or transfer assets. The execution adapter, callback state machine, guardian controls, and post-quantum transaction integration are not implemented yet.
+The current prototype dispatches one target function call only after checking the exact target, method and SHA-256 of the exact argument bytes. It reserves nonce, deposit and call quota before dispatch, forwards only the exact deposit attached to the PQP call, and uses fixed target/callback gas. A private callback requires exactly one promise result, reads at most 256 bytes, and records success, failure or oversized successful output. Terminal callback state is immutable. Failed calls do not refund quota. Remaining unverified areas include local runtime/testnet behavior, gas/storage economics, method-specific argument semantics, governance hardening, guardian controls, post-quantum transaction integration and independent audit.
 
 ## Threats and required controls
 
@@ -36,7 +36,7 @@ The current contract records authorization and consumes budget only. It does not
 Short expiry, per-action and cumulative limits, explicit target/method/argument constraints, destination restrictions, nonce/replay domain, revoke and pause. Agent never receives owner privileges.
 
 ### Malicious destination or argument substitution
-Avoid unrestricted generic call forwarding. Validate security-critical calldata arguments, not only selectors. The current NEAR policy core compares an exact 32-byte argument digest; the future adapter must define and test canonical argument encoding and compute the digest itself before dispatch. Bound attached value and token approvals. Restrict approval, role-change, admin and upgrade methods by default.
+Avoid unrestricted generic call forwarding. Validate security-critical calldata arguments, not only selectors. The current NEAR policy core compares an exact 32-byte argument digest; the current adapter hashes the exact raw argument bytes itself before dispatch; this prevents byte substitution but does not prove those bytes are semantically safe. Each target method still needs a typed schema and adversarial validation of recipient, amount, approval and administrative fields. Bound attached value and token approvals. Restrict approval, role-change, admin and upgrade methods by default.
 
 ### Replay and duplicate requests
 Bind chain/network domain, contract ID, policy ID/version, agent identity and nonce into signed requests. Nonce consumption must be atomic with authorization. Cross-chain messages need source/destination domains, unique message IDs and finality validation.

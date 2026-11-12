@@ -239,6 +239,7 @@ impl PqpNear {
         assert_valid_id(&request.policy_id, "invalid policy id");
         assert_valid_id(&request.request_id, "invalid request id");
         assert!(request.args.len() <= MAX_ARGS_LEN, "arguments exceed maximum length");
+        assert_eq!(env::attached_deposit().as_yoctonear(), request.attached_deposit, "attached deposit must exactly fund target call");
 
         let policy = self.policy_or_panic(&request.policy_id);
         assert_eq!(caller, policy.agent_id, "caller is not the policy agent");

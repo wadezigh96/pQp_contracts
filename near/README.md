@@ -4,16 +4,16 @@ This workspace contains the first native NEAR implementation slice of PQP.
 
 ## Scope
 
-The current contract implements a fail-closed policy registry and one-time action authorization:
+The current contract implements a fail-closed policy registry and constrained asynchronous action execution:
 - owner-controlled policy create/update/pause/revoke;
 - immutable agent identity per policy;
 - policy versions and bounded validity windows;
-- exact target, method and 32-byte argument-hash matching;
+- exact target and method matching, plus a SHA-256 check over the exact argument bytes sent to the target;
 - per-call, per-action cumulative and policy-wide deposit limits;
 - sequential nonces and unique request IDs;
 - authorization and usage events.
 
-**This milestone does not execute cross-contract calls or transfer assets.** An authorization receipt is not proof that a target call ran. Do not use this contract as a production custody or execution layer. The next milestone must add an explicit NEAR promise adapter with authenticated callbacks, idempotent result handling, failure accounting, and integration tests.
+`dispatch_action` now dispatches one policy-approved NEAR function call and chains a private `on_action_result` callback. It forwards only the exact argument bytes whose digest is committed by the policy. The target call is funded only by the exact attached deposit supplied to PQP. Failed calls still consume the reserved budget and nonce to prevent retry-based quota bypass. Oversized successful return data is distinguished from target failure. This is a constrained execution prototype, not a production custody layer: test against a local NEAR runtime and testnet, measure gas/storage, review method-specific argument schemas, and obtain independent security review before real assets.
 
 ## Build and test
 
