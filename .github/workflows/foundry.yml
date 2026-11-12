@@ -16,3 +16,16 @@ jobs:
         run: forge build --sizes
       - name: Run EVM tests
         run: forge test -vvv
+
+  agent-router:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agent-router
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run QPC agent router tests
+        run: npm test
