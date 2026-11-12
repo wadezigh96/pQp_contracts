@@ -55,7 +55,7 @@ Each adapter must pass shared policy conformance cases plus chain-specific secur
 
 ## Repository status
 
-The existing Solidity POAAgentFinance contract is retained as a legacy EVM prototype and audit input. It is not the PQP implementation and does not provide post-quantum cryptography.
+The existing Solidity PQPAgentSecurity contract is retained as a legacy EVM prototype and audit input. It is not the PQP implementation and does not provide post-quantum cryptography.
 
 This branch is a design and implementation workspace. No production deployment, external audit, or post-quantum verification claim is made.
 

@@ -6,7 +6,7 @@ Base: main at 76e23e1a50a6d23f188c6954c07bb78d8c28fa9e.
 
 ## Product definition
 
-PQP means Post-Quantum Persistence. It replaces POA as the product name and top-level concept.
+PQP means Post-Quantum Persistence. It replaces PQP as the product name and top-level concept.
 
 PQP is a multi-L1 security framework with deterministic on-chain policy enforcement, constrained AI/agent execution, crypto-agile identity and authorization, post-quantum migration support where native chain capabilities permit, and monitoring, incident response and recovery controls.
 
@@ -26,7 +26,7 @@ Rejected:
 ## NEAR-first scope
 
 ### Milestone 0 — inherited-code audit
-Preserve POA as legacy baseline. Record CI blocker and security findings. Do not carry unsafe generic execution semantics forward.
+Preserve legacy EVM prototype as baseline. Record CI blocker and security findings. Do not carry unsafe generic execution semantics forward.
 
 ### Milestone 1 — NEAR policy core
 - Rust workspace using a pinned NEAR SDK version.
@@ -93,7 +93,7 @@ Unit tests for all state transitions. Property tests for budget monotonicity, ex
 ## Current inherited baseline
 
 - Latest main CI run: build fails before tests; test step skipped.
-- Compiler error: payable cast in test/POAAgentFinance.stateful.t.sol:14.
+- Compiler error: payable cast in test/PQPAgentSecurity.stateful.t.sol:14.
 - foundry.toml contains unsupported target_contracts.
 - execute() validates target and selector but not dangerous calldata arguments.
 - No PQC implementation exists in inherited Solidity code.

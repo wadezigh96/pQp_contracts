@@ -40,14 +40,14 @@ Inventory all signature and key-agreement dependencies. Prefer standardized PQ s
 ### Monitor or AI compromise
 Monitoring is not a source of truth. Alerts may trigger only explicitly granted narrow pause powers. No monitor-controlled transfer, withdrawal or policy expansion.
 
-## Inherited POA prototype — audit findings
+## Legacy EVM prototype — audit findings
 
-The legacy Solidity POAAgentFinance contract is retained as an audit input, not PQP production code.
+The legacy Solidity PQPAgentSecurity contract is retained as an audit input, not PQP production code.
 
 1. HIGH — generic call arguments are not validated. execute() checks only target and 4-byte selector. An allowed selector can still carry attacker-controlled recipient, spender, amount or other dangerous arguments.
 2. HIGH — generic call forwarding is too broad for a security product. There is no per-method argument schema or typed action adapter. Sensitive methods such as token approvals, role changes, arbitrary transfers and upgrade calls need explicit denial or dedicated validation.
 3. MEDIUM — invariant configuration contains an unsupported key. foundry.toml uses target_contracts; Foundry CI reports it as unknown, so intended invariant targeting is not configured.
-4. BUILD BLOCKER — latest observed stateful test cast fails. GitHub Actions fails at test/POAAgentFinance.stateful.t.sol:14 because a non-payable address is cast to a contract with a payable receive function. The test step is skipped after build failure.
+4. BUILD BLOCKER — latest observed stateful test cast fails. GitHub Actions fails at test/PQPAgentSecurity.stateful.t.sol:14 because a non-payable address is cast to a contract with a payable receive function. The test step is skipped after build failure.
 5. TEST GAP — handler scaffolding is not proof of meaningful invariant campaigns. The handler has a construction test; the invariant harness does not cover all action paths or malicious argument combinations.
 6. ROOT TRUST — owner can change policies and withdraw native funds. This must be protected with multisig/timelock and documented.
 
@@ -67,4 +67,4 @@ These findings are based on source and the latest observed GitHub Actions run fo
 
 ## Audit status
 
-PQP is not independently audited. The inherited POA prototype has known issues listed above. No claim of production readiness, hack-proof security or end-to-end post-quantum security is made.
+PQP is not independently audited. The legacy EVM prototype has known issues listed above. No claim of production readiness, hack-proof security or end-to-end post-quantum security is made.
