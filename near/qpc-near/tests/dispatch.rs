@@ -35,6 +35,23 @@ fn callback_context(predecessor: &str, result: PromiseResult) {
     );
 }
 
+
+fn callback_context_without_results(predecessor: &str) {
+    let mut builder = VMContextBuilder::new();
+    builder
+        .predecessor_account_id(predecessor.parse().unwrap())
+        .current_account_id("qpc.near".parse().unwrap())
+        .account_balance(NearToken::from_near(100))
+        .block_timestamp(NOW + 1);
+    testing_env!(
+        builder.build(),
+        test_vm_config(),
+        RuntimeFeesConfig::test(),
+        HashMap::default(),
+        vec![],
+    );
+}
+
 fn input() -> PolicyInput {
     PolicyInput {
         agent_id: "agent.near".parse().unwrap(),
@@ -159,6 +176,6 @@ fn zero_deposit_calls_are_still_bounded_by_policy() {
 #[should_panic(expected = "expected exactly one promise result")]
 fn callback_without_runtime_promise_result_is_rejected() {
     let mut contract = setup();
-    callback_context("attacker.near", PromiseResult::Failed);
+    callback_context_without_results("attacker.near");
     contract.on_action_result("policy_1".to_string(), "req_missing".to_string(), 0);
 }

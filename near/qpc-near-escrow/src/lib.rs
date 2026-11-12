@@ -73,7 +73,7 @@ pub struct PaymentRecord {
     BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone, Debug, PartialEq,
 )]
 #[serde(crate = "near_sdk::serde")]
-enum PayoutKind {
+pub enum PayoutKind {
     Release,
     Refund,
 }
