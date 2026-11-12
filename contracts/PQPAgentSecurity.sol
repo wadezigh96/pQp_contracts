@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-/// @title PQP Agent Finance
+/// @title PQP Agent Security — Legacy EVM Adapter
 /// @notice Human-controlled, least-privilege spending authority for autonomous/AI agents.
 /// @dev Defense-in-depth. AI/agent keys never become owner keys.
 interface IERC20 { function transfer(address to, uint256 amount) external returns (bool); }

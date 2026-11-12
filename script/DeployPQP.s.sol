@@ -9,10 +9,10 @@ interface Vm {
     function stopBroadcast() external;
 }
 
-/// @title PQP Agent Finance deployment
-/// @notice Minimal Foundry deployment script without external library dependencies.
-/// @dev Set OWNER before running: forge script script/Deploy.s.sol --rpc-url <RPC> --broadcast
-contract DeployPQPAgentSecurity {
+/// @title PQP Legacy EVM Adapter deployment
+/// @notice Deploys only the legacy EVM adapter; this is not the NEAR PQP deployment.
+/// @dev Set OWNER before running: forge script script/DeployPQP.s.sol --rpc-url <RPC> --broadcast
+contract DeployPQPEVMAdapter {
     Vm internal constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
     function run() external returns (PQPAgentSecurity deployed) {
