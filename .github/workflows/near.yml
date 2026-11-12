@@ -1,0 +1,31 @@
+name: NEAR contract
+
+on:
+  push:
+    branches: ["hackathon/near-open-innovation"]
+  pull_request:
+    branches: ["hackathon/near-open-innovation"]
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: near -> target
+      - name: Check Rust formatting
+        working-directory: near
+        run: cargo fmt --check
+      - name: Test NEAR contract
+        working-directory: near
+        run: cargo test --locked
+      - name: Build NEAR WebAssembly
+        working-directory: near
+        run: cargo build --locked --target wasm32-unknown-unknown --release

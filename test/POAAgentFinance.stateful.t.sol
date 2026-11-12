@@ -11,7 +11,7 @@ contract StatefulTarget {
 contract StatefulAgentActor {
     POAAgentFinance public immutable poa;
 
-    constructor(address _poa) { poa = POAAgentFinance(_poa); }
+    constructor(address _poa) { poa = POAAgentFinance(payable(_poa)); }
 
     function execute(address target, uint256 value, bytes calldata data) external {
         poa.execute(target, value, data);

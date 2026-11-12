@@ -8,6 +8,10 @@ interface IERC20 { function transfer(address to, uint256 amount) external return
 
 contract POAAgentFinance {
     uint256 public constant MAX_POLICY_DURATION = 30 days;
+    bytes4 private constant ERC20_APPROVE_SELECTOR = 0x095ea7b3;
+    bytes4 private constant ERC20_TRANSFER_FROM_SELECTOR = 0x23b872dd;
+    bytes4 private constant ERC20_INCREASE_ALLOWANCE_SELECTOR = 0x39509351;
+    bytes4 private constant ERC20_DECREASE_ALLOWANCE_SELECTOR = 0xa457c2d7;
     struct AgentPolicy { bool active; uint64 expiresAt; uint256 nativeCap; uint256 nativeSpent; uint256 nativeTxLimit; }
     struct TokenPolicy { uint256 cap; uint256 spent; uint256 txLimit; }
 
@@ -54,7 +58,7 @@ contract POAAgentFinance {
 
     function configureAgent(address agent,uint64 expiresAt,uint256 nativeCap,uint256 nativeTxLimit)external onlyOwner{
         if(agent==address(0)||agent==owner)revert InvalidAgent();
-        if(agents[agent].active)revert AgentMustBeInactive();
+        if(agents[agent].active && agents[agent].expiresAt > block.timestamp)revert AgentMustBeInactive();
         if(expiresAt==0||expiresAt<=block.timestamp||expiresAt>block.timestamp+MAX_POLICY_DURATION)revert InvalidExpiry();
         if(nativeCap==0||nativeTxLimit==0||nativeTxLimit>nativeCap)revert InvalidPolicy();
         agents[agent]=AgentPolicy(true,expiresAt,nativeCap,0,nativeTxLimit);
@@ -79,17 +83,26 @@ contract POAAgentFinance {
 
     function execute(address target,uint256 value,bytes calldata data)external onlyActiveAgent nonReentrant returns(bytes memory result){
         if(target==address(0)||data.length<4)revert InvalidCallData();bytes4 selector;assembly{selector:=calldataload(data.offset)}
+        if(_isTokenAssetSelector(selector))revert TargetNotAllowed();
         if(!allowedCalls[msg.sender][target][selector])revert TargetNotAllowed();AgentPolicy storage p=agents[msg.sender];
         if(value>p.nativeTxLimit)revert TxLimitExceeded();if(p.nativeSpent+value>p.nativeCap)revert CapExceeded();if(value>address(this).balance)revert CapExceeded();
         p.nativeSpent+=value;uint256 currentNonce=nonce++;(bool ok,bytes memory ret)=target.call{value:value}(data);if(!ok)revert CallFailed(ret);
         emit AgentCall(msg.sender,target,value,selector,currentNonce);return ret;
     }
     function transferToken(address token,address recipient,uint256 amount)external onlyActiveAgent nonReentrant{
-        if(token==address(0)||recipient==address(0))revert InvalidAgent();if(!allowedRecipients[msg.sender][recipient])revert RecipientNotAllowed();
+        if(token==address(0)||recipient==address(0))revert InvalidAgent();if(token.code.length==0)revert InvalidTarget();if(!allowedRecipients[msg.sender][recipient])revert RecipientNotAllowed();
         TokenPolicy storage p=tokenPolicies[msg.sender][token];if(amount==0)revert InvalidPolicy();if(amount>p.txLimit)revert TxLimitExceeded();if(p.spent+amount>p.cap)revert CapExceeded();
         p.spent+=amount;uint256 currentNonce=nonce++;(bool success,bytes memory ret)=token.call(abi.encodeWithSelector(IERC20.transfer.selector,recipient,amount));
         if(!success||(ret.length!=0&&!abi.decode(ret,(bool))))revert TransferFailed();emit AgentTokenTransfer(msg.sender,token,recipient,amount,currentNonce);
     }
     function agentRemainingNative(address agent)external view returns(uint256){AgentPolicy memory p=agents[agent];if(!p.active||p.expiresAt==0||block.timestamp>=p.expiresAt||p.nativeSpent>=p.nativeCap)return 0;return p.nativeCap-p.nativeSpent;}
     function tokenRemaining(address agent,address token)external view returns(uint256){TokenPolicy memory p=tokenPolicies[agent][token];if(p.spent>=p.cap)return 0;return p.cap-p.spent;}
+
+    function _isTokenAssetSelector(bytes4 selector)private pure returns(bool){
+        return selector==IERC20.transfer.selector
+            ||selector==ERC20_APPROVE_SELECTOR
+            ||selector==ERC20_TRANSFER_FROM_SELECTOR
+            ||selector==ERC20_INCREASE_ALLOWANCE_SELECTOR
+            ||selector==ERC20_DECREASE_ALLOWANCE_SELECTOR;
+    }
 }

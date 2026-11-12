@@ -249,22 +249,38 @@ contract POAAgentFinanceSecurityTest {
     }
 
     function testRejectZeroTokenTransfer() public {
-        configure(10 ether, 1 ether, 1 days);
         vm.prank(OWNER);
-        poa.setTokenPolicy(AGENT, TOKEN, 100, 100);
+        poa.setTokenPolicy(AGENT, address(token), 100, 100);
         vm.prank(OWNER);
         poa.setRecipientPermission(AGENT, RECIPIENT, true);
+        configure(10 ether, 1 ether, 1 days);
 
         vm.prank(AGENT);
         (bool ok,) = address(poa).call(
             abi.encodeWithSelector(
                 poa.transferToken.selector,
-                TOKEN,
+                address(token),
                 RECIPIENT,
                 0
             )
         );
         require(!ok, "zero token transfer accepted");
+    }
+
+    function testRejectTokenAddressWithoutCode() public {
+        vm.prank(OWNER);
+        poa.setTokenPolicy(AGENT, TOKEN, 100, 100);
+        vm.prank(OWNER);
+        poa.setRecipientPermission(AGENT, RECIPIENT, true);
+        configure(10 ether, 1 ether, 1 days);
+
+        vm.prank(AGENT);
+        (bool ok,) = address(poa).call(abi.encodeWithSelector(
+            poa.transferToken.selector, TOKEN, RECIPIENT, 1
+        ));
+
+        require(!ok, "token address without code accepted");
+        require(poa.tokenRemaining(AGENT, TOKEN) == 100, "invalid token call consumed cap");
     }
 
     receive() external payable {}
@@ -309,6 +325,26 @@ contract POAAgentFinanceTokenSecurityTest {
         require(poa.tokenRemaining(AGENT, address(token)) == 60, "remaining token cap wrong");
     }
 
+    function testGenericExecuteCannotBypassTokenCap() public {
+        configureToken(100, 20);
+        activateAgent();
+        token.mint(address(poa), 100);
+        vm.prank(OWNER);
+        poa.setCallPermission(AGENT, address(token), MockToken.transfer.selector, true);
+
+        vm.prank(AGENT);
+        (bool ok,) = address(poa).call(abi.encodeWithSelector(
+            poa.execute.selector,
+            address(token),
+            0,
+            abi.encodeWithSelector(MockToken.transfer.selector, RECIPIENT, 21)
+        ));
+
+        require(!ok, "generic execute bypassed token transaction cap");
+        require(token.balanceOf(RECIPIENT) == 0, "generic execute moved tokens");
+        require(poa.tokenRemaining(AGENT, address(token)) == 100, "generic execute changed token accounting");
+    }
+
     function testTokenTxLimitEnforced() public {
         configureToken(100, 40);
         activateAgent();
@@ -349,7 +385,7 @@ contract POAAgentFinanceTokenSecurityTest {
         require(!ok, "recipient allowlist bypass");
     }
 
-    function testFailedTokenTransferDoesNotConsumeCap() public {
+    function testReturnedFalseTokenTransferDoesNotConsumeCap() public {
         configureToken(100, 100);
         activateAgent();
         token.mint(address(poa), 100);

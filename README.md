@@ -1,305 +1,67 @@
-# PQP --- POST QUANTUM PERSISTENCE
+# PQP — Policy-Guarded Payments for Agents
 
-<div align="center">
+**On-chain spending guardrails for agentic treasuries, implemented as a native NEAR smart contract.**
 
-**Policy-Controlled Agentic Finance Infrastructure**
+PQP lets a human-controlled treasury authorize an agent to request bounded NEAR transfers. Each policy has a short expiry, a cumulative cap, a per-transaction limit, an explicit recipient allowlist, and a revocation path. Payments settle asynchronously on NEAR, and spending is counted only after the transfer callback reports success.
 
-**Human intent → Policy → Agent execution → On-chain settlement → Audit**
+> **Security and scope:** This project does not implement post-quantum cryptography, a post-quantum signature scheme, or a quantum-resistant ledger. “PQP” is a project name, not a cryptographic guarantee. The new NEAR contract uses NEAR’s ordinary account authentication; its security comes from explicit on-chain spending policy. The existing Solidity/EVM contract is pre-existing baseline code and is not a NEAR deployment.
 
-</div>
+## What problem it solves
 
----
+Giving an autonomous agent a full-access treasury key grants much more authority than most payment tasks require. PQP puts a deterministic policy layer between an agent account and a treasury: the owner defines how much an agent may spend, who may receive funds, and when the authority ends. The agent can request a transfer but cannot change its own policy.
 
-## About
+## What is new for NEAR HACKATHON
 
-POA Agent Finance is a standalone smart-contract foundation for autonomous and AI-assisted finance.
+This repository contains an earlier Solidity/EVM policy contract. That implementation predates the NEAR integration and is included as baseline context, not as a NEAR contract. The `near/` Rust contract and this NEAR integration were added for the NEAR HACKATHON development window on the `hackathon/near-open-innovation` branch. The relevant baseline-to-hackathon diff is available in the [branch comparison](https://github.com/wadezigh96/pQp_contracts/compare/main...hackathon/near-open-innovation).
 
-The core principle is simple:
+The NEAR build uses native NEAR account execution and asynchronous `Promise` transfers, not an EVM deployment, bridge, Chain Signatures, NEAR Intents, or a post-quantum key. The project targets **Open Innovation**. Its agent-spending-guardrail design also fits **AI Security & Defense**. No partner integration is claimed.
 
-> **The agent may execute within a policy, but the agent never becomes the owner.**
+## Try it locally
 
-The contract separates **human authority** from **agent execution authority**. Policies define what an agent can do, how much it can spend, where it can send funds, which contract functions it can call, and when its authority expires.
-
-
-
-## Core workflow
-
-```mermaid
-flowchart TB
-    U[Human / Owner] --> P[Create Agent Policy]
-    P --> G[Guardrails]
-
-    G --> A[Agent Authority]
-    G --> C[Call Allowlist]
-    G --> R[Recipient Allowlist]
-    G --> T[Token Policy]
-    G --> E[Expiry]
-
-    A --> X[Agent Request]
-
-    X --> V{Policy Check}
-    V -->|blocked| B[Reject]
-    V -->|allowed| S[State Accounting]
-
-    S --> Q[On-chain Execution]
-    Q --> L[Nonce + Events]
-    L --> Z[Settlement]
-
-    U -->|Pause / Revoke| G
-```
-
-### Execution path
-
-**Configure → Activate → Request → Validate → Account → Execute → Emit event**
-
-1. Owner configures an agent.
-2. Agent receives limited authority.
-3. Agent submits an execution request.
-4. Contract checks expiry, pause state, target, selector, recipient and spending limits.
-5. Spending accounting is updated.
-6. The approved call or token transfer executes.
-7. Nonce and event data provide an on-chain execution trail.
-8. Owner can pause or revoke authority at any time.
-
----
-
-## Security architecture
-
-```mermaid
-flowchart LR
-    O[Owner] -->|policy control| PC[POA Policy Controller]
-
-    PC --> AP[Agent Policy]
-    PC --> CL[Call Allowlist]
-    PC --> RL[Recipient Allowlist]
-    PC --> TP[Token Policy]
-    PC --> EX[Expiry]
-    PC --> PP[Emergency Pause]
-
-    AG[Agent Key] -->|limited request| G{Guardrails}
-    AP --> G
-    CL --> G
-    RL --> G
-    TP --> G
-    EX --> G
-    PP --> G
-
-    G -->|pass| CE[Contract Execution]
-    G -->|fail| RE[Revert]
-
-    CE --> EV[Nonce + Events]
-    CE --> SET[Settlement]
-```
-
-### Security boundaries
-
-| Layer | Responsibility |
-|---|---|
-| Owner | Creates, changes, pauses and revokes policies |
-| Agent | Requests permitted execution only |
-| Policy | Defines limits and permissions |
-| Contract | Enforces policy deterministically |
-| Nonce | Provides monotonic execution sequencing |
-| Events | Provide an on-chain audit trail |
-| Pause | Emergency global execution stop |
-| Expiry | Automatic authority termination |
-| Reentrancy guard | Prevents nested execution |
-
-AI logic is **not trusted as a security boundary**. The smart contract remains the final enforcement layer.
-
----
-
-## Project structure
-
-```
-poa_contracts/
-├── contracts/
-│   └── POAAgentFinance.sol       # Core policy + execution contract
-│
-├── test/
-│   ├── POAAgentFinance.security.t.sol
-│   │                              # Security regression tests
-│   ├── POAAgentFinance.invariant.t.sol
-│   │                              # State/invariant checks
-│   └── POAAgentFinance.stateful.t.sol
-│                                  # Stateful handler scenarios
-│
-├── script/                        # Deployment scripts
-├── foundry.toml                   # Foundry compiler/test configuration
-├── README.md                      # Architecture + usage overview
-└── ARCHITECTURE.md                # Detailed system design
-```
-
-The repository keeps the **security-critical policy layer small and isolated**. Application-specific agents, APIs, wallets and protocol adapters can be built above it later without changing the core security model.
-
----
-
-## Policy model
-
-### Native assets
-
-Each agent receives:
-
-- maximum policy duration: **30 days**
-- total native spending cap
-- per-transaction native limit
-- active / revoked state
-
-### ERC-20 assets
-
-Each agent/token pair can define:
-
-- cumulative token cap
-- per-transaction token limit
-- cumulative spending accounting
-
-### Contract calls
-
-Calls require an explicit:
-
-**agent + target + function selector**
-
-allowlist entry.
-
-### Token recipients
-
-Token transfers require an explicit:
-
-**agent + recipient**
-
-allowlist entry.
-
----
-
-## Owner lifecycle
-
-```
-Create Policy
-     ↓
-Activate Agent
-     ↓
-Agent Executes
-     ↓
- ┌───────────────┐
- │ Active Policy │
- └───────────────┘
-     ↓
-  Pause / Revoke / Expire
-     ↓
-Authority Ends
-```
-
-The owner remains the root authority throughout the lifecycle.
-
----
-
-## Agent execution lifecycle
-
-```
-Agent
-  │
-  ▼
-Request
-  │
-  ▼
-Is active?
-  │ no ─────► Revert
-  │ yes
-  ▼
-Is paused?
-  │ yes ────► Revert
-  │ no
-  ▼
-Policy validation
-  │
-  ├── expiry
-  ├── target + selector
-  ├── recipient
-  ├── per-tx limit
-  └── cumulative cap
-  │
-  ▼
-Accounting
-  │
-  ▼
-On-chain call
-  │
-  ▼
-Nonce + event
-  │
-  ▼
-Settlement
-```
-
----
-
-## Security status
-
-Current defenses include:
-
-- two-step ownership transfer
-- agent expiry
-- native spending caps
-- native per-transaction limits
-- ERC-20 spending caps
-- ERC-20 per-transaction limits
-- target/function-selector allowlisting
-- recipient allowlisting
-- emergency pause
-- monotonic nonce
-- reentrancy protection
-- defensive ERC-20 transfer handling
-- policy validation
-- security regression tests
-- invariant/stateful test scaffolding
-
-This repository has **not been independently audited**. Passing local or CI tests does not constitute a security audit. Production funds should not be deployed until independent review, fuzzing, static analysis and deployment validation are complete.
-
----
-
-## Development
+Requirements: Rust stable, Cargo, and the `wasm32-unknown-unknown` target.
 
 ```bash
-forge build
-forge test
+rustup target add wasm32-unknown-unknown
+cd near
+cargo test --locked
+cargo build --locked --target wasm32-unknown-unknown --release
 ```
 
-The intended development loop is:
+Expected results:
 
-**Change → Build → Security tests → Invariant/stateful tests → Review → Deploy**
+1. `cargo test --locked` runs unit tests for owner-only policy changes, recipient permissions, policy duration, per-transaction and cumulative spending limits, pending asynchronous spend reservations, pause behavior, and allowlist enforcement. The process exits successfully when all tests pass.
+2. The build command exits successfully and writes a WebAssembly module under `near/target/wasm32-unknown-unknown/release/`.
+3. A push or pull request to this branch checks Rust formatting, runs the same unit tests, and builds the Wasm contract in GitHub Actions.
 
----
+These are local unit/build checks, not a deployed testnet demo, independent audit, or proof of formal verification.
 
-## Future application layer
+## Contract interface
 
-The core contract intentionally does not contain protocol-specific logic.
+The Rust contract in [`near/src/lib.rs`](near/src/lib.rs) exposes:
 
-A future application can sit above it:
+- `new(owner_id)` to initialize the treasury policy contract.
+- `configure_agent(agent_id, expires_at_ns, native_cap, per_tx_limit)` to create a bounded agent policy. Active, unexpired policies cannot be overwritten; revoke or wait for expiry first.
+- `set_recipient(agent_id, recipient_id, allowed)` to add or remove a transfer destination.
+- `request_spend(recipient_id, amount)` for an authorized agent to request a native NEAR transfer. The contract reserves pending spend so concurrent requests cannot exceed the cap, then settles accounting in a private promise callback.
+- `resolve_spend(request_id)` as an internal callback, `revoke_agent(agent_id)`, `set_paused(paused)`, and `deposit()`.
 
+NEAR promises execute asynchronously. A request ID is returned when a transfer is scheduled; the request is finalized in a callback after success or failure. The scheduling transaction alone does not prove that payment settled.
+
+## Security model and limitations
+
+The owner is trusted to set policies and can pause or revoke agents. An agent can request transfers only while its policy is active, unexpired, unpaused, within its cap and per-transaction limit, and to an allowed recipient. Pending transfers count against the cap before an asynchronous promise is submitted; a failed transfer releases that reservation, while a successful callback records the spend.
+
+The NEAR implementation currently protects native NEAR payments only. It does not implement FT/NEP-141 transfers, cross-chain settlement, agent key provisioning, a frontend, or cryptographic post-quantum protection. Do not use it to custody production funds without deeper callback/state-machine review, adversarial testing, and an independent security audit. The legacy Solidity code has known review concerns; see [`SECURITY.md`](SECURITY.md).
+
+## Repository map
+
+```text
+contracts/                 Pre-existing Solidity/EVM baseline
+script/                    Foundry deployment script for baseline
+test/                       Foundry tests for baseline
+near/Cargo.toml             Native NEAR Rust contract package
+near/src/lib.rs             NEAR policy and asynchronous payment contract
+.github/workflows/near.yml  NEAR test and Wasm build checks
+SECURITY.md                 Scope, limitations, and security review notes
+ARCHITECTURE.md             Baseline and NEAR integration architecture
 ```
-User / AI Agent
-      │
-      ▼
-Application / API
-      │
-      ▼
-Policy Builder
-      │
-      ▼
-POAAgentFinance
-      │
-      ├── DEX
-      ├── Lending
-      ├── Payments
-      └── Other protocols
-```
-
-This keeps integrations replaceable while the security boundary remains centralized in the POA contract.
-
----
-
-<div align="center">
-
-**Policy first. Agent second. Settlement last.**
-
-</div>
