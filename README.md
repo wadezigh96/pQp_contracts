@@ -1,4 +1,4 @@
-# POA --- Proof Of Action
+# PQP --- POST QUANTUM PERSISTENCE
 
 <div align="center">
 
