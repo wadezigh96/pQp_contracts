@@ -1,0 +1,9 @@
+{
+  "name": "@qpc/agent-router",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "QPC agent-operated NEAR to Ethereum cross-chain payment adapter",
+  "scripts": { "test": "node --test" },
+  "engines": { "node": ">=20" }
+}
