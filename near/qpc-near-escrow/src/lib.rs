@@ -8,7 +8,7 @@ use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::store::LookupMap;
 use near_sdk::{
     env, near, AccountId, BorshStorageKey, Gas, NearToken, PanicOnDefault,
-    Promise, PromiseOrValue, PromiseResult,
+    Promise, PromiseOrValue,
 };
 
 const MAX_PAYMENT_ID_LEN: usize = 64;
@@ -166,7 +166,8 @@ impl QpcNearEscrow {
         payment.status = PaymentStatus::ReleasePending;
         self.payments.insert(payment_id.clone(), payment.clone());
         log_payment("payment_release_started", &payment_id);
-        self.payout(payment, payment.recipient.clone(), PayoutKind::Release)
+        let recipient = payment.recipient.clone();
+        self.payout(payment, recipient, PayoutKind::Release)
     }
 
     /// Only the original payer may reclaim an unclaimed payment after expiry.
@@ -191,11 +192,12 @@ impl QpcNearEscrow {
         };
         assert_eq!(payment.status, expected_pending, "payout state mismatch");
 
-        payment.status = match (kind, env::promise_result(0)) {
-            (PayoutKind::Release, PromiseResult::Successful(_)) => PaymentStatus::Released,
-            (PayoutKind::Refund, PromiseResult::Successful(_)) => PaymentStatus::Refunded,
-            // A failed FT transfer leaves escrow available for a controlled retry.
-            (_, PromiseResult::Failed) => PaymentStatus::Pending,
+        let payout_succeeded = env::promise_result_checked(0, 256).is_ok();
+        payment.status = match (kind, payout_succeeded) {
+            (PayoutKind::Release, true) => PaymentStatus::Released,
+            (PayoutKind::Refund, true) => PaymentStatus::Refunded,
+            // A failed or unreadable FT transfer leaves escrow pending for reconciliation.
+            (_, false) => PaymentStatus::Pending,
         };
         self.payments.insert(payment_id.clone(), payment.clone());
         log_payment(match payment.status {
