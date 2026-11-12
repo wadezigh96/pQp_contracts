@@ -35,3 +35,28 @@ The committed fixture is an upstream NEAR light-client inclusion-proof fixture. 
 ## Next security milestone
 
 Implement and test authenticated NEAR header/epoch synchronization, then produce a real QPC escrow transaction and request its execution outcome proof against a trusted finalized head. Only after independent differential tests should this logic be ported to an on-chain Ethereum verifier.
+
+
+## Consensus light-client reference module
+
+The `consensus` module wraps the pinned upstream `near-light-client-protocol`
+implementation at commit `522f94003fbbedfdc1e7a7de6284f5a1d25d8134`.
+
+It maintains a trusted header checkpoint and its epoch producer set, then
+validates each subsequent `LightClientBlockView` through upstream
+`Protocol::sync`. That protocol path checks strictly increasing height,
+current-or-next epoch progression, approval signatures, stake-weighted
+approval strictly greater than two-thirds, and the next validator-set hash
+when the epoch changes.
+
+QPC adds a defensive exact-length check for `approvals_after_next` before
+calling upstream code. This matters because the upstream implementation's
+stake fold pairs approvals and validators with `zip`; a truncated vector
+must not silently shrink the denominator.
+
+The checkpoint is a trust anchor, not something this module authenticates.
+The caller must provision it through an independently trusted bootstrap
+process. The module is an off-chain Rust reference component; it is not
+deployed on Ethereum, BSC, Solana, or NEAR and does not make QPC a trustless
+bridge. Tests that do not contain authentic signed NEAR block fixtures are
+guard tests, not end-to-end consensus proof tests.

@@ -1,3 +1,5 @@
+pub mod consensus;
+
 //! QPC off-chain NEAR execution-proof reference verifier.
 //!
 //! Verifies an execution outcome proof against a caller-supplied trusted block
