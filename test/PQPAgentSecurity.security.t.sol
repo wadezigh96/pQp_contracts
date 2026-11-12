@@ -249,11 +249,11 @@ contract PQPAgentSecuritySecurityTest {
     }
 
     function testRejectZeroTokenTransfer() public {
-        configure(10 ether, 1 ether, 1 days);
         vm.prank(OWNER);
         pqp.setTokenPolicy(AGENT, TOKEN, 100, 100);
         vm.prank(OWNER);
         pqp.setRecipientPermission(AGENT, RECIPIENT, true);
+        configure(10 ether, 1 ether, 1 days);
 
         vm.prank(AGENT);
         (bool ok,) = address(pqp).call(
@@ -349,7 +349,7 @@ contract PQPAgentSecurityTokenSecurityTest {
         require(!ok, "recipient allowlist bypass");
     }
 
-    function testFailedTokenTransferDoesNotConsumeCap() public {
+    function testFalseReturningTokenDoesNotConsumeCap() public {
         configureToken(100, 100);
         activateAgent();
         token.mint(address(pqp), 100);

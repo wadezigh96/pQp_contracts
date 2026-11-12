@@ -54,7 +54,7 @@ contract PQPAgentSecurity {
 
     function configureAgent(address agent,uint64 expiresAt,uint256 nativeCap,uint256 nativeTxLimit)external onlyOwner{
         if(agent==address(0)||agent==owner)revert InvalidAgent();
-        if(agents[agent].active)revert AgentMustBeInactive();
+        if(agents[agent].active && block.timestamp < agents[agent].expiresAt)revert AgentMustBeInactive();
         if(expiresAt==0||expiresAt<=block.timestamp||expiresAt>block.timestamp+MAX_POLICY_DURATION)revert InvalidExpiry();
         if(nativeCap==0||nativeTxLimit==0||nativeTxLimit>nativeCap)revert InvalidPolicy();
         agents[agent]=AgentPolicy(true,expiresAt,nativeCap,0,nativeTxLimit);
@@ -71,7 +71,7 @@ contract PQPAgentSecurity {
     }
     function setTokenPolicy(address agent,address token,uint256 cap,uint256 txLimit)external onlyOwner{
         if(agent==address(0)||agent==owner)revert InvalidAgent();if(token==address(0))revert InvalidTarget();
-        if(agents[agent].active)revert AgentMustBeInactive();
+        if(agents[agent].active && block.timestamp < agents[agent].expiresAt)revert AgentMustBeInactive();
         if(cap==0||txLimit==0||txLimit>cap)revert InvalidPolicy();tokenPolicies[agent][token]=TokenPolicy(cap,0,txLimit);emit TokenPolicySet(agent,token,cap,txLimit);
     }
     function deposit()external payable whenNotPaused{emit NativeDeposited(msg.sender,msg.value);}
