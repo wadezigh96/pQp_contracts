@@ -237,10 +237,14 @@ contract EthereumQPCSettlementTest {
 
     function testOwnerCannotRemoveValidatorBelowThreshold() public {
         vm.prank(OWNER);
+        vault.setValidatorThreshold(3);
+        address validator = vm.addr(KEY_C);
+        vm.prank(OWNER);
         (bool ok,) = address(vault).call(abi.encodeWithSelector(
-            vault.setValidator.selector, vm.addr(KEY_C), false
+            vault.setValidator.selector, validator, false
         ));
         require(!ok, "validator set dropped below threshold");
+        require(vault.isValidator(validator), "validator unexpectedly removed");
     }
 
     function testOwnerCanRotateValidatorWithoutDroppingThreshold() public {
