@@ -18,6 +18,7 @@ const MAX_ID_LEN: usize = 64;
 const MAX_METHOD_LEN: usize = 64;
 
 #[derive(BorshSerialize, BorshStorageKey)]
+#[borsh(crate = "near_sdk::borsh")]
 enum StorageKey {
     Policies,
     Usage,
