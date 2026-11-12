@@ -118,7 +118,7 @@ contract EthereumQPCSettlementTest {
         require(!ok, "paused settlement accepted");
     }
 
-    function testFailedTokenTransferDoesNotConsumeReplayKeys() public {
+    function testTokenTransferFailureDoesNotConsumeReplayKeys() public {
         token.setFailTransfers(true);
         vm.prank(RELAYER);
         (bool ok,) = address(vault).call(abi.encodeWithSelector(
