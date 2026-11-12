@@ -62,3 +62,12 @@ Solana workspace and PQC integrations are not production-ready and are not inclu
 This repository has not received an independent audit. Passing tests do not prove safety. No deployment is authorized by this repository change. Before any testnet or mainnet deployment, review the exact chain, bytecode, constructor authority, RPC, environment variables, gas assumptions and upgrade/governance model.
 
 **Separate chains. Separate contracts. Separate cryptographic trust boundaries.**
+
+
+## Zcash privacy adapter (design only)
+
+QPC also defines a separate Zcash wallet/transaction adapter under `zcash/`. This is **not** a smart contract deployed on Zcash. Its design prioritizes shielded payments through Unified Addresses, disables silent transparent-address fallback, keeps viewing keys and recipient addresses out of public cross-chain messages, and documents metadata leakage from bridges, solvers, relayers, and wallet providers.
+
+The Zcash adapter is currently a **design specification only**. No Zcash wallet, shielded transaction builder, light-client verifier, bridge, or production settlement path is claimed to be implemented. See [the Zcash privacy architecture and threat model](zcash/QPC_ZCASH_PRIVACY_ARCHITECTURE.md) and [the adapter README](zcash/README.md).
+
+A shielded Zcash destination does not make a cross-chain payment fully anonymous: source-chain activity, amounts, timing, route providers, and network metadata may still permit correlation. QPC must disclose those limits and fail closed when the required privacy properties cannot be met.
