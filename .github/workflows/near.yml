@@ -1,4 +1,4 @@
-name: NEAR contract
+name: QPC — NEAR contract
 
 on:
   push:

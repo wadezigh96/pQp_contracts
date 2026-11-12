@@ -128,7 +128,7 @@ impl Contract {
                 pending_spend: U128(0),
             },
         );
-        env::log_str("PQP: agent policy configured");
+        env::log_str("QPC: agent policy configured");
     }
 
     pub fn set_recipient(&mut self, agent_id: AccountId, recipient_id: AccountId, allowed: bool) {
@@ -145,7 +145,7 @@ impl Contract {
             set.remove(&recipient_id);
             self.recipients.insert(&agent_id, &set);
         }
-        env::log_str("PQP: recipient permission updated");
+        env::log_str("QPC: recipient permission updated");
     }
 
     pub fn revoke_agent(&mut self, agent_id: AccountId) {
@@ -153,16 +153,16 @@ impl Contract {
         let mut policy = self.agents.get(&agent_id).expect("Unknown agent");
         policy.active = false;
         self.agents.insert(&agent_id, &policy);
-        env::log_str("PQP: agent revoked");
+        env::log_str("QPC: agent revoked");
     }
 
     pub fn set_paused(&mut self, paused: bool) {
         self.assert_owner();
         self.paused = paused;
         env::log_str(if paused {
-            "PQP: paused"
+            "QPC: paused"
         } else {
-            "PQP: unpaused"
+            "QPC: unpaused"
         });
     }
 
@@ -172,7 +172,7 @@ impl Contract {
             env::attached_deposit().as_yoctonear() > 0,
             "Attach NEAR to deposit"
         );
-        env::log_str("PQP: treasury funded");
+        env::log_str("QPC: treasury funded");
     }
 
     pub fn request_spend(&mut self, recipient_id: AccountId, amount: U128) -> U64 {
@@ -230,7 +230,7 @@ impl Contract {
             created_at_ns: U64(now),
         };
         self.requests.insert(&request_id, &request);
-        env::log_str(&format!("PQP: spend request {} pending", request_id));
+        env::log_str(&format!("QPC: spend request {} pending", request_id));
 
         Promise::new(recipient_id)
             .transfer(NearToken::from_yoctonear(amount.0))
@@ -276,7 +276,7 @@ impl Contract {
         }
         self.agents.insert(&request.agent_id, &policy);
         env::log_str(&format!(
-            "PQP: spend request {} {}",
+            "QPC: spend request {} {}",
             request_id.0,
             if succeeded { "settled" } else { "failed" }
         ));

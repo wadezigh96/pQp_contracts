@@ -1,20 +1,28 @@
-# PQP — Policy-Guarded Payments for Agents
+# QPC — Quantum Persistence Contract
 
-**On-chain spending guardrails for agentic treasuries, implemented as a native NEAR smart contract.**
+**Persistent on-chain cybersecurity guardrails for AI agents and autonomous treasuries on NEAR.**
 
-PQP lets a human-controlled treasury authorize an agent to request bounded NEAR transfers. Each policy has a short expiry, a cumulative cap, a per-transaction limit, an explicit recipient allowlist, and a revocation path. Payments settle asynchronously on NEAR, and spending is counted only after the transfer callback reports success.
+QPC is designed to reduce the blast radius when an AI agent, its application, or an automation workflow is compromised or behaves unsafely. Policy is enforced by a NEAR smart contract rather than relying only on rules in the agent's off-chain software. The owner sets short-lived authority, per-transaction and cumulative spending caps, recipient allowlists, and pause/revocation controls. Pending transfers reserve policy capacity until asynchronous settlement.
 
-> **Security and scope:** This project does not implement post-quantum cryptography, a post-quantum signature scheme, or a quantum-resistant ledger. “PQP” is a project name, not a cryptographic guarantee. The new NEAR contract uses NEAR’s ordinary account authentication; its security comes from explicit on-chain spending policy. The existing Solidity/EVM contract is pre-existing baseline code and is not a NEAR deployment.
+> **What “Quantum Persistence” means here:** QPC is the project name and describes persistent on-chain policy state. The contract does not implement quantum cryptography, detect hackers, repair software bugs, or make every computer or blockchain quantum-safe. NEAR supports the ML-DSA-65 post-quantum access-key scheme at the account/protocol layer, but this contract does not select, inspect, or enforce which keys its owner or agents use. A deployment must separately configure and verify its signing keys before claiming post-quantum account security.
 
-## What problem it solves
+## Cybersecurity innovation
 
-Giving an autonomous agent a full-access treasury key grants much more authority than most payment tasks require. PQP puts a deterministic policy layer between an agent account and a treasury: the owner defines how much an agent may spend, who may receive funds, and when the authority ends. The agent can request a transfer but cannot change its own policy.
+A compromised agent key should not automatically grant authority to rewrite its own spending policy. QPC places deterministic limits between an agent and a treasury: the agent can request an allowed payment, but cannot change its cap, extend its expiry, add a recipient, unpause the contract, or revoke the owner. This can contain financial impact from compromised AI workflows and some application-level failures, provided the on-chain policy and owner account remain secure.
+
+QPC is a containment and authorization layer, not a general-purpose firewall or vulnerability scanner. It cannot prevent an attacker from using a permitted action within its limits. It also cannot protect the owner account if that account is compromised, fix bugs in unrelated applications, or guarantee that every AI-generated action is safe.
+
+## Quantum-safe account keys on NEAR
+
+NEAR's access-key documentation lists **ML-DSA-65** as a post-quantum signature scheme, alongside classical key types. NEAR accounts can hold keys from multiple schemes. For an account-level post-quantum setup, the deployment operator must ensure that the owner and agent accounts use ML-DSA-65 signing keys for the relevant authority and remove any weaker active key that would remain an alternate way to act. See the official [NEAR Access Keys documentation](https://docs.near.org/protocol/accounts-contracts/access-keys.md).
+
+That key configuration is not performed by this repository. The contract identifies callers by NEAR account ID and does not verify the signature scheme used for a transaction. NEAR's protocol and ecosystem quantum migration is also broader than account signatures; the [NEAR post-quantum roadmap](https://www.near.org/blog/near-quantum-safe-roadmap) describes additional protocol, consensus, wallet, and cross-chain work. Therefore, do not describe this contract or the entire NEAR stack as quantum-safe merely because ML-DSA-65 is supported.
 
 ## What is new for NEAR HACKATHON
 
-This repository contains an earlier Solidity/EVM policy contract. That implementation predates the NEAR integration and is included as baseline context, not as a NEAR contract. The `near/` Rust contract and this NEAR integration were added for the NEAR HACKATHON development window on the `hackathon/near-open-innovation` branch. The relevant baseline-to-hackathon diff is available in the [branch comparison](https://github.com/wadezigh96/pQp_contracts/compare/main...hackathon/near-open-innovation).
+The repository's earlier Solidity/EVM policy contract is baseline context, not a NEAR implementation. The Rust contract under `near/` is the new NEAR integration on the `hackathon/near-open-innovation` branch. Compare it with the baseline in the [branch diff](https://github.com/wadezigh96/pQp_contracts/compare/main...hackathon/near-open-innovation).
 
-The NEAR build uses native NEAR account execution and asynchronous `Promise` transfers, not an EVM deployment, bridge, Chain Signatures, NEAR Intents, or a post-quantum key. The project targets **Open Innovation**. Its agent-spending-guardrail design also fits **AI Security & Defense**. No partner integration is claimed.
+QPC targets **Open Innovation** and focuses on **AI Security & Defense** through on-chain containment of agent spending authority. It uses native NEAR account execution and asynchronous `Promise` transfers. It does not claim a partner integration, NEAR Intents integration, cross-chain settlement, or post-quantum signing implemented inside the contract.
 
 ## Try it locally
 
@@ -23,45 +31,40 @@ Requirements: Rust stable, Cargo, and the `wasm32-unknown-unknown` target.
 ```bash
 rustup target add wasm32-unknown-unknown
 cd near
+cargo fmt --check
 cargo test --locked
 cargo build --locked --target wasm32-unknown-unknown --release
 ```
 
-Expected results:
-
-1. `cargo test --locked` runs unit tests for owner-only policy changes, recipient permissions, policy duration, per-transaction and cumulative spending limits, pending asynchronous spend reservations, pause behavior, and allowlist enforcement. The process exits successfully when all tests pass.
-2. The build command exits successfully and writes a WebAssembly module under `near/target/wasm32-unknown-unknown/release/`.
-3. A push or pull request to this branch checks Rust formatting, runs the same unit tests, and builds the Wasm contract in GitHub Actions.
-
-These are local unit/build checks, not a deployed testnet demo, independent audit, or proof of formal verification.
+The tests cover owner-only policy changes, recipient permissions, policy duration, per-transaction and cumulative spending limits, pending asynchronous spend reservations, pause behavior, and allowlist enforcement. A push or pull request to this branch runs formatting, unit tests, and the Wasm release build in GitHub Actions. These checks are not a deployed testnet demo, a proof of formal verification, or an independent security audit.
 
 ## Contract interface
 
 The Rust contract in [`near/src/lib.rs`](near/src/lib.rs) exposes:
 
 - `new(owner_id)` to initialize the treasury policy contract.
-- `configure_agent(agent_id, expires_at_ns, native_cap, per_tx_limit)` to create a bounded agent policy. Active, unexpired policies cannot be overwritten; revoke or wait for expiry first.
+- `configure_agent(agent_id, expires_at_ns, native_cap, per_tx_limit)` to create a bounded agent policy. An active unexpired policy cannot be overwritten; revoke it or wait for expiry first.
 - `set_recipient(agent_id, recipient_id, allowed)` to add or remove a transfer destination.
-- `request_spend(recipient_id, amount)` for an authorized agent to request a native NEAR transfer. The contract reserves pending spend so concurrent requests cannot exceed the cap, then settles accounting in a private promise callback.
-- `resolve_spend(request_id)` as an internal callback, `revoke_agent(agent_id)`, `set_paused(paused)`, and `deposit()`.
+- `request_spend(recipient_id, amount)` for an authorized agent to request a native NEAR transfer. The contract reserves pending spend before scheduling the transfer, then settles accounting in a private promise callback.
+- `resolve_spend(request_id)` as an internal callback, plus `revoke_agent(agent_id)`, `set_paused(paused)`, and `deposit()`.
 
-NEAR promises execute asynchronously. A request ID is returned when a transfer is scheduled; the request is finalized in a callback after success or failure. The scheduling transaction alone does not prove that payment settled.
+NEAR promises execute asynchronously. A request ID is returned when a transfer is scheduled; the callback finalizes the request after success or failure. The scheduling transaction alone does not prove that payment settled.
 
-## Security model and limitations
+## Scope and known limitations
 
-The owner is trusted to set policies and can pause or revoke agents. An agent can request transfers only while its policy is active, unexpired, unpaused, within its cap and per-transaction limit, and to an allowed recipient. Pending transfers count against the cap before an asynchronous promise is submitted; a failed transfer releases that reservation, while a successful callback records the spend.
+The new NEAR contract protects native NEAR payments only. It does not implement FT/NEP-141 transfers, account key provisioning, an AI planner, a frontend, cross-chain settlement, malware detection, or cryptographic verification of ML-DSA keys. Do not use it with production funds without deeper callback/state-machine testing and an independent security review.
 
-The NEAR implementation currently protects native NEAR payments only. It does not implement FT/NEP-141 transfers, cross-chain settlement, agent key provisioning, a frontend, or cryptographic post-quantum protection. Do not use it to custody production funds without deeper callback/state-machine review, adversarial testing, and an independent security audit. The legacy Solidity code has known review concerns; see [`SECURITY.md`](SECURITY.md).
+The legacy Solidity code has separate EVM risks and review notes; see [`SECURITY.md`](SECURITY.md). “QPC” names the persistent on-chain policy contract. A deployment may separately use NEAR ML-DSA access keys, but this contract does not configure or enforce them and does not itself defeat hackers, software bugs, or quantum computers.
 
 ## Repository map
 
 ```text
 contracts/                 Pre-existing Solidity/EVM baseline
-script/                    Foundry deployment script for baseline
+script/                     Foundry deployment script for baseline
 test/                       Foundry tests for baseline
 near/Cargo.toml             Native NEAR Rust contract package
-near/src/lib.rs             NEAR policy and asynchronous payment contract
-.github/workflows/near.yml  NEAR test and Wasm build checks
+near/src/lib.rs             QPC policy and asynchronous payment contract
+.github/workflows/near.yml  Formatting, test, and Wasm build checks
 SECURITY.md                 Scope, limitations, and security review notes
 ARCHITECTURE.md             Baseline and NEAR integration architecture
 ```

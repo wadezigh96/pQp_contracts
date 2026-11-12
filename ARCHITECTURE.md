@@ -1,8 +1,8 @@
-# PQP Architecture
+# QPC Architecture
 
 ## Project boundary
 
-PQP separates a pre-existing EVM policy prototype from a new native NEAR contract. Only the code under `near/` is the NEAR implementation. The Solidity code under `contracts/` is historical baseline context and is not called by the NEAR contract.
+QPC separates a pre-existing EVM policy prototype from a new native NEAR cybersecurity contract. Only the code under `near/` is the NEAR implementation. The Solidity code under `contracts/` is historical baseline context and is not called by QPC.
 
 ## NEAR execution model
 
@@ -26,7 +26,9 @@ Private callback resolves transfer result
          └── failure: release reservation, leave spent unchanged
 ```
 
-The pending-spend reservation is included in cap checks so that several outstanding transfers cannot collectively exceed the configured cap. Transfers are native NEAR only. The implementation does not contain an AI planner, frontend, NEP-141 integration, bridge, or post-quantum cryptography.
+The pending-spend reservation is included in cap checks so that several outstanding transfers cannot collectively exceed the configured cap. This persistent on-chain policy can limit the financial impact of a compromised agent, but it does not detect attacks or repair software bugs. Transfers are native NEAR only. The implementation does not contain an AI planner, frontend, NEP-141 integration, bridge, or post-quantum signature code.
+
+NEAR supports ML-DSA-65 account access keys, but QPC does not provision, inspect, or enforce a key scheme. The owner and agent accounts must be configured and checked separately if a deployment wants post-quantum account authentication. See [NEAR Access Keys](https://docs.near.org/protocol/accounts-contracts/access-keys.md) and the [NEAR post-quantum roadmap](https://www.near.org/blog/near-quantum-safe-roadmap).
 
 ## NEAR contract state
 
@@ -38,7 +40,7 @@ The pending-spend reservation is included in cap checks so that several outstand
 
 ## Baseline Solidity contract
 
-`contracts/POAAgentFinance.sol` is an earlier EVM prototype with generic target/selector execution and native/ERC-20 policy paths. It remains independent from the NEAR contract. See `SECURITY.md` for static-review findings that must be resolved before relying on the EVM baseline.
+`contracts/POAAgentFinance.sol` is an earlier EVM prototype with generic target/selector execution and native/ERC-20 policy paths. It remains independent from QPC. See `SECURITY.md` for static-review findings that must be resolved before relying on the EVM baseline.
 
 ## Validation
 

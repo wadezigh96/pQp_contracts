@@ -1688,7 +1688,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pqp-near-policy"
+name = "qpc-near-policy"
 version = "0.1.0"
 dependencies = [
  "near-sdk",
