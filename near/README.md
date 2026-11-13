@@ -33,6 +33,10 @@ cargo build --release --target wasm32-unknown-unknown -p qpc-near
 cargo build --release --target wasm32-unknown-unknown -p qpc-near-escrow
 ```
 
+The `qpc-near` unit/integration suite includes `tests/cyber_security.rs` for fail-closed agent controls, policy-version safety, payload bounds, nonce replay protection, callback integrity, and preserved accounting. `tests/cross_chain_privacy.rs` verifies that the cross-chain fixture carries only an opaque recipient reference, binds the exact amount and privacy payload to the policy hash, rejects router redirection, and exposes no transparent action when only the shielded rule is configured.
+
+These tests validate the controls currently implemented by the contract. They do not claim that the contract already implements Chain Signatures, a private L1 transaction, a TEE, a solver, or a receipt verifier. Those are explicit integration boundaries and must be tested separately when implemented.
+
 ## Safety boundary
 
 This is an experimental prototype, not audited or production-ready. No mainnet deployment or live payment is authorized. NEAR supports ML-DSA-65 access keys for transaction signing, but this contract does not implement an in-contract ML-DSA/SLH-DSA verifier. Runtime acceptance of an ML-DSA-signed transaction is not QPC contract-level signature verification and does not make NEAR consensus or cross-chain signing post-quantum. See [NEAR's access-key documentation](https://docs.near.org/protocol/accounts-contracts/access-keys) and the [QPC experiment plan](POST_QUANTUM_EXPERIMENTS.md).
