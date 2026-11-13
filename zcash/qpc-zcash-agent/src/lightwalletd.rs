@@ -64,10 +64,7 @@ impl TrustedTestnetCheckpoint {
     ) -> Result<Self, LightwalletdError> {
         let block_hash = block_hash.into().to_ascii_lowercase();
         let tree_state_sha256 = tree_state_sha256.into().to_ascii_lowercase();
-        if height == 0
-            || !is_64_hex(&block_hash)
-            || !is_64_hex(&tree_state_sha256)
-        {
+        if height == 0 || !is_64_hex(&block_hash) || !is_64_hex(&tree_state_sha256) {
             return Err(LightwalletdError::InvalidCheckpoint);
         }
 
@@ -100,9 +97,7 @@ impl VerifiedTestnetTreeState {
         if state.height != checkpoint.height {
             return Err(LightwalletdError::CheckpointHeightMismatch);
         }
-        if !is_64_hex(&state.hash)
-            || !state.hash.eq_ignore_ascii_case(&checkpoint.block_hash)
-        {
+        if !is_64_hex(&state.hash) || !state.hash.eq_ignore_ascii_case(&checkpoint.block_hash) {
             return Err(LightwalletdError::CheckpointHashMismatch);
         }
         if !tree_state_digest(&state).eq_ignore_ascii_case(&checkpoint.tree_state_sha256) {
@@ -302,12 +297,8 @@ mod tests {
     }
 
     fn trusted_checkpoint(state: &TreeState) -> TrustedTestnetCheckpoint {
-        TrustedTestnetCheckpoint::new(
-            state.height,
-            state.hash.clone(),
-            tree_state_digest(state),
-        )
-        .unwrap()
+        TrustedTestnetCheckpoint::new(state.height, state.hash.clone(), tree_state_digest(state))
+            .unwrap()
     }
 
     #[test]
