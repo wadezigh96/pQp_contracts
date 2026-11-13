@@ -18,6 +18,7 @@ use zcash_protocol::{consensus::NetworkType, PoolType, ShieldedPool};
 pub mod lightwalletd;
 pub mod privacy_query;
 pub mod wallet;
+pub mod viewing;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ZcashNetwork {
