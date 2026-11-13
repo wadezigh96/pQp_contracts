@@ -31,6 +31,10 @@ The governing rule is:
 
 The reverse path requires a separately reviewed Zcash receipt verifier and NEAR escrow/release design. A hosted wallet report is a provider-trust model, not a trustless proof.
 
+## Public-chain privacy boundary
+
+The NEAR dispatch payload must contain only a domain-separated commitment to the canonical payment intent, not the destination amount or recipient reference. The router retains the clear request for the route-provider handoff. This reduces public NEAR calldata/log exposure; it does **not** hide the request from the route provider, wallet operator, network observers, or the Zcash wallet itself. The route-provider handoff needs an authenticated confidential transport before production. A SHA-256 commitment is binding under its assumptions, but it is not a zero-knowledge proof and does not let a NEAR contract enforce hidden amount limits. A future NEAR contract must either enforce source-side limits independently or use a reviewed proof system; it must not claim confidential policy enforcement based only on this hash.
+
 ## Why this differs from a conventional bridge
 
 - **Agent-directed intent:** sender and recipient agents negotiate a payment request, quote, deadline, and route.
