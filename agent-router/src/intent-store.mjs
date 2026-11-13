@@ -31,8 +31,9 @@ function copy(value) { return immutable(structuredClone(value)); }
  * atomic mkdir/rename and fsync; not NFS, multi-host consensus, or an RPC API.
  * The caller is a trusted orchestrator: it must authenticate cancellation,
  * administrative failures and submission reports. No signing/broadcast occurs.
- * Mandatory injected authorization/evidence verifiers must be real integrations
- * in production; tests use explicit mocks, not a production verifier.
+ * Authorization is an explicitly trusted application integration boundary.
+ * Evidence callbacks only validate data consistency: they cannot confirm or
+ * settle. Native authorization-bound proof integration is NOT_IMPLEMENTED.
  *
  * A lock covers read/check/write of BOTH replay indexes and lifecycle record.
  * Replacement writes fsync file, rename, fsync directory before success. A crash
@@ -207,6 +208,7 @@ export class FileIntentStore {
       evidence: options.evidence,
       verifyDestinationEvidence: options.verifyDestinationEvidence,
     });
+    check(verified.state === "EVIDENCE_VERIFIED", "NOT_VERIFIED: independent native settlement evidence required");
     check(verified.transactionId === prior.transactionId ||
       (prior.state === "RECONCILING" && prior.transactionId === undefined), "settlement transaction mismatch");
     return this.#update(id, "CONFIRMED", ["SUBMITTED", "RECONCILING"], { nowUnix, expectedRevision }, record => {
@@ -215,10 +217,10 @@ export class FileIntentStore {
     });
   }
 
-  async settle(id, options) {
-    return this.#update(id, "SETTLED", ["CONFIRMED"], options, record => {
-      check(record.confirmation?.transactionId === record.transactionId, "verified confirmation required");
-    });
+  async settle() {
+    // Historical persisted CONFIRMED records may originate from caller callbacks.
+    // Do not grandfather them into settlement without genuine native proof.
+    throw new Error("NOT_IMPLEMENTED: native authorization-bound settlement and durable proof integration required");
   }
 
   async cancel(id, options = {}) {

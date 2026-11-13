@@ -67,8 +67,9 @@ test("in-flight reservation is atomic and timeout uncertainty cannot permit a se
   assert.equal((await store.fail(id, { nowUnix: NOW + 2, reason: "broadcast-timeout" })).state, "RECONCILING");
   await assert.rejects(store.reserveSubmission(id, { nowUnix: NOW + 3 }), /transition/);
   await assert.rejects(store.cancel(id, { nowUnix: NOW + 3, reason: "unsafe" }), /transition/);
-  await store.confirm(id, { nowUnix: NOW + 6, evidence: evidence(), verifyDestinationEvidence: async () => true });
-  assert.equal((await store.settle(id, { nowUnix: NOW + 7 })).state, "SETTLED");
+  await assert.rejects(store.confirm(id, { nowUnix: NOW + 6, evidence: evidence(), verifyDestinationEvidence: async () => true }), /NOT_VERIFIED/);
+  await assert.rejects(store.settle(id, { nowUnix: NOW + 7 }), /NOT_IMPLEMENTED/);
+  assert.equal((await store.get(id)).state, "RECONCILING");
 });
 
 test("nonce and intent uniqueness are independent, scoped, and never released on cancel", async t => {
@@ -104,16 +105,17 @@ test("state machine requires verified matching finality, forbids duplicate submi
   await store.authorize(envelope(), auth);
   await store.recordSubmission(id, { nowUnix: NOW + 1, transactionId: "tx-1", expectedRevision: 1 });
   await assert.rejects(store.recordSubmission(id, { nowUnix: NOW + 2, transactionId: "tx-2" }), /transition/);
-  await assert.rejects(store.settle(id, { nowUnix: NOW + 2 }), /transition/);
+  await assert.rejects(store.settle(id, { nowUnix: NOW + 2 }), /NOT_IMPLEMENTED/);
   await assert.rejects(store.cancel(id, { nowUnix: NOW + 2, reason: "cancel" }), /transition/);
   await assert.rejects(store.confirm(id, { nowUnix: NOW + 2, evidence: evidence(), verifyDestinationEvidence: async () => false }), /verification failed/);
-  await assert.rejects(store.confirm(id, { nowUnix: NOW + 2, evidence: { ...evidence(), transactionId: "other" }, verifyDestinationEvidence: async () => true }), /transaction/);
-  await store.confirm(id, { nowUnix: NOW + 6, evidence: evidence(), verifyDestinationEvidence: async () => true });
-  await assert.rejects(store.settle(id, { nowUnix: NOW + 7, expectedRevision: 2 }), /revision/);
-  assert.equal((await store.settle(id, { nowUnix: NOW + 7 })).state, "SETTLED");
+  for (const transactionId of ["other", "tx-1"]) {
+    await assert.rejects(store.confirm(id, { nowUnix: NOW + 6, evidence: { ...evidence(), transactionId }, verifyDestinationEvidence: async () => true }), /NOT_VERIFIED/);
+  }
+  await assert.rejects(store.reconcile(id, { nowUnix: NOW + 7, expectedRevision: 1, reason: "stale" }), /revision/);
+  assert.equal((await store.get(id)).state, "SUBMITTED");
   assert.equal((await store.reconcile(id, { nowUnix: NOW + 8, reason: "reorg" })).state, "RECONCILING");
-  await store.confirm(id, { nowUnix: NOW + 9, evidence: evidence(), verifyDestinationEvidence: async () => true });
-  assert.equal((await store.settle(id, { nowUnix: NOW + 10 })).state, "SETTLED");
+  await assert.rejects(store.confirm(id, { nowUnix: NOW + 9, evidence: evidence(), verifyDestinationEvidence: async () => true }), /NOT_VERIFIED/);
+  await assert.rejects(store.settle(id, { nowUnix: NOW + 10 }), /NOT_IMPLEMENTED/);
 });
 
 test("failures, timeout uncertainty, cancellation and expiry fail closed", async t => {

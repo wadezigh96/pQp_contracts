@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**Quantum-Persistant Agentic Finance**
+**Policy-governed agentic finance — local prototype**
 
 **Human intent → Guardrails → Agent execution → On-chain settlement → Audit**
 
@@ -21,6 +21,10 @@ The core principle is simple:
 The contract separates **human authority** from **agent execution authority**. Policies define what an agent can do, how much it can spend, where it can send funds, which contract functions it can call, and when its authority expires.
 
 
+
+## Implementation scope
+
+The execution workflow below describes the **EVM policy contract**, not a live cross-chain payment system. NEAR records authorization only; native adapters prepare unsigned requests; the local lifecycle and dashboard are simulations, not evidence of signing, broadcast or settlement. Public chain metadata remains public, and no post-quantum authentication or private agent transport is active. See the [Phase 4 threat model and production blockers](SECURITY.md).
 
 ## Core workflow
 
@@ -124,7 +128,11 @@ qpc_contracts/
 │   └── QPCAgentFinance.stateful.t.sol
 │                                  # Stateful handler scenarios
 │
-├── near/\n│   └── qpc-near-agent-finance/    # NEAR Rust policy contract MVP\n├── agent-router/                  # Local-only cross-chain request preparation\n├── zcash/                         # Shielded wallet adapter boundary\n├── script/                        # Deployment scripts
+├── near/
+│   └── qpc-near-agent-finance/    # NEAR Rust authorization-contract MVP
+├── agent-router/                 # Local-only unsigned preparation and lifecycle
+├── zcash/                        # Shielded wallet adapter boundary
+├── script/                       # Deployment scripts (not executed by the demo)
 ├── foundry.toml                   # Foundry compiler/test configuration
 ├── README.md                      # Architecture + usage overview
 └── ARCHITECTURE.md                # Detailed system design
@@ -248,7 +256,7 @@ Current defenses include:
 - rejection of common ERC-20 allowance-granting selectors (`approve`, `increaseAllowance`, `permit`)
 - recipient allowlisting
 - emergency pause
-- monotonic nonce
+- monotonic execution/audit nonce (not one-use intent or cross-chain replay protection)
 - reentrancy protection
 - defensive ERC-20 transfer handling
 - policy validation
@@ -309,7 +317,7 @@ This keeps integrations replaceable while the security boundary remains centrali
 
 ## Verified engineering boundary
 
-This branch adds a strict [canonical envelope and shared JS/Rust vector](docs/CANONICAL_SPEC.md), NEAR native-identity authorization, [local native adapter boundaries](docs/NATIVE_ADAPTERS.md), and a durable local intent lifecycle. See [engineering evidence and requirement traceability](docs/ENGINEERING_EVIDENCE.md) for exact checks and gaps. These are local prototypes: no deployment, signing, broadcast, transfer, production settlement verifier, or PQ cryptography is included. Native transfer preparation is not execution; a persisted state is not chain evidence.
+This branch adds a strict [canonical envelope and shared JS/Rust vector](docs/CANONICAL_SPEC.md), NEAR native-identity authorization, [local native adapter boundaries](docs/NATIVE_ADAPTERS.md), and a durable single-host local intent lifecycle. See [engineering evidence and requirement traceability](docs/ENGINEERING_EVIDENCE.md) for checks and gaps. The supported demo/testnet verification boundary is unsigned preparation, simulation and read-only observation, not deployment, signing, broadcast, transfer or verified settlement. No production settlement verifier or PQ cryptography is active. Generic evidence remains `NOT_VERIFIED`; native mock evidence is `MOCK_VALIDATED_NOT_SETTLED`; Zcash route success cannot produce settlement. Store confirmation/settlement fail closed, including historical callback-created confirmations. A persisted state or a testnet RPC response is not proof that an authorized payment occurred.
 
 ## QPC design principles and security requirements
 
@@ -323,7 +331,7 @@ Quantum resistance is a design target. QPC must not claim post-quantum security 
 
 Required work includes:
 - define cryptographic agility and versioned identity/authorization formats;
-- evaluate standardized post-quantum signature and key-establishment algorithms against the threat model;
+- evaluate standardized ML-DSA and SLH-DSA signatures and ML-KEM key establishment against the threat model (ML-KEM is not a signature);
 - design a carefully reviewed hybrid classical + post-quantum migration path where chain capabilities permit;
 - define key rotation, compromise recovery, downgrade prevention, and algorithm deprecation;
 - test cross-chain verification, serialization, resource limits, and failure handling.

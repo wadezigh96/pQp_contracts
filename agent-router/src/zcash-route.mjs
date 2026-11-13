@@ -53,7 +53,7 @@ export async function submitNearToZcashDispatch(prepared, {
 }
 
 /**
- * Convert a provider status to SETTLED only after independent receipt checking.
+ * Validate provider consistency only; shielded native verification is unavailable.
  */
 export async function verifyNearToZcashRoute(status, expected, verifyReceipt) {
   assert(status && isNonEmptyString(status.routeId), "route status is invalid");
@@ -80,9 +80,11 @@ export async function verifyNearToZcashRoute(status, expected, verifyReceipt) {
     expectedRecipientRef: expected.opaqueRecipientRef,
   });
   assert(verified === true, "independent Zcash receipt verification failed");
-  return Object.freeze({ state: "SETTLED", status });
+  // A caller-owned callback is not native shielded receipt verification. Never
+  // promote a route-provider claim to settlement, even when it returns true.
+  return Object.freeze({ state: "NOT_IMPLEMENTED", reason: "Native shielded Zcash settlement verification is not implemented", status });
 }
 
 export const QPC_ZCASH_ROUTE_TERMINAL_STATES = Object.freeze([
-  "SETTLED", "FAILED", "REFUNDED", "INCOMPLETE_DEPOSIT",
+  "NOT_IMPLEMENTED", "FAILED", "REFUNDED", "INCOMPLETE_DEPOSIT",
 ]);

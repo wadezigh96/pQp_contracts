@@ -346,7 +346,8 @@ test("settlement evidence must bind the exact authorization and pass the chain-s
       return true;
     },
   });
-  assert.equal(result.state, "EVIDENCE_VERIFIED");
+  assert.equal(result.state, "NOT_VERIFIED");
+  assert.match(result.reason, /not independent native/);
   assert.equal(result.transactionId, "zcash-tx-0001");
   assert.equal(verifierCalls, 1);
 });

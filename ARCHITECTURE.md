@@ -10,7 +10,7 @@ It is designed around one separation:
 - **Agent = constrained executor**
 - **Contract = deterministic enforcement**
 
-The AI does not receive the owner's private key and does not get unrestricted contract access.
+The intended custody boundary keeps the owner's private key outside the AI process and restricts agent authority. The contracts cannot prevent an operator from exposing a key off-chain. Sections 2–12 describe the EVM policy layer; they do not claim that the NEAR/router prototypes execute or settle cross-chain payments. See the [Phase 4 threat model](SECURITY.md) for actual trust assumptions, recovery gaps and production blockers.
 
 ## 2. High-level architecture
 
@@ -145,7 +145,7 @@ Native execution requires:
 - valid expiry
 - unpaused contract
 - target allowlist
-- selector allowlist
+- selector allowlist and exact complete-calldata hash permission
 - amount <= per-transaction limit
 - cumulative amount <= policy cap
 - sufficient contract balance
@@ -279,7 +279,7 @@ Agent contract calls require two independent owner-configured permissions: targe
 
 The EVM policy contract is not a privacy layer: calldata, storage, events, and transaction metadata are public on transparent chains. Exact calldata hashing binds authorization to arguments but does not hide those arguments.
 
-Post-quantum resistance is a design objective only. This implementation has no PQ signature/KEM, hybrid authentication, or PQ key lifecycle. Likewise, the current repository does not yet contain a production NEAR contract or universal chain adapters. The JavaScript agent-router and Zcash wallet adapter are integration prototypes; Zcash transaction construction, signing, broadcast, and independent shielded-receipt verification remain unimplemented.
+Post-quantum resistance is a design objective only. ML-DSA/SLH-DSA signatures and ML-KEM key establishment are future migration candidates, not active implementations; ML-KEM cannot replace authorization signatures. This implementation has no PQ signature/KEM, hybrid authentication, downgrade protection or PQ key lifecycle/recovery. Likewise, the current repository does not yet contain a production NEAR contract or universal chain adapters. The JavaScript agent-router and Zcash wallet adapter are integration prototypes; Zcash transaction construction, signing, broadcast, and independent shielded-receipt verification remain unimplemented.
 
 
 ## NEAR MVP boundary
@@ -304,6 +304,8 @@ A shared envelope does not imply shared transaction semantics. Each adapter must
 
 The NEAR MVP now authorizes the strict canonical v1 envelope using native predecessor authentication and an owner-pinned profile; the legacy limited-hash dispatch is disabled. See [canonical encoding and shared vector](docs/CANONICAL_SPEC.md). Authorization updates persistent replay/cap accounting atomically in NEAR state and emits minimal commitment evidence, not a destination transfer. It does not execute or verify cross-chain settlement.
 
-The local JS intent store persists replay consumption and lifecycle records under a single-host lock and atomic snapshot. It is not a distributed transaction coordinator; uncertain external submissions must enter reconciliation rather than retry automatically. Native preparation handles are unsigned local data, with mock evidence validation explicitly separate from production settlement. See [native adapter boundaries](docs/NATIVE_ADAPTERS.md) and [test evidence](docs/ENGINEERING_EVIDENCE.md).
+The local JS intent store persists replay consumption and lifecycle records under a single-host lock and atomic snapshot. It is not a distributed transaction coordinator; uncertain external submissions must enter reconciliation rather than retry automatically. Storage rollback, malicious local writers and stale-backup replay are not defended. Native preparation handles are unsigned local data, with mock evidence validation explicitly separate from production settlement. Generic evidence callbacks cannot unlock confirmation/settlement: generic results remain `NOT_VERIFIED`, Zcash route results remain `NOT_IMPLEMENTED`, and store `settle` rejects even legacy confirmations. See [native adapter boundaries](docs/NATIVE_ADAPTERS.md) and [test evidence](docs/ENGINEERING_EVIDENCE.md).
+
+Private agent operation and public-chain privacy are separate requirements. No private agent communication/identity layer is active. Redaction limits accidental disclosure, not chain visibility: calldata/profile storage, accounts, timing and deterministic commitment correlations remain public. An unsigned dashboard or read-only testnet probe is a compatibility/simulation tool, not a native receipt verifier, payment or deployment. The [operations guide](docs/OPERATIONS_AND_DEMO.md) describes the no-wallet boundary.
 
 Ethereum/BSC and Solana production adapters are not implemented. The Zcash wallet adapter is not a production shielded signer/broadcaster or independent receipt verifier. The EVM contract is not private by default. Post-quantum authentication is a design target only and is not implemented.

@@ -1,5 +1,7 @@
 # Native adapter safety boundary
 
+The separate [Phase 3 testnet inspection layer](TESTNET_INSPECTION.md) now performs read-only native RPC observations. It does not change the local-only contract of this module or enable QPC settlement.
+
 ## What exists
 
 `agent-router/src/native-adapters.mjs` implements **local validation and unsigned preparation**, not an executing bridge. It imports the strict canonical authorization envelope, including both native chain IDs. `prepareNativeTransfer` returns `PREPARED_UNSIGNED`; this is **not** `AUTHORIZED`, `SUBMITTED`, `CONFIRMED`, or `SETTLED`. The caller must separately authenticate the agent, check the current policy and revocation epoch, and atomically consume replay authorization. The module does not authenticate a signature, contact an RPC, own a wallet, sign, broadcast, deploy, or transfer funds.

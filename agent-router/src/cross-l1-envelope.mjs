@@ -302,7 +302,10 @@ export async function verifyCrossL1SettlementEvidence({
   assert(verified === true, "chain-specific evidence verification failed");
 
   return Object.freeze({
-    state: "EVIDENCE_VERIFIED",
+    // This callback is an application boundary, not native RPC proof. A caller
+    // can return true for fabricated data. Never mint a settlement capability.
+    state: "NOT_VERIFIED",
+    reason: "Caller validation is not independent native authorization-bound evidence",
     authorizationCommitment: expectedCommitment,
     transactionId: evidence.transactionId,
     destinationNetworkId: evidence.destinationNetworkId,

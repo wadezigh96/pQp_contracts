@@ -140,5 +140,6 @@ test("requires independent receipt verification for provider success", async () 
     assert.equal(receiptExpectation.expectedRecipientRef, request.opaqueRecipientRef);
     return true;
   });
-  assert.equal(settled.state, "SETTLED");
+  assert.equal(settled.state, "NOT_IMPLEMENTED");
+  assert.match(settled.reason, /shielded/);
 });

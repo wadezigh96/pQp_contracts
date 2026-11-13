@@ -122,6 +122,15 @@ export function buildNearToZcashShieldedDispatch(input) {
 }
 
 export { buildNearEnvelopeAuthorizationDispatch } from './near-envelope-dispatch.mjs';
+export {
+  TESTNET_NETWORKS,
+  createTestnetAdapter,
+  prepareTestnetTransfer,
+  inspectTestnetNetwork,
+  inspectTestnetTransaction,
+  verifyTestnetSettlement,
+  inspectZcashTestnet,
+} from './testnet-adapters.mjs';
 
 export {
   submitNearToZcashDispatch,

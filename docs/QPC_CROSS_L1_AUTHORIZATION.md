@@ -102,7 +102,7 @@ A common envelope does not make the adapters interchangeable. Each adapter owns 
 
 The cross-chain state machine must be idempotent and explicit:
 
-Implemented local lifecycle: `CREATED -> AUTHORIZED -> SUBMITTED -> CONFIRMED -> SETTLED`. The more detailed route protocol remains a future integration; these labels record orchestration decisions and are not proofs of native execution.
+The usable local lifecycle is `CREATED -> AUTHORIZED -> SUBMITTING -> SUBMITTED`, with pre-submission cancellation/expiry/failure and in-flight `RECONCILING`. `CONFIRMED` and `SETTLED` describe target/historical states, not enabled production success. Generic evidence returns `NOT_VERIFIED`; store confirmation and settlement fail closed. The more detailed route/refund protocol and native recovery verifier remain future integrations. Caller-reported submission labels are not proofs of execution.
 
 Uncertain states enter `PENDING_RECONCILIATION`. Cancellation, expiry, reorg, partial completion, duplicate delivery, timeout, and refund/compensation must be explicit transitions with adapter-specific rules. Do not claim atomicity unless the protocol actually provides it.
 
@@ -114,7 +114,7 @@ The agent-router now contains an initial, versioned QPC v1 envelope implementati
 - deterministic canonical serialization and SHA-256 commitment over the complete envelope;
 - explicit binding of agent/key identity, source/destination networks and adapters, assets/decimals, amounts, fee bounds, recipient commitment, nonce/replay domain, policy, time window, settlement policy, and cancellation epoch;
 - an authorization boundary that requires caller-supplied identity authentication and durable atomic replay-consumption callbacks;
-- a separate settlement-evidence boundary that checks the authorization commitment and expected destination fields before invoking a chain-specific evidence verifier.
+- a separate settlement-evidence consistency boundary that checks the authorization commitment and expected destination fields, but returns `NOT_VERIFIED` even if a caller callback returns true; no production native verifier is installed.
 
 The full-envelope module is now wired into a NEAR native-identity authorization entrypoint; the weaker legacy dispatch is disabled. Verifier callbacks remain dependency boundaries, not signature verification or consensus proofs. The local filesystem intent store offers atomic replay/lifecycle persistence under its documented single-host assumptions; it is not a distributed database or production coordinator. NEAR records authorization only. It does not execute a transfer or independently verify Zcash settlement. Local native preparation adapters never mark production settlement complete.
 
@@ -133,4 +133,4 @@ Each adapter must test at minimum:
 - timeout, cancellation, partial completion, retry idempotency, and refund/reconciliation;
 - malformed encodings, non-canonical integers, unknown critical fields, and resource-exhaustion inputs.
 
-Passing unit tests is not an independent security or cryptographic audit.
+Passing unit tests is not an independent security or cryptographic audit. The comprehensive [Phase 4 threat model](../SECURITY.md) covers authentication/access, replay/storage rollback, parameter substitution, cross-chain finality, privacy leakage, incident recovery, production blockers and future ML-DSA/ML-KEM/SLH-DSA migration. None of those post-quantum algorithms is active.
