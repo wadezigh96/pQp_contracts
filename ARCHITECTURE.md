@@ -285,3 +285,23 @@ Post-quantum resistance is a design objective only. This implementation has no P
 ## NEAR MVP boundary
 
 The NEAR Rust crate under near/qpc-near-agent-finance is an authorization-and-audit-recording MVP. It is not a deployed contract, escrow, bridge, wallet signer, or settlement verifier. Its policy hash and nonce checks do not make NEAR state private. It has not undergone independent audit or production gas/storage review.
+
+
+## Cross-L1 authorization and adapter architecture
+
+QPC's target is one versioned authorization envelope enforced independently by each chain adapter, not one universal smart contract. The envelope must bind agent identity, source and destination network/account, action, chain-specific assets, base-unit amount, fee bounds, recipient or privacy commitment, nonce/replay domain, policy ID/version, validity window, and required settlement evidence. The complete proposed field set and verification requirements are specified in [QPC Cross-L1 Authorization Envelope](docs/QPC_CROSS_L1_AUTHORIZATION.md).
+
+The intended adapters are distinct:
+- **NEAR:** NEAR account/contract-call and receipt/finality adapter.
+- **Ethereum:** EVM chain-ID, transaction, token, receipt, and finality adapter.
+- **BSC:** separately configured EVM-compatible adapter with BSC-specific network and finality assumptions.
+- **Solana:** program/instruction/account and slot/blockhash/finality adapter.
+- **Zcash:** shielded UTXO, wallet/note, nullifier, and shielded-receipt adapter.
+
+A shared envelope does not imply shared transaction semantics. Each adapter must validate its own network identity, asset mapping, replay state, signer boundary, finality, and recovery behavior.
+
+### Current implementation versus target
+
+The current NEAR MVP only authorizes a narrowly defined Zcash Testnet intent and records an event. Its hash currently binds payment ID, opaque recipient reference, amount in Zatoshi, and expiry; additional policy, caller, router, nonce, action, destination, privacy-mode, allowlist, and cap checks are performed separately. This is not yet the complete cross-L1 envelope and does not execute or verify settlement.
+
+Ethereum/BSC and Solana production adapters are not implemented. The Zcash wallet adapter is not a production shielded signer/broadcaster or independent receipt verifier. The EVM contract is not private by default. Post-quantum authentication is a design target only and is not implemented.
