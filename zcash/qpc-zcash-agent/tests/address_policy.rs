@@ -1,3 +1,4 @@
+use zcash_address::unified::Encoding;
 use qpc_zcash_agent::{
     validate_recipient, AddressPolicyError, ShieldedReceiver, ZcashNetwork,
 };
@@ -45,9 +46,9 @@ fn rejects_non_unified_transparent_address_without_fallback() {
 }
 
 #[test]
-fn rejects_non_canonical_unified_address_encoding() {
-    // The published vector is accepted only in the canonical representation.
-    // The production validator enforces this with decode -> encode equality.
+fn canonical_unified_address_round_trips_without_mutation() {
+    // The canonical representation is stable under decode -> encode.
+    // The production validator enforces the same equality for every input.
     let canonical = zcash_address::unified::Address::decode(MAINNET_UA)
         .expect("published vector should decode");
     let (network, _revision, address) = canonical;
