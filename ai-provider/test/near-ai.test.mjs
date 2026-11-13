@@ -153,3 +153,33 @@ test('rejects invalid response signature without exposing response content', asy
   const provider = createNearAIProvider({ env, clientFactory: factory });
   await assert.rejects(provider.generate({ prompt: 'hello' }), /response_signature_invalid/);
 });
+
+test('passes a bounded request timeout to the SDK', async () => {
+  let requestOptions;
+  const factory = async (options) => ({
+    async verify(model) {
+      options.modelVerification.verifiers.deployment({ runtimeMeasurements: { composeHash: 'approved-compose-hash' } });
+      options.deploymentPolicy({ model });
+      return { models: [{ deploymentProvenance: 'verified' }] };
+    },
+    chat: { completions: { create: async (_input, opts) => {
+      requestOptions = opts;
+      return { id: 'id-timeout', choices: [{ message: { content: 'ok' } }] };
+    } } },
+    async verifyResponse() { return { signatureKind: 'provider_tee' }; },
+  });
+  const provider = createNearAIProvider({ env, clientFactory: factory, timeoutMs: 12_000 });
+  await provider.generate({ prompt: 'hello' });
+  assert.equal(requestOptions.timeout, 12_000);
+});
+
+test('rejects responses beyond the configured character limit', async () => {
+  const { factory } = fakeFactory();
+  const provider = createNearAIProvider({ env, clientFactory: factory, maxResponseChars: 3 });
+  await assert.rejects(provider.generate({ prompt: 'hello' }), /response_too_large/);
+});
+
+test('rejects invalid timeout and response limit configuration', () => {
+  assert.throws(() => createNearAIProvider({ env, clientFactory: fakeFactory().factory, timeoutMs: 0 }), /invalid_timeout/);
+  assert.throws(() => createNearAIProvider({ env, clientFactory: fakeFactory().factory, maxResponseChars: 0 }), /invalid_response_limit/);
+});
