@@ -9,6 +9,8 @@
 
 use std::path::Path;
 
+use crate::wallet::{harden_sqlite_sidecars, prepare_database_file, restrict_regular_file};
+
 use rand_core::OsRng;
 use zcash_client_backend::keys::UnifiedFullViewingKey;
 use zcash_client_backend::{
@@ -17,7 +19,8 @@ use zcash_client_backend::{
 };
 use zcash_client_sqlite::{
     util::SystemClock,
-    wallet::{init::WalletMigrator, WalletDb},
+    wallet::init::WalletMigrator,
+    WalletDb,
 };
 use zcash_protocol::consensus::Network;
 
