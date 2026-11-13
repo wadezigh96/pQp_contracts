@@ -1,12 +1,12 @@
 # Native adapter safety boundary
 
-The separate [Phase 3 testnet inspection layer](TESTNET_INSPECTION.md) now performs read-only native RPC observations. It does not change the local-only contract of this module or enable QPC settlement.
+The separate [Phase 3 testnet inspection layer](TESTNET_INSPECTION.md) now performs read-only native RPC observations. It does not change the local-only contract of this module. Separate narrow authorization-bearing NEAR/EVM execution verifiers and the durable `settleNative` integration are described in [local execution](LOCAL_EXECUTION.md); their mocked-RPC tests are not evidence of a deployed payment.
 
 ## What exists
 
 `agent-router/src/native-adapters.mjs` implements **local validation and unsigned preparation**, not an executing bridge. It imports the strict canonical authorization envelope, including both native chain IDs. `prepareNativeTransfer` returns `PREPARED_UNSIGNED`; this is **not** `AUTHORIZED`, `SUBMITTED`, `CONFIRMED`, or `SETTLED`. The caller must separately authenticate the agent, check the current policy and revocation epoch, and atomically consume replay authorization. The module does not authenticate a signature, contact an RPC, own a wallet, sign, broadcast, deploy, or transfer funds.
 
-`settleNativeTransfer` always throws: real native verification and durable settlement integration are not implemented. An injected callback cannot unlock it. `validateMockNativeEvidence` is deliberately named and returns only `MOCK_VALIDATED_NOT_SETTLED`. It compares **synthetic normalized fixtures**, not raw chain responses. A fixture claiming `canonical: true` or `FINALIZED` is not proof of canonicality or finality. It cannot be passed off as a production verifier.
+`settleNativeTransfer` in this module always throws: a prepared plain transfer cannot authorize settlement. The separate native execution verification API must not be confused with this mock/plain-transfer boundary. An injected callback cannot unlock it. `validateMockNativeEvidence` is deliberately named and returns only `MOCK_VALIDATED_NOT_SETTLED`. It compares **synthetic normalized fixtures**, not raw chain responses. A fixture claiming `canonical: true` or `FINALIZED` is not proof of canonicality or finality. It cannot be passed off as a production verifier.
 
 ## Shared preparation contract
 

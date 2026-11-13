@@ -10,7 +10,7 @@ use near_sdk::serde_json::{json, Value};
 use near_sdk::{
     borsh::{self, BorshDeserialize, BorshSerialize},
     collections::LookupMap,
-    env, near, AccountId, BorshStorageKey, PanicOnDefault,
+    env, near, AccountId, BorshStorageKey, Gas, NearToken, PanicOnDefault, Promise, PromiseResult,
 };
 
 #[cfg(test)]
@@ -22,6 +22,8 @@ enum StorageKey {
     UsedPayments,
     AllowedRecipients,
     EnvelopeProfiles,
+    AuthorizationReceipts,
+    ExecutionResults,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone)]
@@ -62,6 +64,45 @@ pub struct DispatchReceipt {
     pub policy_args_hash: String,
 }
 
+/// Durable evidence of native predecessor authorization, not payment execution.
+/// This record is historical: expiry or later revocation never changes its state
+/// into an executable capability or a settlement proof.
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Clone)]
+#[serde(crate = "near_sdk::serde", rename_all = "camelCase")]
+pub struct AuthorizationReceipt {
+    pub state: String,
+    pub execution_status: String,
+    pub intent_id: String,
+    pub authorization_commitment: String,
+    pub agent_id: AccountId,
+    pub adapter_id: AccountId,
+    pub nonce: String,
+    pub policy_id: String,
+    pub policy_version: u32,
+    pub policy_commitment: String,
+    pub revocation_epoch: u64,
+    pub authorized_at_unix: u64,
+    pub expires_at_unix: u64,
+    pub block_height: u64,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Clone)]
+#[serde(crate = "near_sdk::serde", rename_all = "camelCase")]
+pub struct ExecutionResult {
+    pub state: String,
+    pub intent_id: String,
+    pub authorization_commitment: String,
+    pub recipient: AccountId,
+    pub amount_atomic: String,
+    pub authorized_at_unix: u64,
+    pub completed_at_unix: Option<u64>,
+    pub contract_fee_atomic: String,
+    pub protocol_gas_fee: String,
+    pub fee_budget_enforced: bool,
+    pub refund_state: String,
+    pub refund_attempt: u64,
+}
+
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
 pub struct QPCNear {
@@ -70,6 +111,8 @@ pub struct QPCNear {
     used_payments: LookupMap<String, bool>,
     allowed_recipients: LookupMap<(AccountId, String), bool>,
     envelope_profiles: LookupMap<AccountId, String>,
+    authorization_receipts: LookupMap<String, AuthorizationReceipt>,
+    execution_results: LookupMap<String, ExecutionResult>,
 }
 
 #[near]
@@ -83,6 +126,8 @@ impl QPCNear {
             used_payments: LookupMap::new(StorageKey::UsedPayments),
             allowed_recipients: LookupMap::new(StorageKey::AllowedRecipients),
             envelope_profiles: LookupMap::new(StorageKey::EnvelopeProfiles),
+            authorization_receipts: LookupMap::new(StorageKey::AuthorizationReceipts),
+            execution_results: LookupMap::new(StorageKey::ExecutionResults),
         }
     }
 
@@ -302,8 +347,25 @@ impl QPCNear {
         policy.next_nonce = next_nonce;
         self.agents.insert(&agent, &policy);
         self.used_payments.insert(&intent.to_owned(), &true);
-        let receipt = json!({"state":"AUTHORIZED", "intentId":intent,
-            "authorizationCommitment":expected, "nonce":envelope["nonce"]});
+        let record = AuthorizationReceipt {
+            state: "AUTHORIZED".into(),
+            execution_status: "NOT_EXECUTED".into(),
+            intent_id: intent.to_owned(),
+            authorization_commitment: expected,
+            agent_id: agent,
+            adapter_id: env::current_account_id(),
+            nonce: string(&envelope["nonce"]).to_owned(),
+            policy_id: policy.policy_id,
+            policy_version: policy.policy_version,
+            policy_commitment: string(&envelope["policy"]["commitment"]).to_owned(),
+            revocation_epoch: integer(&envelope["cancellation"]["revocationEpoch"]),
+            authorized_at_unix: now,
+            expires_at_unix: expiry,
+            block_height: env::block_height(),
+        };
+        self.authorization_receipts
+            .insert(&intent.to_owned(), &record);
+        let receipt = near_sdk::serde_json::to_value(record).expect("serialize receipt");
         // No raw recipient, amounts, or envelope are duplicated in the event.
         env::log_str(&format!(
             "EVENT_JSON:{}",
@@ -311,6 +373,362 @@ impl QPCNear {
             "event":"agent_action_authorized", "data":[receipt.clone()]})
         ));
         receipt
+    }
+
+    /// Same-chain testnet-only native transfer, funded by the native agent's
+    /// exact attached deposit. Protocol gas is caller-paid, not an adapter fee.
+    /// Failure consumes authorization permanently. The original agent can claim
+    /// returned funds through the separately tracked failure-only refund path.
+    #[payable]
+    pub fn execute_near_envelope(
+        &mut self,
+        envelope: Value,
+        authorization_commitment: String,
+        recipient: AccountId,
+    ) -> Promise {
+        validate_envelope(&envelope);
+        for section in ["source", "destination"] {
+            assert_eq!(
+                string(&envelope[section]["networkId"]),
+                "near:testnet",
+                "testnet only"
+            );
+            assert_eq!(
+                string(&envelope[section]["nativeChainId"]),
+                "testnet",
+                "testnet only"
+            );
+        }
+        assert_eq!(
+            string(&envelope["destination"]["adapterId"]),
+            env::current_account_id().as_str(),
+            "same contract only"
+        );
+        assert_eq!(
+            string(&envelope["action"]["type"]),
+            "asset-transfer",
+            "unsupported action"
+        );
+        assert_eq!(
+            string(&envelope["action"]["operation"]),
+            "pay",
+            "unsupported operation"
+        );
+        for key in ["sourceAssetId", "destinationAssetId"] {
+            assert_eq!(
+                string(&envelope["asset"][key]),
+                "near:native",
+                "native NEAR only"
+            );
+        }
+        for key in ["sourceDecimals", "destinationDecimals"] {
+            assert_eq!(
+                integer(&envelope["asset"][key]),
+                24,
+                "NEAR decimals mismatch"
+            );
+        }
+        assert_eq!(
+            string(&envelope["asset"]["mappingId"]),
+            "near-native-identity-v1",
+            "identity mapping required"
+        );
+        let amount = decimal(&envelope["amount"]["sourceAtomic"], true);
+        assert_eq!(
+            amount,
+            decimal(&envelope["amount"]["destinationAtomic"], true),
+            "amount mismatch"
+        );
+        assert_eq!(
+            string(&envelope["fees"]["feeAssetId"]),
+            "near:native",
+            "fee asset mismatch"
+        );
+        // The host does not expose gas price. The owner-approved all-in fee
+        // budget stays bound in the envelope but must be checked independently
+        // against actual transaction/receipt tokens_burnt; this result does not
+        // attest fee-budget conformance.
+        assert_eq!(
+            integer(&envelope["fees"]["maxSlippageBps"]),
+            0,
+            "slippage forbidden"
+        );
+        assert_eq!(
+            string(&envelope["settlement"]["evidenceClass"]),
+            "near-native-transfer-result",
+            "unsupported evidence class"
+        );
+        assert_eq!(
+            string(&envelope["settlement"]["finalityPolicy"]),
+            "near-execution-outcome",
+            "unsupported result policy"
+        );
+        assert_eq!(
+            integer(&envelope["settlement"]["minConfirmations"]),
+            0,
+            "not a finality verifier"
+        );
+        assert_ne!(
+            recipient,
+            env::current_account_id(),
+            "self transfer forbidden"
+        );
+        let recipient_hash = hex_string(&env::sha256(
+            format!(
+                "QPC-NATIVE-RECIPIENT-V1\0{}",
+                canonical_json(
+                    &json!({"chain":"near", "nativeChainId":"testnet", "recipient":recipient})
+                )
+            )
+            .as_bytes(),
+        ));
+        assert_eq!(
+            string(&envelope["destination"]["recipientCommitment"]),
+            recipient_hash,
+            "recipient commitment mismatch"
+        );
+        assert_eq!(
+            env::attached_deposit().as_yoctonear(),
+            amount,
+            "exact transfer deposit required"
+        );
+        assert!(
+            env::prepaid_gas() >= Gas::from_tgas(40),
+            "at least 40 Tgas required"
+        );
+        // Retain existing storage stake plus a bounded 16 KiB receipt reserve.
+        // The envelope has a 16 KiB bound and all persisted fields are bounded.
+        let storage_bytes = env::storage_usage()
+            .checked_add(16_384)
+            .expect("storage overflow");
+        let reserve = env::storage_byte_cost()
+            .as_yoctonear()
+            .checked_mul(storage_bytes as u128)
+            .expect("storage cost overflow");
+        assert!(
+            env::account_balance()
+                .as_yoctonear()
+                .checked_sub(amount)
+                .is_some_and(|balance| balance >= reserve),
+            "insufficient storage reserve"
+        );
+        let intent_id = string(&envelope["intentId"]).to_owned();
+        assert!(
+            self.execution_results.get(&intent_id).is_none(),
+            "execution already exists"
+        );
+        self.authorize_envelope(envelope, authorization_commitment.clone());
+        let result = ExecutionResult {
+            state: "PENDING".into(),
+            intent_id: intent_id.clone(),
+            authorization_commitment: authorization_commitment.clone(),
+            recipient: recipient.clone(),
+            amount_atomic: amount.to_string(),
+            authorized_at_unix: now_unix(),
+            completed_at_unix: None,
+            contract_fee_atomic: "0".into(),
+            protocol_gas_fee: "NOT_VERIFIED".into(),
+            fee_budget_enforced: false,
+            refund_state: "NOT_APPLICABLE".into(),
+            refund_attempt: 0,
+        };
+        self.execution_results.insert(&intent_id, &result);
+        Promise::new(recipient)
+            .transfer(NearToken::from_yoctonear(amount))
+            .then(
+                Self::ext(env::current_account_id())
+                    .with_static_gas(Gas::from_tgas(10))
+                    .on_near_transfer_result(intent_id, authorization_commitment),
+            )
+    }
+
+    /// Only the contract's own promise callback can record a native outcome.
+    /// EXECUTED describes this transfer result, never cross-chain settlement or
+    /// independent chain finality. Duplicate callbacks cannot rewrite history.
+    #[private]
+    pub fn on_near_transfer_result(
+        &mut self,
+        intent_id: String,
+        authorization_commitment: String,
+    ) -> ExecutionResult {
+        assert_eq!(
+            env::predecessor_account_id(),
+            env::current_account_id(),
+            "private callback only"
+        );
+        assert_eq!(
+            env::promise_results_count(),
+            1,
+            "one transfer result required"
+        );
+        let mut result = self
+            .execution_results
+            .get(&intent_id)
+            .expect("unknown execution");
+        assert_eq!(
+            result.authorization_commitment, authorization_commitment,
+            "authorization commitment mismatch"
+        );
+        assert_eq!(result.state, "PENDING", "execution already completed");
+        result.state = match env::promise_result(0) {
+            PromiseResult::Successful(bytes) if bytes.is_empty() => "EXECUTED",
+            PromiseResult::Failed => {
+                result.refund_state = "AVAILABLE".into();
+                "FAILED"
+            }
+            // An unexpected successful return does not prove returned funds.
+            // Fail closed without enabling a potentially double-paying refund.
+            _ => {
+                result.refund_state = "BLOCKED_INVALID_RESULT".into();
+                "FAILED"
+            }
+        }
+        .into();
+        result.completed_at_unix = Some(now_unix());
+        self.execution_results.insert(&intent_id, &result);
+        env::log_str(&format!(
+            "EVENT_JSON:{}",
+            json!({"standard":"qpc", "version":"1.0.0", "event":"near_transfer_result", "data":[result.clone()]})
+        ));
+        result
+    }
+
+    /// Refund only funds returned by a failed native transfer. This never
+    /// releases the original payment nonce, intent ID, or spending reservation.
+    pub fn claim_failed_near_refund(&mut self, intent_id: String) -> Promise {
+        let receipt = self
+            .authorization_receipts
+            .get(&intent_id)
+            .expect("unknown authorization");
+        assert_eq!(
+            env::predecessor_account_id(),
+            receipt.agent_id,
+            "original agent only"
+        );
+        let mut result = self
+            .execution_results
+            .get(&intent_id)
+            .expect("unknown execution");
+        assert_eq!(
+            result.authorization_commitment, receipt.authorization_commitment,
+            "authorization commitment mismatch"
+        );
+        assert_eq!(
+            result.state, "FAILED",
+            "only failed execution is refundable"
+        );
+        assert!(
+            result.refund_state == "AVAILABLE" || result.refund_state == "RETRYABLE",
+            "refund unavailable or pending"
+        );
+        assert!(
+            env::prepaid_gas() >= Gas::from_tgas(30),
+            "at least 30 Tgas required"
+        );
+        let amount = result
+            .amount_atomic
+            .parse::<u128>()
+            .expect("stored amount invalid");
+        let reserve = env::storage_byte_cost()
+            .as_yoctonear()
+            .checked_mul(env::storage_usage() as u128 + 1024)
+            .expect("storage cost overflow");
+        assert!(
+            env::account_balance()
+                .as_yoctonear()
+                .checked_sub(amount)
+                .is_some_and(|balance| balance >= reserve),
+            "insufficient refund storage reserve"
+        );
+        result.refund_attempt = result
+            .refund_attempt
+            .checked_add(1)
+            .expect("refund attempt overflow");
+        result.refund_state = "PENDING".into();
+        self.execution_results.insert(&intent_id, &result);
+        Promise::new(receipt.agent_id)
+            .transfer(NearToken::from_yoctonear(amount))
+            .then(
+                Self::ext(env::current_account_id())
+                    .with_static_gas(Gas::from_tgas(10))
+                    .on_near_refund_result(
+                        intent_id,
+                        result.authorization_commitment,
+                        result.refund_attempt,
+                    ),
+            )
+    }
+
+    #[private]
+    pub fn on_near_refund_result(
+        &mut self,
+        intent_id: String,
+        authorization_commitment: String,
+        refund_attempt: u64,
+    ) -> ExecutionResult {
+        assert_eq!(
+            env::predecessor_account_id(),
+            env::current_account_id(),
+            "private callback only"
+        );
+        assert_eq!(
+            env::promise_results_count(),
+            1,
+            "one refund result required"
+        );
+        let mut result = self
+            .execution_results
+            .get(&intent_id)
+            .expect("unknown execution");
+        assert_eq!(
+            result.authorization_commitment, authorization_commitment,
+            "authorization commitment mismatch"
+        );
+        assert_eq!(
+            result.state, "FAILED",
+            "only failed execution is refundable"
+        );
+        assert_eq!(result.refund_state, "PENDING", "refund not pending");
+        assert_eq!(
+            result.refund_attempt, refund_attempt,
+            "stale refund attempt"
+        );
+        result.refund_state = match env::promise_result(0) {
+            PromiseResult::Successful(bytes) if bytes.is_empty() => "REFUNDED",
+            PromiseResult::Failed => "RETRYABLE",
+            _ => "BLOCKED_INVALID_RESULT",
+        }
+        .into();
+        self.execution_results.insert(&intent_id, &result);
+        env::log_str(&format!(
+            "EVENT_JSON:{}",
+            json!({"standard":"qpc", "version":"1.0.0", "event":"near_refund_result", "data":[result.clone()]})
+        ));
+        result
+    }
+
+    pub fn get_execution_result(&self, intent_id: String) -> Option<ExecutionResult> {
+        self.execution_results.get(&intent_id)
+    }
+
+    /// Public historical record only. It does not prove current policy validity,
+    /// destination execution, canonical finality, or shielded receipt of funds.
+    pub fn get_authorization_receipt(&self, intent_id: String) -> Option<AuthorizationReceipt> {
+        self.authorization_receipts.get(&intent_id)
+    }
+
+    /// Deliberately no success path: neither a commitment nor an injected result
+    /// proves native destination execution. No untrusted result is persisted.
+    pub fn settle_envelope(&mut self, intent_id: String, authorization_commitment: String) {
+        let receipt = self
+            .authorization_receipts
+            .get(&intent_id)
+            .expect("unknown intent");
+        assert_eq!(
+            receipt.authorization_commitment, authorization_commitment,
+            "authorization commitment mismatch"
+        );
+        panic!("native external settlement not implemented; authorization is not execution");
     }
 
     fn assert_native_bindings(&self, agent: &AccountId, policy: &AgentPolicy, envelope: &Value) {

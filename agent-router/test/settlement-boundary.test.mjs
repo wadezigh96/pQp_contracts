@@ -38,6 +38,8 @@ test('caller boolean cannot confirm or settle a durable intent', async t => {
   const file = join(root, 'state.json');
   const legacy = JSON.parse(await readFile(file, 'utf8'));
   legacy.records[id].state = 'CONFIRMED';
+  legacy.records[id].revision += 1;
+  legacy.records[id].history.push({ state: 'CONFIRMED', atUnix: nowUnix });
   legacy.records[id].confirmation = { state: 'EVIDENCE_VERIFIED', transactionId: evidence.transactionId };
   await writeFile(file, JSON.stringify(legacy));
   await assert.rejects(new FileIntentStore(root).settle(id, { nowUnix }), /NOT_IMPLEMENTED/);

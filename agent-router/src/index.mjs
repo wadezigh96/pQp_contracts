@@ -122,6 +122,8 @@ export function buildNearToZcashShieldedDispatch(input) {
 }
 
 export { buildNearEnvelopeAuthorizationDispatch } from './near-envelope-dispatch.mjs';
+export { prepareEvmOwnerApprovedExecution } from './evm-exact-execution.mjs';
+export { prepareSolanaOwnerApprovedExecution } from './solana-exact-execution.mjs';
 export {
   TESTNET_NETWORKS,
   createTestnetAdapter,
@@ -130,6 +132,17 @@ export {
   inspectTestnetTransaction,
   verifyTestnetSettlement,
   inspectZcashTestnet,
+  inspectNearAuthorizationTransaction,
+  prepareNearExecution,
+  inspectNearExecutionTransaction,
+  verifyNearExecutionSettlement,
+  prepareEvmExecution,
+  inspectEvmExecutionTransaction,
+  verifyEvmExecutionSettlement,
+  readVerifiedNativeSettlement,
+  prepareSolanaExecution,
+  inspectSolanaExecutionTransaction,
+  verifySolanaExecutionSettlement,
 } from './testnet-adapters.mjs';
 
 export {

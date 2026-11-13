@@ -17,6 +17,6 @@ if (chains.some(chain => !Object.hasOwn(TESTNET_NETWORKS, chain))) {
     } });
     return { chain, endpoint: network.rpcUrl, ...await inspectTestnetNetwork(adapter) };
   }));
-  console.log(JSON.stringify({ readOnly: true, settlementImplemented: false, results }, null, 2));
+  console.log(JSON.stringify({ readOnly: true, settlementAttempted: false, results }, null, 2));
   if (results.some(result => result.state === 'NOT_VERIFIED')) process.exitCode = 1;
 }

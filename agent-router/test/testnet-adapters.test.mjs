@@ -1,10 +1,19 @@
 import test from 'node:test';
+import { createHash } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { FileIntentStore } from '../src/intent-store.mjs';
 import assert from 'node:assert/strict';
 import {
   createTestnetAdapter, prepareTestnetTransfer, inspectTestnetTransaction,
   verifyTestnetSettlement, inspectZcashTestnet, inspectTestnetNetwork, TESTNET_NETWORKS,
+  inspectNearAuthorizationTransaction, prepareNearExecution, inspectNearExecutionTransaction,
+  verifyNearExecutionSettlement, readVerifiedNativeSettlement,
+  prepareEvmExecution, inspectEvmExecutionTransaction, verifyEvmExecutionSettlement,
 } from '../src/testnet-adapters.mjs';
 import { computeNativeRecipientCommitment } from '../src/native-adapters.mjs';
+import { buildNearEnvelopeAuthorizationDispatch } from '../src/near-envelope-dispatch.mjs';
 
 const NOW = 1800000000;
 const ADDRESS = `0x${'1'.repeat(40)}`;
@@ -234,6 +243,404 @@ test('NEAR rejects wrong network and canonical-height reorg', async () => {
     await withRpc(handler, async () => assert.equal((await verifyTestnetSettlement({ adapter: f.adapter, prepared: f.prepared, transactionId: NEAR_ID, signerAccountId: 'alice.testnet' })).state, 'NOT_VERIFIED'));
   }
 });
+function nearAuthorizationFixture() {
+  const f = fixture('near');
+  f.authorization.agentIdentity = { namespace: 'near', id: 'agent.testnet', keyId: 'agent.testnet' };
+  f.authorization.source.adapterId = 'contract.testnet';
+  f.authorization.replayDomain.authorityId = 'contract.testnet';
+  f.adapter = createTestnetAdapter({ chain: 'near', trustedProfile: f.trustedProfile, nearContract: { accountId: 'contract.testnet', codeHash: KEY } });
+  f.prepared = prepareTestnetTransfer(f);
+  return f;
+}
+function nearAuthorizationRpc(f) {
+  const s = nearRpc(), p = f.prepared;
+  const e = p.authorization;
+  const expected = { state: 'AUTHORIZED', executionStatus: 'NOT_EXECUTED', intentId: e.intentId, authorizationCommitment: p.authorizationCommitment,
+    agentId: e.source.accountId, adapterId: 'contract.testnet', nonce: e.nonce, policyId: e.policy.id, policyVersion: e.policy.version,
+    policyCommitment: e.policy.commitment, revocationEpoch: e.cancellation.revocationEpoch, authorizedAtUnix: NOW, expiresAtUnix: e.time.expiresAtUnix, blockHeight: 101 };
+  s.authorizationRecord = expected;
+  const success = { SuccessValue: Buffer.from(JSON.stringify(expected)).toString('base64') };
+  s.result.transaction.signer_id = 'agent.testnet';
+  s.result.transaction.receiver_id = 'contract.testnet';
+  s.result.transaction.actions = [{ FunctionCall: { method_name: 'authorize_envelope', args: Buffer.from(JSON.stringify(buildNearEnvelopeAuthorizationDispatch({ envelope: p.authorization, nowUnix: NOW }).qpcCall.args)).toString('base64'), deposit: '0', gas: 100000000000000 } }];
+  s.result.status = success;
+  s.result.transaction_outcome.outcome.executor_id = 'agent.testnet';
+  const root = s.result.receipts_outcome[0];
+  root.outcome.executor_id = 'contract.testnet'; root.outcome.status = success;
+  root.outcome.logs = [`EVENT_JSON:${JSON.stringify({ standard: 'qpc', version: '1.0.0', event: 'agent_action_authorized', data: [expected] })}`];
+  s.block.header.prev_hash = KEY; s.receiptBlock.header.prev_hash = KEY;
+  const original = s.handler;
+  s.handler = (m, p) => m === 'query' ? p.request_type === 'view_account' ? { block_hash: p.block_id, code_hash: KEY } : { block_hash: p.block_id, block_height: s.final.header.height, result: [...Buffer.from(JSON.stringify(s.authorizationRecord))] } : original(m, p);
+  return s;
+}
+test('NEAR authorization: independently binds exact call, predecessor, contract event and pinned historical code, NOT settlement', async () => {
+  const f = nearAuthorizationFixture(), s = nearAuthorizationRpc(f);
+  await withRpc(s.handler, async calls => {
+    const result = await inspectNearAuthorizationTransaction({ adapter: f.adapter, prepared: f.prepared, transactionId: NEAR_ID });
+    assert.equal(result.state, 'OBSERVED_NATIVE_AUTHORIZATION_NOT_SETTLED', result.reason);
+    assert.equal(result.authorizationCommitment, f.prepared.authorizationCommitment);
+    assert(calls.some(c => c.method === 'query' && c.params.request_type === 'view_account'));
+  });
+});
+for (const [name, mutate] of [
+  ['signer', s => { s.result.transaction.signer_id = 'mallory.testnet'; }],
+  ['contract', s => { s.result.transaction.receiver_id = 'mallory.testnet'; }],
+  ['method', s => { s.result.transaction.actions[0].FunctionCall.method_name = 'execute_near_envelope'; }],
+  ['deposit', s => { s.result.transaction.actions[0].FunctionCall.deposit = '1'; }],
+  ['args', s => { s.result.transaction.actions[0].FunctionCall.args = Buffer.from('{}').toString('base64'); }],
+  ['executor', s => { s.result.receipts_outcome[0].outcome.executor_id = 'mallory.testnet'; }],
+  ['event', s => { s.result.receipts_outcome[0].outcome.logs = []; }],
+  ['return', s => { s.result.status = { SuccessValue: Buffer.from('{}').toString('base64') }; }],
+  ['duplicate event', s => { s.result.receipts_outcome[0].outcome.logs.push(s.result.receipts_outcome[0].outcome.logs[0]); }],
+]) test(`NEAR authorization rejects ${name} substitution`, async () => {
+  const f = nearAuthorizationFixture(), s = nearAuthorizationRpc(f); mutate(s);
+  await withRpc(s.handler, async () => assert.equal((await inspectNearAuthorizationTransaction({ adapter: f.adapter, prepared: f.prepared, transactionId: NEAR_ID })).state, 'NOT_VERIFIED'));
+});
+test('NEAR authorization rejects unpinned code and forged preparation without consulting caller proof', async () => {
+  const f = nearAuthorizationFixture(), s = nearAuthorizationRpc(f);
+  await withRpc((m, p) => m === 'query' ? { block_hash: p.block_id, code_hash: PAYER } : s.handler(m, p), async () => {
+    assert.match((await inspectNearAuthorizationTransaction({ adapter: f.adapter, prepared: f.prepared, transactionId: NEAR_ID })).reason, /code mismatch/);
+  });
+  await withRpc(() => { throw Error('must not call RPC'); }, async () => {
+    assert.equal((await inspectNearAuthorizationTransaction({ adapter: f.adapter, prepared: { ...f.prepared }, transactionId: NEAR_ID })).state, 'NOT_VERIFIED');
+    assert.equal((await inspectNearAuthorizationTransaction({ adapter: f.adapter, prepared: f.prepared, transactionId: NEAR_ID, verified: true })).state, 'NOT_VERIFIED');
+  });
+});
+function nearExecutionFixture() {
+  const f = nearAuthorizationFixture(), e = f.authorization;
+  e.destination.adapterId = 'contract.testnet'; e.asset.mappingId = 'near-native-identity-v1'; e.amount.sourceAtomic = e.amount.destinationAtomic;
+  e.settlement = { evidenceClass: 'near-native-transfer-result', finalityPolicy: 'near-execution-outcome', minConfirmations: 0 };
+  f.prepared = prepareNearExecution({ adapter: f.adapter, authorization: e, recipient: 'bob.testnet', nowUnix: NOW });
+  return f;
+}
+test('NEAR execution preparation is exact, unsigned, same-chain only and deeply frozen', () => {
+  const f = nearExecutionFixture(), p = f.prepared;
+  assert.equal(p.state, 'PREPARED_NEAR_EXECUTION_UNSIGNED');
+  assert.equal(p.qpcCall.methodName, 'execute_near_envelope');
+  assert.equal(p.qpcCall.deposit, '7');
+  assert.equal(p.qpcCall.args.authorization_commitment, p.authorizationCommitment);
+  assert(Object.isFrozen(p.qpcCall.args.envelope));
+  for (const mutate of [e => { e.source.adapterId = 'mallory.testnet'; }, e => { e.agentIdentity.id = 'mallory.testnet'; }, e => { e.destination.networkId = 'near:mainnet'; }, e => { e.amount.sourceAtomic = '8'; }, e => { e.asset.mappingId = 'other'; }, e => { e.destination.recipientCommitment = 'a'.repeat(64); }, e => { e.settlement.evidenceClass = 'near-native-v1'; }]) {
+    const authorization = structuredClone(f.authorization); mutate(authorization);
+    assert.throws(() => prepareNearExecution({ adapter: f.adapter, authorization, recipient: 'bob.testnet', nowUnix: NOW }));
+  }
+  assert.throws(() => prepareNearExecution({ adapter: f.adapter, authorization: f.authorization, recipient: 'bob.testnet', nowUnix: NOW + 100 }), /time window/);
+});
+
+function nearExecutionRpc(f) {
+  // Reuse the exact authorization event but execute the dedicated attached-value
+  // method, with a successful transfer and data-dependent private callback.
+  const p = f.prepared;
+  const authPrepared = { ...p, authorization: { ...p.authorization } };
+  const s = nearAuthorizationRpc({ ...f, prepared: authPrepared });
+  const root = s.result.receipts_outcome[0];
+  const record = { state: 'EXECUTED', intentId: p.authorization.intentId, authorizationCommitment: p.authorizationCommitment, recipient: 'bob.testnet', amountAtomic: '7', authorizedAtUnix: NOW, completedAtUnix: NOW, contractFeeAtomic: '0', protocolGasFee: 'NOT_VERIFIED', feeBudgetEnforced: false, refundState: 'NOT_APPLICABLE', refundAttempt: 0 };
+  s.executionRecord = record;
+  const encoded = Buffer.from(JSON.stringify(record)).toString('base64');
+  s.result.transaction.actions = [{ FunctionCall: { method_name: 'execute_near_envelope', args: Buffer.from(JSON.stringify(p.qpcCall.args)).toString('base64'), deposit: '7', gas: Number(p.qpcCall.gas) } }];
+  s.result.status = { SuccessValue: encoded };
+  root.outcome.status = { SuccessReceiptId: PAYER }; root.outcome.receipt_ids = [RECIPIENT, PAYER];
+  s.result.receipts_outcome.push(
+    { id: RECIPIENT, block_hash: PAYER, outcome: { executor_id: 'bob.testnet', status: { SuccessValue: '' }, receipt_ids: [], tokens_burnt: '1', logs: [] } },
+    { id: PAYER, block_hash: PAYER, outcome: { executor_id: 'contract.testnet', status: { SuccessValue: encoded }, receipt_ids: [], tokens_burnt: '1', logs: [`EVENT_JSON:${JSON.stringify({ standard: 'qpc', version: '1.0.0', event: 'near_transfer_result', data: [record] })}`] } },
+  );
+  s.transferReceipt = { receipt_id: RECIPIENT, predecessor_id: 'contract.testnet', receiver_id: 'bob.testnet', receipt: { Action: { signer_id: 'agent.testnet', actions: [{ Transfer: { deposit: '7' } }], output_data_receivers: [{ data_id: KEY, receiver_id: 'contract.testnet' }] } } };
+  s.callbackReceipt = { receipt_id: PAYER, predecessor_id: 'contract.testnet', receiver_id: 'contract.testnet', receipt: { Action: { signer_id: 'agent.testnet', actions: [{ FunctionCall: { method_name: 'on_near_transfer_result', args: Buffer.from(JSON.stringify({ intent_id: p.authorization.intentId, authorization_commitment: p.authorizationCommitment })).toString('base64'), gas: 10000000000000, deposit: '0' } }], input_data_ids: [KEY] } } };
+  const original = s.handler;
+  s.handler = (m, q) => m === 'EXPERIMENTAL_receipt' ? q.receipt_id === RECIPIENT ? s.transferReceipt : s.callbackReceipt : m === 'query' && q.method_name === 'get_execution_result' ? { block_hash: q.block_id, block_height: s.final.header.height, result: [...Buffer.from(JSON.stringify(s.executionRecord))] } : original(m, q);
+  return s;
+}
+test('NEAR execution independently observes authorized transfer, callback dependency, immutable records, canonical finality and all-in fee', async () => {
+  const f = nearExecutionFixture(), s = nearExecutionRpc(f);
+  await withRpc(s.handler, async calls => {
+    const result = await inspectNearExecutionTransaction({ adapter: f.adapter, prepared: f.prepared, transactionId: NEAR_ID });
+    assert.equal(result.state, 'OBSERVED_NEAR_EXECUTION_NOT_SETTLED', result.reason);
+    assert.equal(result.actualFeeAtomic, '4');
+    assert.equal(result.feeBudgetVerifiedByRpc, true);
+    assert.equal(result.feeBudgetEnforcedOnChain, false);
+    assert(calls.some(c => c.method === 'EXPERIMENTAL_receipt'));
+    assert.equal((await verifyTestnetSettlement({ adapter: f.adapter, prepared: f.prepared, transactionId: NEAR_ID })).state, 'NATIVE_SETTLEMENT_VERIFIED');
+  });
+});
+for (const [name, mutate] of [
+  ['transfer recipient', s => { s.transferReceipt.receiver_id = 'mallory.testnet'; }],
+  ['transfer amount', s => { s.transferReceipt.receipt.Action.actions[0].Transfer.deposit = '8'; }],
+  ['transfer predecessor', s => { s.transferReceipt.predecessor_id = 'mallory.testnet'; }],
+  ['transfer failure', s => { s.result.receipts_outcome[1].outcome.status = { Failure: {} }; }],
+  ['callback dependency', s => { s.callbackReceipt.receipt.Action.input_data_ids = [PAYER]; }],
+  ['callback predecessor', s => { s.callbackReceipt.predecessor_id = 'mallory.testnet'; }],
+  ['callback replay args', s => { s.callbackReceipt.receipt.Action.actions[0].FunctionCall.args = Buffer.from('{}').toString('base64'); }],
+  ['callback missing', s => { s.result.receipts_outcome.pop(); }],
+  ['callback record amount', s => { s.executionRecord.amountAtomic = '8'; }],
+  ['failed stored record', s => { s.executionRecord.state = 'FAILED'; }],
+  ['forged stored commitment', s => { s.executionRecord.authorizationCommitment = 'b'.repeat(64); }],
+  ['unbounded fee', s => { s.result.receipts_outcome[2].outcome.tokens_burnt = '10001'; }],
+  ['duplicate transfer', s => { s.result.receipts_outcome[2].outcome.executor_id = 'bob.testnet'; }],
+  ['expired execution', s => { s.receiptBlock.header.timestamp_nanosec = `${NOW + 100}000000000`; }],
+  ['persisted authorization changed', s => { s.authorizationRecord.nonce = '9'; }],
+]) test(`NEAR execution rejects ${name}`, async () => {
+  const f = nearExecutionFixture(), s = nearExecutionRpc(f); mutate(s);
+  await withRpc(s.handler, async () => assert.equal((await inspectNearExecutionTransaction({ adapter: f.adapter, prepared: f.prepared, transactionId: NEAR_ID })).state, 'NOT_VERIFIED'));
+});
+test('NEAR execution rejects caller booleans, copied handles and network/code/reorg substitutions', async () => {
+  const f = nearExecutionFixture(), s = nearExecutionRpc(f);
+  for (const extra of [{ verified: true }, { evidence: s.executionRecord }, { prepared: { ...f.prepared } }]) {
+    await withRpc(() => { throw Error('must not call RPC'); }, async () => assert.equal((await inspectNearExecutionTransaction({ adapter: f.adapter, prepared: f.prepared, transactionId: NEAR_ID, ...extra })).state, 'NOT_VERIFIED'));
+  }
+  let reads = 0;
+  for (const handler of [
+    (m, p) => m === 'status' ? { chain_id: 'mainnet' } : s.handler(m, p),
+    (m, p) => m === 'query' && p.request_type === 'view_account' ? { block_hash: p.block_id, code_hash: PAYER } : s.handler(m, p),
+    (m, p) => m === 'block' && p.block_id === 101 && ++reads > 4 ? { header: { ...s.receiptBlock.header, hash: KEY } } : s.handler(m, p),
+  ]) await withRpc(handler, async () => assert.equal((await inspectNearExecutionTransaction({ adapter: f.adapter, prepared: f.prepared, transactionId: NEAR_ID })).state, 'NOT_VERIFIED'));
+});
+
+test('NEAR settlement mints only fresh process-owned fully bound receipt; metadata, clones and booleans cannot become proof', async () => {
+  const f = nearExecutionFixture(), s = nearExecutionRpc(f);
+  await withRpc(s.handler, async () => {
+    const result = await verifyNearExecutionSettlement({ adapter: f.adapter, prepared: f.prepared, transactionId: NEAR_ID });
+    assert.equal(result.state, 'NATIVE_SETTLEMENT_VERIFIED', result.reason);
+    const record = readVerifiedNativeSettlement(result.receipt);
+    assert.equal(record.authorizationCommitment, f.prepared.authorizationCommitment);
+    assert.equal(record.sourceNetworkId, 'near:testnet');
+    assert.equal(record.destinationNetworkId, record.sourceNetworkId);
+    assert.equal(record.actualFeeAtomic, '4');
+    assert(Object.isFrozen(record.authorization.policy));
+    for (const forged of [true, record, { ...result.receipt }, structuredClone(result.receipt), JSON.parse(JSON.stringify(result.receipt)), { kind: 'QPC_NATIVE_SETTLEMENT_RECEIPT_V1' }]) assert.equal(readVerifiedNativeSettlement(forged), null);
+    const originalNow = Date.now;
+    try {
+      Date.now = () => (record.verifiedAtUnix + 62) * 1000;
+      assert.equal(readVerifiedNativeSettlement(result.receipt), null);
+      Date.now = () => (record.verifiedAtUnix - 1) * 1000;
+      assert.equal(readVerifiedNativeSettlement(result.receipt), null);
+    } finally { Date.now = originalNow; }
+  });
+});
+
+const EVM_AGENT = `0x${'2'.repeat(40)}`, EVM_EXECUTOR = `0x${'3'.repeat(40)}`, EVM_OWNER = `0x${'4'.repeat(40)}`;
+const RUNTIME = '0x60006000';
+function evmExecutionFixture(chain = 'ethereum') {
+  const f = fixture(chain), e = f.authorization;
+  e.agentIdentity = { namespace: 'eip155', id: EVM_AGENT, keyId: EVM_AGENT };
+  e.source = { networkId: e.destination.networkId, nativeChainId: e.destination.nativeChainId, accountId: EVM_AGENT, adapterId: EVM_EXECUTOR };
+  e.destination.adapterId = EVM_EXECUTOR;
+  e.asset = { sourceAssetId: `${chain}:native`, destinationAssetId: `${chain}:native`, sourceDecimals: 18, destinationDecimals: 18, mappingId: `${chain}-native-identity-v1` };
+  e.amount.sourceAtomic = '7'; e.replayDomain = { authorityId: EVM_EXECUTOR, scope: 'native-payment' };
+  e.cancellation = { authorityId: EVM_OWNER, revocationEpoch: 1 };
+  e.settlement.evidenceClass = 'evm-owner-attested-native-v1'; e.settlement.finalityPolicy = `${chain}-finalized`;
+  f.adapter = createTestnetAdapter({ chain, trustedProfile: f.trustedProfile, evmContract: { address: EVM_EXECUTOR, owner: EVM_OWNER, codeHashSha256: createHash('sha256').update(Buffer.from(RUNTIME.slice(2), 'hex')).digest('hex') } });
+  f.prepared = prepareEvmExecution({ adapter: f.adapter, authorization: e, recipient: ADDRESS, nowUnix: NOW });
+  return f;
+}
+const word = value => typeof value === 'string' && value.startsWith('0x') ? value.slice(2).padStart(64, '0') : BigInt(value).toString(16).padStart(64, '0');
+const encodedWords = values => `0x${values.map(word).join('')}`;
+function evmExecutionRpc(f) {
+  const s = evmRpc(f.chain), p = f.prepared, intent = p.approveIntent.args[1];
+  s.tx.to = EVM_EXECUTOR; s.tx.from = EVM_AGENT; s.tx.input = `0xe751f271${p.authorizationCommitment.slice(2)}`; s.tx.transactionIndex = '0x0';
+  s.receipt.to = EVM_EXECUTOR; s.receipt.from = EVM_AGENT; s.receipt.transactionIndex = '0x0';
+  s.block.parentHash = `0x${'c'.repeat(64)}`;
+  s.receipt.logs = [{ address: EVM_EXECUTOR, topics: ['0x20f591e22f01104e4c2a646a938001e2382a73446550a3b72a94549b841f8bf8', p.authorizationCommitment, encodedWords([EVM_AGENT]), encodedWords([ADDRESS])], data: encodedWords([intent.amount, intent.nonce]), transactionHash: TX, blockHash: BLOCK, blockNumber: '0x64', transactionIndex: '0x0', logIndex: '0x0', removed: false }];
+  s.code = RUNTIME; s.owner = EVM_OWNER; s.intent = structuredClone(intent);
+  s.flags = { '0x7865c3ad': '1', '0x328a93e8': '0', '0xa9fcfb33': '1', '0x0a2dc12f': '1' };
+  s.policy = ['1', intent.policyIdHash, intent.policyVersion, intent.revocationEpoch];
+  const original = s.handler;
+  s.handler = (m, q) => {
+    if (m === 'eth_getCode') return s.code;
+    if (m === 'eth_call') {
+      const selector = q[0].data.slice(0, 10);
+      if (selector === '0x8da5cb5b') return encodedWords([s.owner]);
+      if (selector === '0xf13c46aa') return encodedWords(Object.values(s.intent));
+      if (selector === '0xcd4b90f9') return encodedWords(s.policy);
+      if (Object.hasOwn(s.flags, selector)) return encodedWords([s.flags[selector]]);
+      throw Error(`unexpected call ${selector}`);
+    }
+    return original(m, q);
+  };
+  return s;
+}
+for (const chain of ['ethereum', 'bsc']) {
+  test(`${chain}: exact owner-attested native execution independently binds runtime, owner, typed record, event and all-in fee`, async () => {
+    const f = evmExecutionFixture(chain), s = evmExecutionRpc(f);
+    await withRpc(s.handler, async calls => {
+      const result = await inspectEvmExecutionTransaction({ adapter: f.adapter, prepared: f.prepared, transactionId: TX });
+      assert.equal(result.state, 'OBSERVED_EVM_EXECUTION_NOT_SETTLED', result.reason);
+      assert.equal(result.actualFeeAtomic, '1');
+      assert(calls.some(c => c.method === 'eth_getCode' && c.params[1].requireCanonical));
+      const verified = await verifyEvmExecutionSettlement({ adapter: f.adapter, prepared: f.prepared, transactionId: TX });
+      assert.equal(verified.state, 'NATIVE_SETTLEMENT_VERIFIED', verified.reason);
+      const metadata = readVerifiedNativeSettlement(verified.receipt);
+      assert.equal(metadata.authorizationCommitment, f.prepared.authorizationCommitment.slice(2));
+      assert.equal(metadata.sourceNetworkId, metadata.destinationNetworkId);
+      assert.equal(metadata.amountAtomic, '7');
+    });
+  });
+  for (const [name, mutate] of [
+    ['sender', s => { s.tx.from = EVM_OWNER; }], ['receipt sender', s => { s.receipt.from = EVM_OWNER; }],
+    ['executor', s => { s.tx.to = ADDRESS; }], ['calldata commitment', s => { s.tx.input = `0xe751f271${'c'.repeat(64)}`; }],
+    ['calldata suffix', s => { s.tx.input += '00'; }], ['amount', s => { s.tx.value = '0x8'; }],
+    ['runtime code', s => { s.code = '0x60016000'; }], ['owner', s => { s.owner = EVM_AGENT; }],
+    ['typed recipient', s => { s.intent.recipient = EVM_OWNER; }], ['typed amount', s => { s.intent.amount = '8'; }],
+    ['typed nonce', s => { s.intent.nonce = '2'; }], ['typed policy', s => { s.intent.policyVersion = '2'; }],
+    ['typed expiry', s => { s.intent.expiry = '1'; }], ['typed chain', s => { s.intent.chainId = '1'; }],
+    ['not approved', s => { s.flags['0x7865c3ad'] = '0'; }], ['revoked', s => { s.flags['0x328a93e8'] = '1'; }],
+    ['not executed', s => { s.flags['0xa9fcfb33'] = '0'; }], ['nonce not reserved', s => { s.flags['0x0a2dc12f'] = '0'; }],
+    ['native policy inactive', s => { s.policy[0] = '0'; }], ['native policy epoch', s => { s.policy[3] = '2'; }],
+    ['event emitter', s => { s.receipt.logs[0].address = EVM_OWNER; }], ['event amount', s => { s.receipt.logs[0].data = encodedWords(['8', '1']); }],
+    ['event recipient', s => { s.receipt.logs[0].topics[3] = encodedWords([EVM_OWNER]); }], ['event commitment', s => { s.receipt.logs[0].topics[1] = BLOCK; }],
+    ['removed log', s => { s.receipt.logs[0].removed = true; }], ['event transaction', s => { s.receipt.logs[0].transactionHash = BLOCK; }],
+    ['duplicate event', s => { s.receipt.logs.push(structuredClone(s.receipt.logs[0])); }], ['transaction index', s => { s.tx.transactionIndex = '0x1'; }],
+    ['failed execution', s => { s.receipt.status = '0x0'; }], ['all-in fee', s => { s.receipt.gasUsed = '0xffff'; }],
+    ['blob envelope', s => { s.tx.type = '0x3'; s.receipt.type = '0x3'; }], ['delegation', s => { s.tx.authorizationList = []; }],
+  ]) test(`${chain}: native execution rejects ${name}`, async () => {
+    const f = evmExecutionFixture(chain), s = evmExecutionRpc(f); mutate(s);
+    await withRpc(s.handler, async () => {
+      const result = await verifyEvmExecutionSettlement({ adapter: f.adapter, prepared: f.prepared, transactionId: TX });
+      assert.equal(result.state, 'NOT_VERIFIED', name);
+      assert.equal(result.receipt, undefined);
+    });
+  });
+  test(`${chain}: copied preparation/callback claims cannot mint receipt; late reorg rejected`, async () => {
+    const f = evmExecutionFixture(chain), s = evmExecutionRpc(f);
+    await withRpc(() => { throw Error('must not call RPC'); }, async () => {
+      for (const extra of [{ prepared: { ...f.prepared } }, { verified: true }, { verify: () => true }]) assert.equal((await verifyTestnetSettlement({ adapter: f.adapter, prepared: f.prepared, transactionId: TX, ...extra })).state, 'NOT_VERIFIED');
+    });
+    let reads = 0;
+    await withRpc((m, p) => m === 'eth_getBlockByNumber' && p[0] === '0x64' && ++reads > 1 ? { ...s.block, hash: TX } : s.handler(m, p), async () => assert.match((await verifyEvmExecutionSettlement({ adapter: f.adapter, prepared: f.prepared, transactionId: TX })).reason, /reorg/));
+  });
+}
+
+for (const chain of ['near', 'ethereum', 'bsc']) test(`${chain}: caller mutation during RPC cannot retarget an issued native receipt`, async () => {
+  const f = chain === 'near' ? nearExecutionFixture() : evmExecutionFixture(chain);
+  const other = chain === 'near' ? nearExecutionFixture() : evmExecutionFixture(chain);
+  const changed = structuredClone(other.authorization); changed.intentId = 'different-intent'; changed.nonce = '2';
+  const replacement = chain === 'near'
+    ? prepareNearExecution({ adapter: other.adapter, authorization: changed, recipient: 'bob.testnet', nowUnix: NOW })
+    : prepareEvmExecution({ adapter: other.adapter, authorization: changed, recipient: ADDRESS, nowUnix: NOW });
+  const s = chain === 'near' ? nearExecutionRpc(f) : evmExecutionRpc(f);
+  const input = { adapter: f.adapter, prepared: f.prepared, transactionId: chain === 'near' ? NEAR_ID : TX };
+  let mutated = false;
+  await withRpc((method, params) => {
+    if (!mutated) { mutated = true; input.adapter = other.adapter; input.prepared = replacement; input.transactionId = 'forged-after-await'; }
+    return s.handler(method, params);
+  }, async () => {
+    const result = await verifyTestnetSettlement(input);
+    assert.equal(result.state, 'NATIVE_SETTLEMENT_VERIFIED', result.reason);
+    const metadata = readVerifiedNativeSettlement(result.receipt);
+    assert.equal(metadata.intentId, f.authorization.intentId);
+    assert.notEqual(metadata.intentId, changed.intentId);
+    assert.equal(metadata.authorization.nonce, f.authorization.nonce);
+    assert.equal(metadata.transactionId, chain === 'near' ? NEAR_ID : TX);
+  });
+});
+
+async function nativeStoreFixture(chain = 'near', { trust = true, transactionId, mutateTrust } = {}) {
+  const f = chain === 'near' ? nearExecutionFixture() : evmExecutionFixture(chain);
+  const s = chain === 'near' ? nearExecutionRpc(f) : evmExecutionRpc(f);
+  const nativeId = chain === 'near' ? NEAR_ID : TX;
+  const verified = await withRpc(s.handler, () => verifyTestnetSettlement({ adapter: f.adapter, prepared: f.prepared, transactionId: nativeId }));
+  assert.equal(verified.state, 'NATIVE_SETTLEMENT_VERIFIED', verified.reason);
+  const identity = structuredClone(verified.verification.verifierIdentity);
+  if (mutateTrust) mutateTrust(identity);
+  const root = await mkdtemp(join(tmpdir(), 'qpc-native-settlement-'));
+  const store = new FileIntentStore(root, { nativeTrust: trust ? [identity] : [] });
+  const record = await store.create(f.authorization, { nowUnix: NOW });
+  // This callback is only the existing trusted local authorization integration;
+  // it never supplies destination proof, which is independently parsed above.
+  await store.authorize(f.authorization, { nowUnix: NOW, verifyAgentAuthorization: async () => true });
+  await store.reserveSubmission(record.id, { nowUnix: NOW + 1 });
+  await store.recordSubmission(record.id, { nowUnix: NOW + 2, transactionId: transactionId ?? nativeId });
+  return { ...f, rpc: s, store, root, id: record.id, verified, nativeId };
+}
+for (const chain of ['near', 'ethereum', 'bsc']) {
+  test(`${chain}: durable store atomically settles ONLY fresh module-owned proof matching independent operator trust`, async () => {
+    const f = await nativeStoreFixture(chain);
+    try {
+      const before = await f.store.get(f.id);
+      assert.equal(before.state, 'SUBMITTED');
+      const settled = await f.store.settleNative(f.id, { verification: f.verified.receipt, nowUnix: NOW + 3, expectedRevision: before.revision });
+      assert.equal(settled.state, 'SETTLED');
+      assert.equal(settled.revision, before.revision + 2);
+      assert.deepEqual(settled.history.slice(-2).map(h => h.state), ['CONFIRMED', 'SETTLED']);
+      assert.equal(settled.confirmation.authorizationCommitment, f.id);
+      assert.equal(settled.confirmation.actualFeeAtomic, chain === 'near' ? '4' : '1');
+      assert.deepEqual(settled.confirmation.verifierIdentity, f.verified.verification.verifierIdentity);
+      await assert.rejects(f.store.settleNative(f.id, { verification: f.verified.receipt, nowUnix: NOW + 4 }), /invalid transition/);
+      assert.equal((await f.store.get(f.id)).revision, settled.revision);
+      const reopened = new FileIntentStore(f.root, { nativeTrust: [f.verified.verification.verifierIdentity] });
+      assert.equal((await reopened.get(f.id)).state, 'SETTLED');
+      // Persisted metadata is not a process-owned receipt on restart.
+      await assert.rejects(reopened.settleNative(f.id, { verification: settled.confirmation, nowUnix: NOW + 4 }), /fresh native verification handle/);
+    } finally { await rm(f.root, { recursive: true, force: true }); }
+  });
+}
+test('durable native settlement rejects metadata/clone/boolean/callback proofs without state mutation', async () => {
+  const f = await nativeStoreFixture();
+  try {
+    for (const verification of [true, f.verified.verification, { ...f.verified.receipt }, JSON.parse(JSON.stringify(f.verified.receipt)), () => true]) {
+      await assert.rejects(f.store.settleNative(f.id, { verification, nowUnix: NOW + 3 }), /fresh native verification handle/);
+      assert.equal((await f.store.get(f.id)).state, 'SUBMITTED');
+    }
+    await assert.rejects(f.store.confirm(f.id, { nowUnix: NOW + 3, evidence: { verified: true }, verifyDestinationEvidence: async () => true }), /NOT_VERIFIED|evidence/);
+    await assert.rejects(f.store.settle(f.id, { nowUnix: NOW + 3 }), /NOT_IMPLEMENTED/);
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+for (const [name, options, expected] of [
+  ['missing independent operator trust', { trust: false }, /trust identity/],
+  ['wrong contract pin', { mutateTrust: identity => { identity.codeHash = 'wrong'; } }, /trust identity/],
+  ['wrong owner trust', { mutateTrust: identity => { identity.owner = 'mallory.testnet'; } }, /trust identity/],
+  ['wrong submitted transaction', { transactionId: PAYER }, /transaction mismatch/],
+]) test(`durable native settlement rejects ${name}`, async () => {
+  const f = await nativeStoreFixture('near', options);
+  try {
+    await assert.rejects(f.store.settleNative(f.id, { verification: f.verified.receipt, nowUnix: NOW + 3 }), expected);
+    assert.equal((await f.store.get(f.id)).state, 'SUBMITTED');
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+test('durable native settlement rejects wrong intent and wall-clock expiry before and inside lock', async () => {
+  const f = await nativeStoreFixture();
+  try {
+    await assert.rejects(f.store.settleNative('b'.repeat(64), { verification: f.verified.receipt, nowUnix: NOW + 3 }), /commitment mismatch/);
+    const originalNow = Date.now, base = originalNow();
+    try {
+      Date.now = () => base + 62_000;
+      await assert.rejects(f.store.settleNative(f.id, { verification: f.verified.receipt, nowUnix: NOW + 3 }), /fresh native verification handle/);
+      let reads = 0;
+      Date.now = () => base + (++reads >= 3 ? 62_000 : 0);
+      await assert.rejects(f.store.settleNative(f.id, { verification: f.verified.receipt, nowUnix: NOW + 3 }), /expired native verification handle/);
+    } finally { Date.now = originalNow; }
+    assert.equal((await f.store.get(f.id)).state, 'SUBMITTED');
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+test('durable native settlement CAS races reconciliation without overwriting either winner', async () => {
+  const f = await nativeStoreFixture();
+  try {
+    const before = await f.store.get(f.id);
+    const results = await Promise.allSettled([
+      f.store.settleNative(f.id, { verification: f.verified.receipt, nowUnix: NOW + 3, expectedRevision: before.revision }),
+      f.store.reconcile(f.id, { nowUnix: NOW + 3, expectedRevision: before.revision, reason: 'reorg-check' }),
+    ]);
+    assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
+    assert.match(results.find(r => r.status === 'rejected').reason.message, /stale intent revision/);
+    const after = await f.store.get(f.id);
+    assert(['SETTLED', 'RECONCILING'].includes(after.state));
+    if (after.state === 'RECONCILING') assert.equal((await f.store.settleNative(f.id, { verification: f.verified.receipt, nowUnix: NOW + 4, expectedRevision: after.revision })).state, 'SETTLED');
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+test('durable native settlement prevents the same native transaction from reserving a second intent', async () => {
+  const f = await nativeStoreFixture();
+  try {
+    const second = structuredClone(f.authorization);
+    second.intentId = 'testnet-2'; second.nonce = '2';
+    const secondRecord = await f.store.create(second, { nowUnix: NOW });
+    await f.store.authorize(second, { nowUnix: NOW, verifyAgentAuthorization: async () => true });
+    await f.store.reserveSubmission(secondRecord.id, { nowUnix: NOW + 1 });
+    await f.store.recordSubmission(secondRecord.id, { nowUnix: NOW + 2, transactionId: NEAR_ID });
+    await assert.rejects(f.store.settleNative(f.id, { verification: f.verified.receipt, nowUnix: NOW + 3 }), /transaction already reserved/);
+    assert.equal((await f.store.get(f.id)).state, 'SUBMITTED');
+    assert.equal((await f.store.get(secondRecord.id)).state, 'SUBMITTED');
+  } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
 function solanaRpc() {
   const state = {
     tx: { slot: 100, blockTime: NOW, version: 'legacy', meta: { err: null, fee: 1, innerInstructions: [], preBalances: [100, 0, 0], postBalances: [92, 7, 0] }, transaction: { signatures: [SIGNATURE], message: { recentBlockhash: KEY, accountKeys: [

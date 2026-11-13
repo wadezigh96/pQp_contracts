@@ -24,6 +24,8 @@ export function buildNearEnvelopeAuthorizationDispatch({ envelope: input, nowUni
   if (!Number.isSafeInteger(nowUnix) || nowUnix < envelope.time.notBeforeUnix || nowUnix >= envelope.time.expiresAtUnix) {
     throw new Error('authorization outside valid time window');
   }
+  if (nowUnix < envelope.time.issuedAtUnix) throw new Error('authorization issued in future');
+  if (envelope.replayDomain.authorityId !== source.adapterId) throw new Error('NEAR replay authority mismatch');
   return Object.freeze({
     state: 'PREPARED_AUTHORIZATION_ONLY',
     execution: false,

@@ -24,7 +24,7 @@ The contract separates **human authority** from **agent execution authority**. P
 
 ## Implementation scope
 
-The execution workflow below describes the **EVM policy contract**, not a live cross-chain payment system. NEAR records authorization only; native adapters prepare unsigned requests; the local lifecycle and dashboard are simulations, not evidence of signing, broadcast or settlement. Public chain metadata remains public, and no post-quantum authentication or private agent transport is active. See the [Phase 4 threat model and production blockers](SECURITY.md).
+The execution workflow below describes the **EVM policy contract**, not a live cross-chain payment system. NEAR now also has a narrow caller-funded same-chain native execution/refund prototype; separate exact owner-attested EVM executors support local Sepolia/BSC tests. Native RPC verification and durable settlement integration are exercised with mocked RPC fixtures, not a deployed end-to-end payment. The dashboard remains explicitly simulated. Public chain metadata remains public, and no post-quantum authentication or private agent transport is active. See the [Phase 4 threat model and production blockers](SECURITY.md).
 
 ## Core workflow
 
@@ -317,7 +317,7 @@ This keeps integrations replaceable while the security boundary remains centrali
 
 ## Verified engineering boundary
 
-This branch adds a strict [canonical envelope and shared JS/Rust vector](docs/CANONICAL_SPEC.md), NEAR native-identity authorization, [local native adapter boundaries](docs/NATIVE_ADAPTERS.md), and a durable single-host local intent lifecycle. See [engineering evidence and requirement traceability](docs/ENGINEERING_EVIDENCE.md) for checks and gaps. The supported demo/testnet verification boundary is unsigned preparation, simulation and read-only observation, not deployment, signing, broadcast, transfer or verified settlement. No production settlement verifier or PQ cryptography is active. Generic evidence remains `NOT_VERIFIED`; native mock evidence is `MOCK_VALIDATED_NOT_SETTLED`; Zcash route success cannot produce settlement. Store confirmation/settlement fail closed, including historical callback-created confirmations. A persisted state or a testnet RPC response is not proof that an authorized payment occurred.
+This branch adds a strict [canonical envelope and shared JS/Rust vector](docs/CANONICAL_SPEC.md), NEAR native-identity authorization, [local native adapter boundaries](docs/NATIVE_ADAPTERS.md), and a durable single-host local intent lifecycle. See [engineering evidence and requirement traceability](docs/ENGINEERING_EVIDENCE.md) for checks and gaps. The supported demo/testnet verification boundary is unsigned preparation, simulation and read-only observation, not evidence of deployment, signing, broadcast or real payment. Narrow NEAR/EVM/Solana execution verifiers are local fixture-tested prototypes under explicit operator RPC/code-pin trust; no production audit or PQ cryptography is active. Generic evidence remains `NOT_VERIFIED`; native mock evidence is `MOCK_VALIDATED_NOT_SETTLED`; Zcash route success cannot produce settlement. Generic store confirmation/settlement still fail closed, including historical callback-created confirmations. The separate `settleNative` path requires a fresh, module-owned native RPC receipt and independently operator-pinned verifier identity; it cannot accept a boolean or deserialized confirmation. See [local execution and verification boundaries](docs/LOCAL_EXECUTION.md). A persisted state or a testnet RPC response is not proof that an authorized payment occurred.
 
 ## QPC design principles and security requirements
 
@@ -376,7 +376,7 @@ QPC is intended to support independent adapters with a shared authorization inte
 | Solana | Solana program/client adapter | program IDs, instruction/account constraints, signer and PDA rules, recent blockhash/replay handling, commitment/finality |
 | Zcash | Shielded UTXO wallet and light-client adapter | Unified Address/network validation, shielded note handling, nullifier/replay controls, witness/consensus and shielded receipt verification |
 
-**Current status:** NEAR has an authorization-contract MVP; EVM has the existing Solidity policy contract; Zcash has a wallet/adapter prototype. Production-grade, independently verified adapters and settlement are not yet complete for all listed networks. Ethereum, BSC, and Solana must not be presented as integrated merely because an adapter is planned.
+**Current status:** NEAR has authorization plus a same-chain native execution/refund prototype; EVM has its existing policy contract plus a separate owner-attested testnet executor; Solana has a host-tested native program and unsigned codec, without SBF/validator execution evidence; Zcash has a wallet/adapter prototype. Production-grade, independently verified adapters and settlement are not yet complete for all listed networks. Ethereum, BSC, and Solana must not be presented as integrated merely because an adapter is planned.
 
 ### 5. One authorization bound across networks
 
@@ -396,7 +396,7 @@ Adapters must validate the same intent commitment against their own chain-specif
 
 A transaction hash supplied by an agent or relayer is not proof of settlement by itself. The receiving side must independently verify the appropriate chain receipt/finality or shielded proof before marking an intent settled. Timeout, reorg, partial completion, and refund states must be explicit and idempotent.
 
-**Current status:** the NEAR MVP now has a strict full-envelope authorization entrypoint with owner-pinned policy profile and native predecessor authentication; it records authorization only. The legacy limited dispatch is disabled to avoid a weaker authorization bypass. Cross-chain proof verification, atomic settlement, and refunds are not implemented. The full production one-authorization model is not active.
+**Current status:** the NEAR MVP now has a strict full-envelope authorization entrypoint with owner-pinned policy profile and native predecessor authentication; its authorization-only entrypoint remains separate from the new same-chain NEAR execution/refund entrypoint. The legacy limited dispatch is disabled to avoid a weaker authorization bypass. Cross-chain proof verification, atomic cross-chain settlement, and cross-chain refunds are not implemented; same-chain NEAR failed-transfer refunds are a separate local prototype. The full production one-authorization model is not active.
 
 ---
 

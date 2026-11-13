@@ -20,6 +20,11 @@ test('full envelope dispatch rejects mismatched agent and invalid contract recei
   const invalid = structuredClone(fixture.envelope); invalid.source.adapterId = 'near:contract';
   assert.throws(() => buildNearEnvelopeAuthorizationDispatch({ envelope: invalid, nowUnix: invalid.time.notBeforeUnix }), /contract/);
 });
+test('full envelope dispatch rejects an unrelated replay authority', () => {
+  const bad = structuredClone(fixture.envelope);
+  bad.replayDomain.authorityId = 'unrelated.testnet';
+  assert.throws(() => buildNearEnvelopeAuthorizationDispatch({ envelope: bad, nowUnix: bad.time.notBeforeUnix }), /replay authority/);
+});
 test('full envelope dispatch rejects invalid native identity and expiry', () => {
   const bad = structuredClone(fixture.envelope); bad.source.nativeChainId = 'mainnet';
   assert.throws(() => buildNearEnvelopeAuthorizationDispatch({ envelope: bad, nowUnix: bad.time.notBeforeUnix }), /network/);

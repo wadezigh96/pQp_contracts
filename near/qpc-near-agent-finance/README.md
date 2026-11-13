@@ -1,6 +1,6 @@
 # QPC NEAR authorization contract
 
-This contract records native-account-authorized QPC cross-L1 intents. It **does not execute payments**, call a router, sign or broadcast wallet transactions, verify destination consensus, or prove shielded settlement.
+This contract records native-account-authorized QPC cross-L1 intents. The original `authorize_envelope` entrypoint **does not execute payments**. A separate narrow `execute_near_envelope` entrypoint now supports caller-funded same-chain native NEAR transfers and private result/refund callbacks in local mock-runtime tests. Neither method signs/broadcasts wallet transactions, verifies external destination consensus or proves shielded settlement. See [local execution and remaining limits](../../docs/LOCAL_EXECUTION.md).
 
 ## Actual authorization boundary
 
@@ -24,7 +24,7 @@ Revocation disables the policy and deletes its profile. Reconfiguration incremen
 - NEAR's host API supplies the current contract account, not its network/genesis ID. The owner must configure source `networkId` and `nativeChainId` from independently trusted deployment configuration. Authorization pins that profile; it cannot independently discover the live network identity.
 - The profile hash binds recipient commitments and declared privacy/evidence requirements; this is neither private NEAR state nor verification of shielded notes. Input arguments and state remain publicly observable. Events avoid duplicating recipient references, amounts and full envelopes.
 - An `AUTHORIZED` receipt is only a policy authorization commitment. It is not an execution, source finality, destination receipt, settlement, bridge or cross-chain atomicity claim.
-- Native NEAR account authentication remains classical. No post-quantum signature, hybrid authentication, ZK proof, escrow, refund or destination verifier is implemented.
+- Native NEAR account authentication remains classical. No post-quantum signature, hybrid authentication, ZK proof, cross-chain escrow/refund or external destination verifier is implemented. Same-chain failed-transfer refund recovery is separate and does not release consumed replay state.
 - Unit tests use the NEAR SDK host mock. WASM compilation is checked, but no sandbox deployment, RPC integration, gas/storage economics audit or mainnet activation is claimed.
 
 ## Checks

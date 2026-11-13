@@ -1,6 +1,39 @@
 # QPC engineering evidence and requirement traceability
 
-## Current Phase 4 boundary and validation
+## Native execution continuation — current local check record
+
+The continuation began on local `29c5deaaf49d609bf962c13cd08663735bd8f66a`. Fetch found remote feature HEAD `d5ce72197357b9b79b72298f7256303cd6fe7db4` with identical content but different history; a non-destructive merge preserved both histories. Remote main was `45a8352172e207df6b37c1a305d4c5bb92c01378`, no longer containing the original checkout basis. Publication was refused without pushing or opening a PR. The user explicitly chose to keep `qpc/near-contract-mvp`, so no alternate branch, PR or migration was attempted.
+
+Current implementation adds exact caller-funded NEAR execution/private results/refunds, a separate owner-attested Sepolia/BSC native executor, a real Solana native processor with cross-language unsigned instruction encoding, independent native execution RPC verification, opaque expiring verification handles, independently pinned store trust and atomic durable settlement. See [local execution and trust limits](LOCAL_EXECUTION.md). Generic callback and plain-transfer settlement remain disabled; Zcash shielded settlement remains `NOT_IMPLEMENTED`.
+
+### Passed integrated checks on Reason Cloud Linux
+
+- PASS: `RUSTUP_HOME=/home/runner/.cache/qpc-rustup FORGE_BIN=/tmp/qpc-foundry/node_modules/@foundry-rs/forge-linux-amd64/bin/forge node agent-router/scripts/check-local.mjs` — exit 0. This runs the exact individual commands described below; it performs no signing, broadcast, deployment or real funds movement.
+- PASS: `node --test agent-router/test/*.test.mjs` — **499 tests**, 0 failed, 0 skipped at this integrated checkpoint. Native adapter/store tests use mocked native RPC fixtures; they do not prove deployed-executor compatibility.
+- PASS: JS source syntax checks; additionally `find agent-router -name '*.mjs' -print0 | xargs -0 -n1 node --check` passed for source/tests/demo/scripts.
+- PASS: `node agent-router/demo/simulate.mjs` — 11 expected deterministic simulated outcomes, 0 real transactions/settlements. No visible dashboard change in this continuation.
+- PASS: `cargo fmt --manifest-path near/qpc-near-agent-finance/Cargo.toml -- --check`; `CARGO_BUILD_JOBS=1 cargo test --manifest-path near/qpc-near-agent-finance/Cargo.toml --locked` — **21 tests**; `cargo check --manifest-path near/qpc-near-agent-finance/Cargo.toml --locked --target wasm32-unknown-unknown`; `cargo build --manifest-path near/qpc-near-agent-finance/Cargo.toml --locked --target wasm32-unknown-unknown --release`.
+- PASS: `cargo fmt --manifest-path zcash/qpc-zcash-agent/Cargo.toml -- --check`; `cargo test --manifest-path zcash/qpc-zcash-agent/Cargo.toml --locked` — **46 tests**; `cargo check --manifest-path zcash/qpc-zcash-agent/Cargo.toml --locked`.
+- PASS: `cargo fmt --manifest-path solana/qpc-native-executor/Cargo.toml -- --check`; `cargo test --manifest-path solana/qpc-native-executor/Cargo.toml --locked` — **14 host tests**; `cargo check --manifest-path solana/qpc-native-executor/Cargo.toml --locked`; `cargo clippy --manifest-path solana/qpc-native-executor/Cargo.toml --locked --all-targets -- -D warnings`. Rust-generated instruction bytes match all four JS instruction encodings. Host syscall tests explicitly do not simulate bank rollback.
+- PASS: Foundry 1.7.1 `forge fmt --check`, `forge test --summary` — **55 tests**, including 19 new native executor tests and amount fuzzing, and `forge build`. Existing timestamp/typecast warnings remain; none was disabled.
+- PASS: `git diff --check`, added-line secret-signature scan and sensitive-artifact filename check. These are bounded checks, not a guarantee against every secret encoding.
+
+### Reproductions and recovered check failures
+
+The recovery worker reproduced reauthorization after stripping both replay indexes before adding integrity checks; the new regression rejects it. New crash tests kill a real child before/after rename; they prove process-crash behavior, not power-loss durability. Native proof tests reject forged/cloned handles, stale receipts before and after lock acquisition, wrong authorization/transaction/trust roots, duplicate transaction use, CAS races and asynchronous caller input mutation. Solana upgrade-planted state cannot substitute for an independently discovered canonical owner approval under the pinned immutable program.
+
+Initial checks exposed environment/runner failures and were corrected, not skipped: `forge` was absent (exit 127), recovered using pinned npm `@foundry-rs/forge-linux-amd64@1.7.1`; Zcash `--locked` failed because its lockfile was absent, fixed by including Cargo.lock; the shared toolchain refused WASM installation read-only, so a writable toolchain was used; that toolchain initially lacked rustfmt, installed before rerun; NEAR host `cargo check` failed by SDK design, corrected to the required WASM target. The final integrated runner above passed all its checks.
+
+### Partial and unverified requirements
+
+- PARTIAL: `node agent-router/scripts/testnet-inspect.mjs` — exit 1: actual read-only chain/genesis identity reads succeeded for NEAR testnet, Sepolia, BSC testnet and Solana devnet; Zcash loopback RPC was `NOT_VERIFIED` (no local daemon). The CLI attempts no settlement.
+- PASS, narrow live compatibility probes by the adapter worker: NEAR finalized public transaction/receipt schema and `EXPERIMENTAL_receipt`, plus Sepolia/BSC finalized-block EIP-1898 `eth_getCode`/`eth_call`. NEAR numeric FunctionCall gas was observed and incorporated. These do not prove our new executor was deployed or paid anyone.
+- BLOCKED/NOT RUN: `cargo build-sbf --manifest-path solana/qpc-native-executor/Cargo.toml` — SBF command unavailable. No SBF/validator integration, actual Solana rollback, new deployed executor identity or live payment is verified.
+- NOT_IMPLEMENTED: Zcash shielded payment construction/native settlement; cross-chain atomicity and cross-chain recovery; active PQ/hybrid authentication/private transport; production-grade signer/custody/replicated rollback-resistant storage.
+- The original supplied `qpc-phase2-4-final.patch` remains absent from the upload inventory. Its bytes were never fabricated or claimed applied. Independent implementation cannot prove missing-patch completeness.
+- An independent model security review is separate from a professional external audit; production funds remain prohibited pending audit and operational/deployment acceptance.
+
+## Historical Phase 4 boundary and validation
 
 This document separates freshly run checks from **historical evidence retained below**. Prior review verdicts, test counts and unavailable historical commit IDs are not attestations for the current working tree. The comprehensive current [security model](../SECURITY.md) defines remaining blockers, not the historical approval language.
 

@@ -8,6 +8,7 @@ import {
   authorizeCrossL1Envelope,
   verifyCrossL1SettlementEvidence,
 } from "./cross-l1-envelope.mjs";
+import { readVerifiedNativeSettlement } from "./testnet-adapters.mjs";
 
 const ID = /^[0-9a-f]{64}$/;
 const TEXT = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$/;
@@ -25,6 +26,68 @@ function immutable(value) {
   return value;
 }
 function copy(value) { return immutable(structuredClone(value)); }
+const TRUST_FIELDS = ["chain", "networkId", "nativeChainId", "contractAddress", "codeHash", "owner"];
+function trustSnapshot(input) {
+  check(Array.isArray(input), "nativeTrust must be an array");
+  return immutable(input.map(identity => {
+    check(identity && [Object.prototype, null].includes(Object.getPrototypeOf(identity)), "plain native trust identity required");
+    const descriptors = Object.getOwnPropertyDescriptors(identity);
+    check(Reflect.ownKeys(identity).length === TRUST_FIELDS.length && TRUST_FIELDS.every(key =>
+      descriptors[key]?.enumerable && "value" in descriptors[key] && typeof descriptors[key].value === "string" && descriptors[key].value.length > 0), "exact native trust data fields required");
+    return Object.fromEntries(TRUST_FIELDS.map(key => [key, descriptors[key].value]));
+  }));
+}
+
+const TRANSITIONS = Object.freeze({
+  CREATED: ["AUTHORIZED", "CANCELED", "EXPIRED", "FAILED"],
+  AUTHORIZED: ["SUBMITTING", "SUBMITTED", "CANCELED", "EXPIRED", "FAILED"],
+  SUBMITTING: ["SUBMITTED", "RECONCILING"],
+  SUBMITTED: ["CONFIRMED", "RECONCILING"],
+  CONFIRMED: ["SETTLED", "RECONCILING"],
+  SETTLED: ["RECONCILING"],
+  RECONCILING: ["CONFIRMED", "RECONCILING"],
+  CANCELED: [], EXPIRED: [], FAILED: [],
+});
+function persistentState(state) {
+  // Detect partial/corrupt state rather than trusting an independently missing
+  // replay map. This is consistency checking, not tamper-proof local storage.
+  const invalid = message => check(false, `invalid persistent store: ${message}`);
+  const object = x => x !== null && typeof x === "object" && !Array.isArray(x);
+  if (!object(state) || state.version !== 1 ||
+      ![state.records, state.nonces, state.intents].every(object)) invalid("schema");
+  const nonces = Object.create(null), intents = Object.create(null);
+  for (const [id, record] of Object.entries(state.records)) {
+    if (!ID.test(id) || !object(record) || record.id !== id ||
+        !Number.isSafeInteger(record.revision) || record.revision < 0 ||
+        !Array.isArray(record.history) || record.history.length !== record.revision + 1) invalid("record");
+    let commitment;
+    try { commitment = computeCrossL1AuthorizationCommitment(record.envelope); }
+    catch { invalid("envelope"); }
+    if (commitment !== id) invalid("commitment");
+    let previous;
+    for (const event of record.history) {
+      if (!object(event) || !Object.hasOwn(TRANSITIONS, event.state) ||
+          !Number.isSafeInteger(event.atUnix) || event.atUnix < 0 || Object.is(event.atUnix, -0)) invalid("history");
+      if (!previous ? event.state !== "CREATED" :
+          !TRANSITIONS[previous.state].includes(event.state) || event.atUnix < previous.atUnix) invalid("history transition");
+      previous = event;
+    }
+    if (record.history[0].atUnix !== record.createdAtUnix || previous.atUnix !== record.updatedAtUnix ||
+        previous.state !== record.state) invalid("history head");
+    if (record.history.some(event => event.state === "AUTHORIZED")) {
+      const domain = computeCrossL1ReplayDomainKey(record.envelope);
+      const nonceKey = JSON.stringify([domain, record.envelope.nonce]);
+      const intentKey = JSON.stringify([domain, record.envelope.intentId]);
+      if (Object.hasOwn(nonces, nonceKey) || Object.hasOwn(intents, intentKey)) invalid("duplicate replay claim");
+      nonces[nonceKey] = id; intents[intentKey] = id;
+    }
+  }
+  for (const [actual, expected] of [[state.nonces, nonces], [state.intents, intents]]) {
+    if (Object.keys(actual).length !== Object.keys(expected).length ||
+        Object.entries(expected).some(([key, id]) => !Object.hasOwn(actual, key) || actual[key] !== id)) invalid("replay index mismatch");
+  }
+  return state;
+}
 
 /**
  * LOCAL PROTOTYPE ONLY. One private directory on a local filesystem supporting
@@ -33,12 +96,17 @@ function copy(value) { return immutable(structuredClone(value)); }
  * administrative failures and submission reports. No signing/broadcast occurs.
  * Authorization is an explicitly trusted application integration boundary.
  * Evidence callbacks only validate data consistency: they cannot confirm or
- * settle. Native authorization-bound proof integration is NOT_IMPLEMENTED.
+ * settle. settleNative requires a fresh module-owned native RPC verification
+ * handle, never a caller callback or deserialized persisted confirmation.
  *
  * A lock covers read/check/write of BOTH replay indexes and lifecycle record.
  * Replacement writes fsync file, rename, fsync directory before success. A crash
  * may leave .lock: FAIL CLOSED; operator must prove no writer is alive before
- * removing it. Never automatically steal locks. Storage rollback/deletion,
+ * removing it. Never automatically steal locks. recover() then quarantines
+ * ambiguous submission/legacy confirmation records without freeing replay keys.
+ * State/replay-index consistency is validated on every read/write. This detects
+ * partial corruption, not a malicious writer rewriting the complete history.
+ * Storage rollback/deletion,
  * malicious local writers, hardware fsync lies, and lost-disk recovery are not
  * defended; production needs transactional replicated durable storage/backups.
  * The store retains full envelopes/evidence summaries (sensitive metadata) and
@@ -47,11 +115,14 @@ function copy(value) { return immutable(structuredClone(value)); }
 export class FileIntentStore {
   #root;
   #lockTimeoutMs;
-  constructor(root, { lockTimeoutMs = 5000 } = {}) {
+  #nativeTrust;
+  constructor(root, { lockTimeoutMs = 5000, nativeTrust = [] } = {}) {
     check(typeof root === "string" && root.length > 0, "store directory is required");
     check(Number.isSafeInteger(lockTimeoutMs) && lockTimeoutMs >= 0, "invalid lock timeout");
     this.#root = resolve(root);
     this.#lockTimeoutMs = lockTimeoutMs;
+    // Operator-owned trust roots are independent of the request/receipt.
+    this.#nativeTrust = trustSnapshot(nativeTrust);
   }
 
   async #read() {
@@ -61,13 +132,11 @@ export class FileIntentStore {
       if (error.code === "ENOENT") return { version: 1, records: {}, nonces: {}, intents: {} };
       throw error;
     }
-    const state = JSON.parse(raw); // corruption propagates; never silently reset
-    check(state.version === 1 && [state.records, state.nonces, state.intents].every(
-      x => x !== null && typeof x === "object" && !Array.isArray(x)), "invalid persistent store");
-    return state;
+    return persistentState(JSON.parse(raw)); // corruption propagates; never silently reset
   }
 
   async #write(state) {
+    persistentState(state);
     const temporary = join(this.#root, `.state-${randomUUID()}.tmp`);
     let handle;
     try {
@@ -102,6 +171,26 @@ export class FileIntentStore {
       await this.#write(state);
       return copy(result);
     } finally { await rmdir(lock); }
+  }
+
+  /**
+   * Startup recovery requires exclusive orchestrator ownership: do not call this
+   * while an external sender is still active. The normal filesystem lock is
+   * required; an abandoned lock is never removed or stolen here. No send, retry,
+   * proof verification, settlement, or replay-key release occurs during recovery.
+   */
+  async recover({ nowUnix } = {}) {
+    const now = time(nowUnix);
+    return this.#transaction(state => {
+      const recovered = [];
+      for (const record of Object.values(state.records)) {
+        if (!["SUBMITTING", "SUBMITTED", "CONFIRMED", "SETTLED"].includes(record.state)) continue;
+        this.#advance(record, "RECONCILING", [record.state], { nowUnix: now, reason: "crash-recovery" });
+        delete record.confirmation;
+        recovered.push(record);
+      }
+      return recovered;
+    });
   }
 
   async get(id) {
@@ -214,6 +303,43 @@ export class FileIntentStore {
     return this.#update(id, "CONFIRMED", ["SUBMITTED", "RECONCILING"], { nowUnix, expectedRevision }, record => {
       record.transactionId = verified.transactionId;
       record.confirmation = verified;
+    });
+  }
+
+  /** Atomically consume a fresh, native-verifier-owned receipt. No caller proof
+   * callback or persisted confirmation can unlock this path. The operator RPC,
+   * code pin and upgrade-authority trust assumptions remain explicit.
+   */
+  async settleNative(id, options = {}) {
+    check(ID.test(id), "invalid intent record id");
+    const handle = options.verification;
+    const verified = readVerifiedNativeSettlement(handle);
+    check(verified, "NOT_VERIFIED: fresh native verification handle required");
+    check(verified.authorizationCommitment === id, "native authorization commitment mismatch");
+    const prior = await this.get(id);
+    const captured = { nowUnix: options.nowUnix, expectedRevision: options.expectedRevision ?? prior.revision };
+    return this.#transaction(state => {
+      // Check wall-clock freshness again after waiting for the filesystem lock.
+      const proof = readVerifiedNativeSettlement(handle);
+      check(proof, "NOT_VERIFIED: expired native verification handle");
+      check(this.#nativeTrust.some(identity => TRUST_FIELDS.every(key =>
+        identity[key] === proof.verifierIdentity?.[key])), "native verifier trust identity not approved by store operator");
+      const record = state.records[id];
+      check(record, "intent not found");
+      check(proof.authorizationCommitment === record.id, "native authorization commitment mismatch");
+      check(proof.sourceNetworkId === record.envelope.source.networkId &&
+        proof.sourceNativeChainId === record.envelope.source.nativeChainId &&
+        proof.destinationNetworkId === record.envelope.destination.networkId &&
+        proof.destinationNativeChainId === record.envelope.destination.nativeChainId, "native network binding mismatch");
+      check(record.transactionId === proof.transactionId ||
+        (record.state === "RECONCILING" && record.transactionId === undefined), "native settlement transaction mismatch");
+      check(!Object.values(state.records).some(other => other.id !== id &&
+        other.transactionId === proof.transactionId), "native transaction already reserved by another intent");
+      this.#advance(record, "CONFIRMED", ["SUBMITTED", "RECONCILING"], captured);
+      record.transactionId = proof.transactionId;
+      record.confirmation = structuredClone(proof);
+      this.#advance(record, "SETTLED", ["CONFIRMED"], { nowUnix: captured.nowUnix, expectedRevision: record.revision });
+      return record;
     });
   }
 
