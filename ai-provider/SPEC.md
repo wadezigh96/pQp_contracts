@@ -1,6 +1,6 @@
 # QPC AI Provider Interface — Specification v1
 
-**Status:** design-only. No provider adapter, model runtime, attestation verifier, or inference path is implemented by this document.
+**Status:** implemented prototype. The initial provider-neutral JavaScript contract and NEAR AI Cloud adapter are present under `src/`; the live provider path remains disabled until an operator supplies reviewed deployment measurements and credentials.
 
 ## 1. Purpose and boundary
 
@@ -66,7 +66,7 @@ interface AIProvider {
 }
 ```
 
-These are conceptual types, not an implemented or frozen public API. Before implementation, define canonical serialization, byte encodings, error codes, time source, and signature verification APIs.
+These are conceptual TypeScript contract types; the current implementation is JavaScript ESM with JSDoc and is not yet a frozen public API. The official SDK performs the cryptographic request/response verification. The adapter requires a locally configured allowlist of measured deployment compose hashes and refuses model-only or Gateway-only trust.
 
 ## 4. Policy requirements
 
@@ -85,12 +85,12 @@ These are conceptual types, not an implemented or frozen public API. Before impl
 
 The NEAR AI integration is an optional provider adapter, not a dependency of QPC payment settlement. Its OpenAI-compatible inference endpoint does not by itself establish TEE execution or response authenticity.
 
-The adapter must use the official inference SDK's supported verification path rather than inventing a custom signature format. Preserve the distinction between:
+The adapter pins `@nearai/inference-sdk` to `0.3.0` and uses its Node `InferenceClient` verification path rather than inventing a custom signature format. It enables E2EE, sets attestation cache TTL to zero, runs a local compose-hash allowlist policy, calls `verify(model)` before each inference, consumes the full non-streaming response, then calls `verifyResponse(completion.id)` before returning any text. Preserve the distinction between:
 
 - `provider_tee`: signature binding inference bytes to the attested model/provider TEE signer.
 - `gateway`: signature binding bytes to the attested gateway signer.
 
-A gateway signature alone MUST NOT satisfy a policy that requires proof of model execution inside a provider TEE. Deployment evidence must be checked separately and bound to the selected model and signer. Exact SDK API names and evidence formats must be verified against the pinned SDK version before implementation.
+A gateway signature alone MUST NOT satisfy a policy that requires proof of model execution inside a provider TEE. Deployment evidence must be checked separately and bound to the selected model and signer. The adapter rejects empty model-attestation results, unverified deployment provenance, and every response receipt except `provider_tee`. The exact signed-byte verification is delegated to the pinned SDK; mock tests do not independently validate cryptography.
 
 Do not conflate NEAR AI Gateway desktop session tooling with the NEAR AI Cloud inference API. Gateway desktop tooling is not a QPC bridge, wallet, or payment rail.
 
@@ -106,12 +106,12 @@ Do not conflate NEAR AI Gateway desktop session tooling with the NEAR AI Cloud i
 
 ## 7. Versioning and acceptance
 
-The interface is not implementation-ready until:
-- exact SDK version and verification APIs are pinned;
-- canonical request/response bytes and signature domains are specified;
-- provider/model identity and attestation freshness rules are specified;
+Production activation remains blocked until:
+- a live approved model and deployment compose hash are verified independently;
+- exact SDK verification implementation, trust roots, and signed-byte binding are reviewed;
+- provider/model identity, attestation freshness, revocation, and response replay behavior are reviewed;
 - policy and error semantics are agreed;
-- contract tests in `TEST_PLAN.md` pass against a deterministic fake provider;
+- offline contract tests and live end-to-end verification pass;
 - an independent security review covers prompt/data leakage and the signer boundary.
 
 Passing adapter tests does not prove the provider is secure, that a TEE is uncompromised, or that the overall agent is safe.
