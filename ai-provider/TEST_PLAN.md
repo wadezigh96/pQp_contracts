@@ -14,19 +14,19 @@ The suite uses a deterministic fake SDK client. It does not call NEAR AI, requir
 
 | Scenario | Expected result | Test status |
 |---|---|---|
-| Missing API key | Fail closed | PASS |
-| Missing model allowlist | Fail closed | PASS |
-| Missing compose-hash allowlist | Fail closed | PASS |
-| Unsupported model | Reject before provider call | PASS |
-| Deployment compose hash outside operator allowlist | Reject before inference | PASS |
-| No model TEE evidence (Incognito/Gateway-only) | Reject before inference | PASS |
-| Gateway-only response receipt | Reject; do not return text | PASS |
-| Deployment preflight and receipt verification order | Verify -> inference -> verify response | PASS |
-| Provider error containing secret text | Return stable redacted error | PASS |
-| Empty and oversized prompt | Reject | PASS |
-| Wallet/signing surface | No signer or transaction methods; adapter implements provider-neutral base class | PASS |
-| SDK security configuration | E2EE on, attestation cache TTL zero, deployment verifier and model policy supplied | PASS |
-| SDK model report without verified deployment provenance | Reject before inference | PASS |
+| Missing API key | Fail closed | Implemented; execution pending |
+| Missing model allowlist | Fail closed | Implemented; execution pending |
+| Missing compose-hash allowlist | Fail closed | Implemented; execution pending |
+| Unsupported model | Reject before provider call | Implemented; execution pending |
+| Deployment compose hash outside operator allowlist | Reject before inference | Implemented; execution pending |
+| No model TEE evidence (Incognito/Gateway-only) | Reject before inference | Implemented; execution pending |
+| Gateway-only response receipt | Reject; do not return text | Implemented; execution pending |
+| Deployment preflight and receipt verification order | Verify -> inference -> verify response | Implemented; execution pending |
+| Provider error containing secret text | Return stable redacted error | Implemented; execution pending |
+| Empty and oversized prompt | Reject | Implemented; execution pending |
+| Wallet/signing surface | No signer or transaction methods; adapter implements provider-neutral base class | Implemented; execution pending |
+| SDK security configuration | E2EE on, attestation cache TTL zero, deployment verifier and model policy supplied | Implemented; execution pending |
+| SDK model report without verified deployment provenance | Reject before inference | Implemented; execution pending |
 | Invalid response receipt | Reject without returning response text | Implemented; execution pending |
 | Agent Runtime labels output untrusted | No action authorization or execution | Implemented; execution pending |
 | Invalid provider contract | Reject construction | Implemented; execution pending |
