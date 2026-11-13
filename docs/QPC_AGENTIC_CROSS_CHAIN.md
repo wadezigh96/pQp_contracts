@@ -72,4 +72,11 @@ These are local tests. They do not broadcast testnet transactions, prove Zcash c
 
 ## Current implementation boundary
 
-The repository contains local NEAR dispatch, agent-router request preparation, and Zcash wallet-adapter/state-machine prototypes. It does **not** yet contain a production Zcash transaction signer/broadcaster, a trust-minimized shielded receipt proof, a live solver/bridge, atomic cross-chain settlement, or a production refund mechanism.
+The repository currently contains:
+- a local agent-router that hashes a payment intent, prepares a NEAR call payload, and can invoke an explicitly supplied wallet signer and route-provider callback;
+- a Zcash address/policy adapter, persistent local replay guard, Testnet wallet-storage initializer, and checkpoint-gated view-only UFVK import;
+- local unit tests for router payload binding and provider receipt gating.
+
+**Important integration gap:** this repository does not currently contain a NEAR smart-contract crate or deployed QPC NEAR contract implementing the router's assumed `dispatch_action` method. The EVM Solidity contract under `contracts/QPCAgentFinance.sol` is not a NEAR contract and cannot receive NEAR calls. Therefore the router's `qpcContractId` and `dispatch_action` are an interface seam for future NEAR contract work, not a working on-chain NEAR integration.
+
+It also does **not** yet contain a production Zcash transaction signer/broadcaster, shielded wallet scan/receipt verifier, trust-minimized shielded receipt proof, live solver/bridge, atomic cross-chain settlement, or production refund mechanism. The current CI proves local Rust and Node unit tests only; it does not prove live NEAR or Zcash settlement.
