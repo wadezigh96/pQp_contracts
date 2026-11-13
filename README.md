@@ -32,7 +32,7 @@ Quantum resistance is a design objective, not a currently implemented property. 
 
 ### Current repository status
 
-This repository currently contains an **EVM/Solidity policy-contract prototype** and Foundry tests. It is not yet a NEAR-native private contract, a universal multi-L1 deployment, a shielded payment system, an x402 payment adapter, or a post-quantum implementation. Those are planned engineering milestones and must be implemented and tested separately.
+This repository contains an **EVM/Solidity policy-contract prototype** with Foundry tests and a first **NEAR-native Rust policy-gate source prototype** under `near/qpc-policy/`. The NEAR prototype authorizes and accounts for payment intents but does not transfer assets. Its Rust tests and WASM build are pending CI verification. Neither implementation provides shielded settlement, an end-to-end x402 adapter, universal multi-L1 execution, or post-quantum verification. The NEAR prototype is not yet suitable for real funds.
 
 ### Optional confidential inference with NEAR AI Cloud
 

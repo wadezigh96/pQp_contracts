@@ -4,7 +4,7 @@
 **Positioning:** Private on-chain infrastructure for policy-controlled agentic finance  
 **Hackathon primary track:** Open Innovation (`open`)  
 **Additional fitting tracks:** Privacy & Private AI (`privacy`), AI Security & Defense (`security`), Agent Economy (`agents`)  
-**Status:** Design specification; NEAR-native implementation and privacy payment rail are not yet implemented.
+**Status:** NEAR policy-gate source prototype added; build/CI verification pending. Private settlement, x402 execution, TEE attestation integration, and post-quantum verification are not implemented.
 
 ---
 
@@ -208,6 +208,31 @@ The macOS NEAR AI Gateway desktop application is a developer workflow tool for l
 6. Document which prompt data is sent, what metadata remains visible, and what evidence is retained.
 
 This integration is optional for the first vertical slice. Do not make it a hard dependency for contract execution or payment settlement.
+
+## 8A. NEAR policy-gate source prototype — implemented, verification pending
+
+The repository now includes a first NEAR-native Rust contract prototype at `near/qpc-policy/`.
+
+### Implemented in source
+
+- Owner-only agent policy configuration.
+- Maximum 30-day policy duration.
+- Per-payment maximum and cumulative authorized cap.
+- Recipient allowlist capped at 64 unique account IDs.
+- Agent revocation and global pause.
+- Sequential per-agent nonce and request-hash format validation.
+- Policy versioning and public-safe event logs.
+- Unit-test cases for allowed intent, wrong recipient, per-payment limit, cumulative cap, replay, expiry, pause, revocation, unauthorized owner action, duplicate recipients, and policy reconfiguration.
+
+### Exact limitation
+
+`authorize_payment` is an **authorization/reservation operation only**. It does not transfer NEAR, NEP-141 tokens, or any other asset; it does not call a merchant contract; it does not verify an x402 facilitator; and it does not prove settlement. Authorized amounts are conservatively accumulated against the cap. There is not yet a cancellation/release or settlement-finalization lifecycle, so this source prototype must not be used to control real funds.
+
+The contract state, call arguments, account identifiers, and transaction metadata are public on NEAR. It is not a private/shielded contract. The request hash is a binding/audit field, not proof of payload correctness.
+
+### Verification status
+
+The source includes unit tests and a GitHub Actions workflow for `cargo test` and a `wasm32-unknown-unknown` check. The tests and WASM compilation must pass on the branch before this prototype is considered validated. No testnet deployment or real-value transaction has been performed.
 
 ## 8. NEAR-first prototype scope
 

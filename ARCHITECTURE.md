@@ -13,7 +13,7 @@ The intended separation is:
 
 The agent must not receive the owner's root key or be able to expand its own authority.
 
-**Current implementation boundary:** this repository currently contains an EVM/Solidity prototype. It is not a NEAR-native contract, private/shielded payment implementation, x402 adapter, universal multi-L1 deployment, or post-quantum cryptographic implementation. Those are roadmap objectives. This document distinguishes existing code from planned work.
+**Current implementation boundary:** this repository contains an EVM/Solidity prototype and a first NEAR-native Rust policy-gate source prototype. The NEAR source authorizes and accounts for payment intents but does not transfer assets; build and test verification are pending. Neither implementation is a private/shielded payment system, end-to-end x402 adapter, universal multi-L1 deployment, or post-quantum cryptographic implementation. Those remain roadmap objectives.
 
 ## 2. Current implementation status
 
@@ -228,6 +228,17 @@ NEAR AI Cloud may provide confidential inference for QPC's agent reasoning or pr
 - TEE inference does not make on-chain NEAR transfers private and does not replace a shielded payment rail.
 
 The NEAR AI Gateway desktop app is a developer tool for routing supported local coding-agent sessions through NEAR AI Cloud. A deployed QPC product should call the Cloud API/SDK directly; it does not need the macOS app as a runtime dependency.
+
+
+## 8B. NEAR-native policy-gate source prototype
+
+A first Rust contract prototype now lives at `near/qpc-policy/`, using NEAR SDK 5.30.1.
+
+Implemented in source: owner-only policy configuration, 30-day maximum expiry, per-payment and cumulative authorization caps, recipient allowlist (maximum 64 unique accounts), pause, revocation, policy versions, sequential per-agent nonces, request-hash format validation, and public audit logs.
+
+**Critical limitation:** `authorize_payment` only records authorization and reserves the amount against the policy cap. It does not transfer NEAR or FT assets, call a merchant, verify x402 settlement, or make transaction data private. No settlement/cancel lifecycle exists yet. It must not be used for real funds.
+
+Unit-test cases and a GitHub Actions workflow for Rust tests and WASM compile checking are included. Their success remains unverified until CI completes.
 
 
 ## 9. QPC roadmap — planned, not implemented
