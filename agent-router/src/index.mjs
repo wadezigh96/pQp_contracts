@@ -86,12 +86,9 @@ export function buildNearToZcashShieldedDispatch(input) {
     action_id: actionId,
     destination_chain: "zcash:testnet",
     destination_router: input.zcashRouterAccountId,
-    payment_id: intent.paymentId,
-    amount_zatoshis: intent.amountZatoshis,
-    opaque_recipient_ref: intent.opaqueRecipientRef,
     expires_at_unix: intent.expiresAtUnix,
     privacy_policy: "SHIELDED_ONLY",
-    policy_args_hash: policyArgsHash,
+    intent_commitment: policyArgsHash,
   });
 
   const request = Object.freeze({
