@@ -67,7 +67,6 @@ jobs:
         with:
           workspaces: zcash/qpc-zcash-agent
       - run: cargo fmt --all -- --check
-      - run: cargo generate-lockfile
       - run: cargo test --locked
       - run: cargo check --locked
 
