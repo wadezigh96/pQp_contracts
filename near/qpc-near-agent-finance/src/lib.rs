@@ -168,15 +168,12 @@ impl QPCNear {
         let new_spent = policy.spent.checked_add(amount).expect("spending overflow");
         assert!(new_spent <= policy.total_cap, "cumulative spending cap exceeded");
 
-        let canonical = format!(
-            "{}{{\"paymentId\":{},\"opaqueRecipientRef\":{},\"amountZatoshis\":{},\"expiresAtUnix\":{}}}",
-            HASH_DOMAIN,
-            near_sdk::serde_json::to_string(&payment_id).expect("serialize payment id"),
-            near_sdk::serde_json::to_string(&opaque_recipient_ref).expect("serialize recipient ref"),
-            near_sdk::serde_json::to_string(&amount_zatoshis).expect("serialize amount"),
+        let expected_hash = compute_policy_args_hash(
+            &payment_id,
+            &opaque_recipient_ref,
+            &amount_zatoshis,
             expires_at_unix,
         );
-        let expected_hash = hex_string(&env::sha256(canonical.as_bytes()));
         assert_eq!(policy_args_hash, expected_hash, "policy argument hash mismatch");
 
         policy.spent = new_spent;
@@ -217,6 +214,23 @@ impl QPCNear {
     fn assert_owner(&self) {
         assert_eq!(env::predecessor_account_id(), self.owner, "owner only");
     }
+}
+
+fn compute_policy_args_hash(
+    payment_id: &str,
+    opaque_recipient_ref: &str,
+    amount_zatoshis: &str,
+    expires_at_unix: u64,
+) -> String {
+    let canonical = format!(
+        "{}{{\"paymentId\":{},\"opaqueRecipientRef\":{},\"amountZatoshis\":{},\"expiresAtUnix\":{}}}",
+        HASH_DOMAIN,
+        near_sdk::serde_json::to_string(payment_id).expect("serialize payment id"),
+        near_sdk::serde_json::to_string(opaque_recipient_ref).expect("serialize recipient ref"),
+        near_sdk::serde_json::to_string(amount_zatoshis).expect("serialize amount"),
+        expires_at_unix,
+    );
+    hex_string(&env::sha256(canonical.as_bytes()))
 }
 
 fn now_unix() -> u64 {
@@ -286,6 +300,19 @@ mod tests {
             ALLOWED_PRIVACY.to_string(),
             hash.to_string(),
         )
+    }
+
+    #[test]
+    fn rust_hash_matches_agent_router_fixture() {
+        assert_eq!(
+            compute_policy_args_hash(
+                "pay-2026-0001",
+                "ref-7f2a9c8405d1b6e3f48a2d0c",
+                "25000",
+                1_800_000_300,
+            ),
+            "afba8520c1b56d0635f02f6d02df0e0f3fa70dc87c170822be11230db55d04a5"
+        );
     }
 
     #[test]
