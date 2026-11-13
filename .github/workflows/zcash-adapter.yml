@@ -32,7 +32,7 @@ jobs:
         with:
           workspaces: zcash/qpc-zcash-agent
       - name: Format Rust sources
-        run: cargo fmt --all
+        run: cargo fmt --all -- --check
       - name: Run adapter and wallet storage tests
         run: cargo test
       - name: Compile adapter and wallet backend
