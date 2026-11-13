@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-/// @title POA Agent Finance
+/// @title QPC Agent Finance
 /// @notice Human-controlled, least-privilege spending authority for autonomous/AI agents.
 /// @dev Defense-in-depth. AI/agent keys never become owner keys.
 interface IERC20 { function transfer(address to, uint256 amount) external returns (bool); }
 
-contract POAAgentFinance {
+contract QPCAgentFinance {
     uint256 public constant MAX_POLICY_DURATION = 30 days;
     struct AgentPolicy { bool active; uint64 expiresAt; uint256 nativeCap; uint256 nativeSpent; uint256 nativeTxLimit; }
     struct TokenPolicy { uint256 cap; uint256 spent; uint256 txLimit; }

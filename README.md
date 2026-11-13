@@ -12,7 +12,7 @@
 
 ## About
 
-POA Agent Finance is a standalone smart-contract foundation for autonomous and AI-assisted finance.
+QPC Agent Finance is a standalone smart-contract foundation for autonomous and AI-assisted finance.
 
 The core principle is simple:
 
@@ -67,7 +67,7 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    O[Owner] -->|policy control| PC[POA Policy Controller]
+    O[Owner] -->|policy control| PC[QPC Policy Controller]
 
     PC --> AP[Agent Policy]
     PC --> CL[Call Allowlist]
@@ -112,16 +112,16 @@ AI logic is **not trusted as a security boundary**. The smart contract remains t
 ## Project structure
 
 ```
-poa_contracts/
+qpc_contracts/
 ├── contracts/
-│   └── POAAgentFinance.sol       # Core policy + execution contract
+│   └── QPCAgentFinance.sol       # Core policy + execution contract
 │
 ├── test/
-│   ├── POAAgentFinance.security.t.sol
+│   ├── QPCAgentFinance.security.t.sol
 │   │                              # Security regression tests
-│   ├── POAAgentFinance.invariant.t.sol
+│   ├── QPCAgentFinance.invariant.t.sol
 │   │                              # State/invariant checks
-│   └── POAAgentFinance.stateful.t.sol
+│   └── QPCAgentFinance.stateful.t.sol
 │                                  # Stateful handler scenarios
 │
 ├── script/                        # Deployment scripts
@@ -286,7 +286,7 @@ Application / API
 Policy Builder
       │
       ▼
-POAAgentFinance
+QPCAgentFinance
       │
       ├── DEX
       ├── Lending
@@ -294,7 +294,7 @@ POAAgentFinance
       └── Other protocols
 ```
 
-This keeps integrations replaceable while the security boundary remains centralized in the POA contract.
+This keeps integrations replaceable while the security boundary remains centralized in the QPC contract.
 
 ---
 

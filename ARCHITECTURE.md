@@ -1,8 +1,8 @@
-# POA Agent Finance — Architecture
+# QPC Agent Finance — Architecture
 
 ## 1. Design goal
 
-POA is a policy enforcement layer for agentic finance.
+QPC is a policy enforcement layer for agentic finance.
 
 It is designed around one separation:
 
@@ -29,7 +29,7 @@ The AI does not receive the owner's private key and does not get unrestricted co
           └───────────┬───────────┘
                       ▼
               ┌───────────────┐
-              │ POA CONTRACT  │
+              │ QPC CONTRACT  │
               │ Enforcement   │
               └───────┬───────┘
                       │
@@ -46,7 +46,7 @@ The AI does not receive the owner's private key and does not get unrestricted co
 
 ## 3. Component responsibilities
 
-### POAAgentFinance.sol
+### QPCAgentFinance.sol
 
 The contract is the security boundary.
 
@@ -197,7 +197,7 @@ ACTIVE
 
 ## 9. Application architecture
 
-POA should remain protocol-agnostic.
+QPC should remain protocol-agnostic.
 
 A future application can provide:
 
@@ -211,7 +211,7 @@ Agent / API
 Policy Builder
    │
    ▼
-POAAgentFinance
+QPCAgentFinance
    │
    ├── DEX adapter
    ├── Lending adapter
@@ -221,7 +221,7 @@ POAAgentFinance
 
 The application chooses **what the agent wants to do**.
 
-POA decides **whether the agent is allowed to do it**.
+QPC decides **whether the agent is allowed to do it**.
 
 ## 10. Testing architecture
 
@@ -265,6 +265,6 @@ A passing test suite is not equivalent to an independent security audit.
 
 The intended user-facing flow can later be presented as:
 
-**Intent → Policy → Preview → Approval → Agent Request → POA Guardrails → Settlement → Audit**
+**Intent → Policy → Preview → Approval → Agent Request → QPC Guardrails → Settlement → Audit**
 
-Unlike an application-specific agent, POA does not need to know how the strategy was generated. Its job is to enforce the final security policy on-chain.
+Unlike an application-specific agent, QPC does not need to know how the strategy was generated. Its job is to enforce the final security policy on-chain.
