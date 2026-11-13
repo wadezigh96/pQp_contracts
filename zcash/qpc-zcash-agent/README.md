@@ -27,3 +27,12 @@ Spending keys must remain in a dedicated local wallet boundary and never enter a
 5. Verify transaction inclusion and confirmations independently before reporting settlement.
 
 CI tests only local storage initialization and policy/parser behavior. It does not access a live network or send funds.
+
+
+## Optional private explorer query boundary
+
+The `privacy_query` module accepts only bounded opaque ciphertext payloads and exposes a read-only transport trait. It intentionally has no ordinary HTTP explorer fallback: a PIR outage must fail closed rather than disclose a transaction ID, block identifier, or address through a plaintext query.
+
+ZecBlock's public API reference documents normal `https://api.zecblock.com/v1` reads. The ZecBlock Private announcement describes browser-side PIR but does not publish a stable public machine-to-machine request schema in that reference. Therefore this repository does not claim a live ZecBlock PIR integration and does not invent its cryptographic wire format or endpoint. A reviewed vendor protocol/client is required before implementing the transport.
+
+PIR protects query contents from the service under its protocol assumptions; it does not hide client IP address, timing, request size, or the underlying public blockchain transaction. It is not a shielded-payment or settlement verifier.

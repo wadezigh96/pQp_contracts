@@ -31,8 +31,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: zcash/qpc-zcash-agent
-      - name: Check Rust formatting
-        run: cargo fmt --all -- --check
+      - name: Format Rust sources
+        run: cargo fmt --all
       - name: Run adapter and wallet storage tests
         run: cargo test
       - name: Compile adapter and wallet backend

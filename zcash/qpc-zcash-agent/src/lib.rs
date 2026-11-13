@@ -11,6 +11,7 @@ use zcash_address::{unified, ConversionError, TryFromAddress, ZcashAddress};
 use zcash_protocol::{consensus::NetworkType, PoolType, ShieldedPool};
 
 pub mod wallet;
+pub mod privacy_query;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ZcashNetwork {
