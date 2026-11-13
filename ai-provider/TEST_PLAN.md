@@ -29,6 +29,10 @@ The suite uses a deterministic fake SDK client. It does not call NEAR AI, requir
 | SDK model report without verified deployment provenance | Reject before inference | PASS |
 | Invalid response receipt | Reject without returning response text | PASS |
 
+## Additional executable Agent Runtime boundary coverage
+
+Five tests in `test/runtime.test.mjs` verify that output is advisory-only, invalid providers are rejected, wallet/signer capabilities are refused, provider errors are redacted, and malformed output is rejected.
+
 ## Remaining acceptance work
 
 - Exact signed request/response byte mutation and cross-request replay regression fixtures. These are delegated to the pinned official SDK but have not been independently tested here.
