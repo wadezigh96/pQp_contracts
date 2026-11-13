@@ -1,6 +1,6 @@
 # QPC AI Provider — Security Boundary
 
-**Status:** design-only security requirements. This file does not claim that controls are implemented.
+**Status:** security requirements plus implemented prototype controls. Mock tests cover selected boundaries; live cryptographic and deployment verification still require an independent review.
 
 ## Assets to protect
 
@@ -37,7 +37,7 @@ The provider interface must not be placed inside the wallet signing boundary and
 
 The integration must preserve the difference between a gateway signature and a provider-TEE signature. A gateway signature proves only the gateway's signed statement under its verification model; it is not proof that the model executed inside a provider TEE. Where policy requires model TEE execution, require the provider-TEE evidence and separately validated deployment attestation.
 
-The adapter must pin and review the official SDK version and its verification implementation. Do not invent trust roots, signer identities, attestation claims, or API semantics.
+The adapter pins `@nearai/inference-sdk@0.3.0`, enables E2EE, invokes the SDK's model verification before every inference, checks the SDK-reported deployment provenance and a local compose-hash allowlist, then verifies the response receipt. It accepts only `provider_tee` receipts. Do not infer that mock tests validate the SDK cryptography or trust roots; those still require independent review.
 
 ## Threat cases
 
@@ -61,5 +61,6 @@ The adapter must pin and review the official SDK version and its verification im
 - Use bounded timeouts, retries, payload sizes, and response sizes.
 - Record only minimum non-sensitive audit metadata; never persist raw prompts or responses by default.
 - Provide provider revocation and model allowlist controls.
-- Disable adapter by default until verification and policy tests pass.
+- Adapter construction fails unless an API key, exact model allowlist, and non-empty measured compose-hash allowlist are supplied. Production activation must additionally require independently reviewed values and live verification.
 - No production activation based solely on a successful mock test or provider marketing claim.
+- The adapter has no signer or payment methods; integration code must preserve that separation and route any proposed action through the independent QPC Policy Gate.
