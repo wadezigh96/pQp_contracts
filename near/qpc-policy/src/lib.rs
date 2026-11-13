@@ -430,7 +430,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "only owner can call this method")]
+    #[should_panic(expected = "initializer must be the owner")]
     fn non_owner_cannot_configure_agent() {
         context("attacker.near", NOW_NS);
         let mut contract = QpcPolicyContract::new(account("owner.near"), "near-testnet".to_string());
