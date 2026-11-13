@@ -305,3 +305,15 @@ This keeps integrations replaceable while the security boundary remains centrali
 **Policy first. Agent second. Settlement last.**
 
 </div>
+
+
+## Privacy and quantum-resistance status
+
+The name **Quantum Persistence Contract** describes the project's direction, not a currently achieved cryptographic guarantee.
+
+- The current EVM contract is public-chain software. Contract storage, calldata, transaction metadata, and emitted events are observable; the contract does not provide private on-chain execution by itself.
+- No post-quantum signature, key-encapsulation mechanism, hybrid classical/PQ authentication, or PQ key-rotation/recovery protocol is implemented in this repository's current contract.
+- The current cross-chain work is a prototype boundary, not a universal L1 network. The repository does not yet contain a production NEAR smart contract or production adapters for all L1s.
+- The Zcash adapter currently provides address/policy validation, local wallet database initialization, replay protection, and a read-only lightwalletd probe. It does not yet scan shielded notes, construct/sign/broadcast payments, or independently prove shielded receipts.
+
+Do not describe QPC as quantum-resistant, private-on-chain, a live bridge, or production-ready until those capabilities are implemented and independently reviewed.
