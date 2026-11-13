@@ -36,6 +36,8 @@ export function createNearAIProvider({
   now = Date.now,
   maxPromptChars = 16_000,
   maxCompletionTokens = DEFAULT_MAX_COMPLETION_TOKENS,
+  maxResponseChars = 64_000,
+  timeoutMs = 30_000,
 } = {}) {
   const apiKey = env.NEARAI_API_KEY;
   const model = env.QPC_NEARAI_MODEL;
@@ -46,6 +48,8 @@ export function createNearAIProvider({
   if (!apiKey) throw safeFailure('configuration_missing_api_key');
   if (!model || !allowedModels.has(model)) throw safeFailure('model_not_allowlisted');
   if (allowedComposeHashes.size === 0) throw safeFailure('deployment_allowlist_missing');
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 120_000) throw safeFailure('invalid_timeout');
+  if (!Number.isInteger(maxResponseChars) || maxResponseChars < 1 || maxResponseChars > 1_000_000) throw safeFailure('invalid_response_limit');
   let clientPromise;
   let verifiedDeployment;
 
@@ -134,7 +138,7 @@ export function createNearAIProvider({
           model,
           messages: [{ role: 'user', content: request.prompt }],
           max_completion_tokens: request.maxCompletionTokens ?? maxCompletionTokens,
-        });
+        }, { timeout: timeoutMs });
       } catch {
         throw safeFailure('inference_failed');
       }
@@ -151,6 +155,7 @@ export function createNearAIProvider({
 
       const text = completion.choices?.[0]?.message?.content;
       if (typeof text !== 'string') throw safeFailure('response_content_invalid');
+      if (text.length > maxResponseChars) throw safeFailure('response_too_large');
       return Object.freeze({
         providerId: 'near-ai-cloud',
         model,
