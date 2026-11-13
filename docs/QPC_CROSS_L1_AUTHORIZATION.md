@@ -106,11 +106,19 @@ The cross-chain state machine must be idempotent and explicit:
 
 Uncertain states enter `PENDING_RECONCILIATION`. Cancellation, expiry, reorg, partial completion, duplicate delivery, timeout, and refund/compensation must be explicit transitions with adapter-specific rules. Do not claim atomicity unless the protocol actually provides it.
 
-## 9. Current implementation gap
+## 9. Implementation status (2026-11-13)
 
-The current NEAR MVP is narrower than this specification. Its existing hash binds only `paymentId`, `opaqueRecipientRef`, `amountZatoshis`, and `expiresAtUnix`; the contract separately checks the caller, policy ID/version, nonce, fixed action, fixed Zcash Testnet destination/router, shielded-only flag, recipient allowlist, and spending caps.
+The agent-router now contains an initial, versioned QPC v1 envelope implementation in `agent-router/src/cross-l1-envelope.mjs`:
 
-It does **not** yet bind the complete source/destination/asset/fee/agent identity/settlement evidence envelope described here. It records policy authorization only; it does not execute a transfer or verify a Zcash receipt. This is an explicit implementation gap, not a completed feature.
+- strict field allowlists and rejection of unknown fields;
+- deterministic canonical serialization and SHA-256 commitment over the complete envelope;
+- explicit binding of agent/key identity, source/destination networks and adapters, assets/decimals, amounts, fee bounds, recipient commitment, nonce/replay domain, policy, time window, settlement policy, and cancellation epoch;
+- an authorization boundary that requires caller-supplied identity authentication and durable atomic replay-consumption callbacks;
+- a separate settlement-evidence boundary that checks the authorization commitment and expected destination fields before invoking a chain-specific evidence verifier.
+
+The new module is not yet wired into the existing NEAR dispatch path or a production chain adapter. The verifier callbacks are dependency boundaries, not built-in signature verification or consensus proofs. The replay callback must be backed by durable atomic storage supplied by an adapter; the library itself does not persist replay state. The current NEAR contract still uses its narrower NEAR-to-Zcash policy-argument hash and records policy authorization only. It does not execute a transfer or independently verify Zcash settlement.
+
+No production authentication profile, post-quantum signature, hybrid key scheme, ZK proof, or live cross-L1 settlement is activated by this module. The v1 schema is an initial protocol baseline and must receive independent review, adapter-specific integration, and CI/security testing before production use.
 
 ## 10. Required acceptance tests before activation
 
