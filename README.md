@@ -309,6 +309,8 @@ This keeps integrations replaceable while the security boundary remains centrali
 
 ## QPC design principles and security requirements
 
+Detailed cross-network authorization fields, replay domains, settlement evidence, adapter-specific validation, and acceptance tests are defined in [QPC Cross-L1 Authorization Envelope](docs/QPC_CROSS_L1_AUTHORIZATION.md).
+
 These principles define the intended system architecture. They are **design requirements**, not claims that every capability is already implemented.
 
 ### 1. Quantum Persistence: post-quantum readiness
