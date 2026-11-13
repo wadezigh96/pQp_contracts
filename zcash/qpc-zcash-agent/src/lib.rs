@@ -368,7 +368,7 @@ mod tests {
     fn rejects_transparent_only_recipient() {
         assert_eq!(
             validate_intent(&intent(), &recipient(vec![ReceiverKind::Transparent]), 1_000),
-            Err(AdapterError::NoPermittedShieldedReceiver)
+            Err(AdapterError::TransparentReceiverForbidden)
         );
     }
 
