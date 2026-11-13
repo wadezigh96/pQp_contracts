@@ -10,6 +10,7 @@
 use std::path::Path;
 
 use rand_core::OsRng;
+use zcash_client_backend::keys::UnifiedFullViewingKey;
 use zcash_client_backend::{
     data_api::{AccountBirthday, AccountPurpose, WalletWrite},
     proto::service::TreeState,
@@ -40,7 +41,9 @@ pub fn import_testnet_ufvk_view_only(
 ) -> Result<(), String> {
     if account_name.is_empty()
         || account_name.len() > ACCOUNT_NAME_MAX_BYTES
-        || !account_name.bytes().all(|b| b.is_ascii_graphic() || b == b' ')
+        || !account_name
+            .bytes()
+            .all(|b| b.is_ascii_graphic() || b == b' ')
     {
         return Err("view-only account name is invalid".into());
     }
@@ -120,9 +123,6 @@ mod tests {
             state,
         );
 
-        assert_eq!(
-            result,
-            Err("view-only account name is invalid".to_owned())
-        );
+        assert_eq!(result, Err("view-only account name is invalid".to_owned()));
     }
 }
