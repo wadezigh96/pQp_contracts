@@ -56,14 +56,9 @@ pub fn validate_testnet_endpoint(
         return Err(LightwalletdError::InvalidEndpoint);
     }
 
-    let authority = uri
-        .authority()
-        .ok_or(LightwalletdError::InvalidEndpoint)?;
+    let authority = uri.authority().ok_or(LightwalletdError::InvalidEndpoint)?;
     let authority_text = authority.as_str();
-    if authority_text.contains('@')
-        || uri.query().is_some()
-        || uri.path() != "/"
-    {
+    if authority_text.contains('@') || uri.query().is_some() || uri.path() != "/" {
         return Err(LightwalletdError::InvalidEndpoint);
     }
 
@@ -88,14 +83,12 @@ pub async fn probe_testnet_lightwalletd(
 ) -> Result<TestnetLightwalletdStatus, LightwalletdError> {
     let endpoint = validate_testnet_endpoint(endpoint, allowed_authorities)?;
 
-    let mut client = tokio::time::timeout(
-        CONNECT_TIMEOUT,
-        CompactTxStreamerClient::connect(endpoint),
-    )
-    .await
-    .map_err(|_| LightwalletdError::ConnectTimeout)?
-    .map_err(|_| LightwalletdError::ConnectFailed)?
-    .max_decoding_message_size(MAX_RESPONSE_BYTES);
+    let mut client =
+        tokio::time::timeout(CONNECT_TIMEOUT, CompactTxStreamerClient::connect(endpoint))
+            .await
+            .map_err(|_| LightwalletdError::ConnectTimeout)?
+            .map_err(|_| LightwalletdError::ConnectFailed)?
+            .max_decoding_message_size(MAX_RESPONSE_BYTES);
 
     let info = tokio::time::timeout(
         RPC_TIMEOUT,
@@ -110,14 +103,11 @@ pub async fn probe_testnet_lightwalletd(
         return Err(LightwalletdError::WrongNetwork);
     }
 
-    let tip = tokio::time::timeout(
-        RPC_TIMEOUT,
-        client.get_latest_block(ChainSpec {}),
-    )
-    .await
-    .map_err(|_| LightwalletdError::RpcTimeout)?
-    .map_err(|_| LightwalletdError::RpcFailed)?
-    .into_inner();
+    let tip = tokio::time::timeout(RPC_TIMEOUT, client.get_latest_block(ChainSpec {}))
+        .await
+        .map_err(|_| LightwalletdError::RpcTimeout)?
+        .map_err(|_| LightwalletdError::RpcFailed)?
+        .into_inner();
 
     if tip.height == 0 || info.block_height == 0 || info.estimated_height < info.block_height {
         return Err(LightwalletdError::InconsistentTip);
@@ -143,10 +133,7 @@ mod tests {
     #[test]
     fn accepts_only_https_exact_allowlisted_authority() {
         assert_eq!(
-            validate_testnet_endpoint(
-                "https://testnet.example.org:9067",
-                ALLOWLIST
-            ),
+            validate_testnet_endpoint("https://testnet.example.org:9067", ALLOWLIST),
             Ok("https://testnet.example.org:9067".to_owned())
         );
     }
@@ -154,10 +141,7 @@ mod tests {
     #[test]
     fn rejects_plaintext_grpc() {
         assert_eq!(
-            validate_testnet_endpoint(
-                "http://testnet.example.org:9067",
-                ALLOWLIST
-            ),
+            validate_testnet_endpoint("http://testnet.example.org:9067", ALLOWLIST),
             Err(LightwalletdError::InvalidEndpoint)
         );
     }
@@ -165,10 +149,7 @@ mod tests {
     #[test]
     fn rejects_non_allowlisted_authority() {
         assert_eq!(
-            validate_testnet_endpoint(
-                "https://attacker.example.org:9067",
-                ALLOWLIST
-            ),
+            validate_testnet_endpoint("https://attacker.example.org:9067", ALLOWLIST),
             Err(LightwalletdError::EndpointNotAllowlisted)
         );
     }
@@ -176,17 +157,11 @@ mod tests {
     #[test]
     fn rejects_credentials_and_url_query_parameters() {
         assert_eq!(
-            validate_testnet_endpoint(
-                "https://user:password@testnet.example.org:9067",
-                ALLOWLIST
-            ),
+            validate_testnet_endpoint("https://user:password@testnet.example.org:9067", ALLOWLIST),
             Err(LightwalletdError::InvalidEndpoint)
         );
         assert_eq!(
-            validate_testnet_endpoint(
-                "https://testnet.example.org:9067/?token=secret",
-                ALLOWLIST
-            ),
+            validate_testnet_endpoint("https://testnet.example.org:9067/?token=secret", ALLOWLIST),
             Err(LightwalletdError::InvalidEndpoint)
         );
     }
@@ -194,17 +169,11 @@ mod tests {
     #[test]
     fn rejects_paths_and_unlisted_ports() {
         assert_eq!(
-            validate_testnet_endpoint(
-                "https://testnet.example.org:9067/rpc",
-                ALLOWLIST
-            ),
+            validate_testnet_endpoint("https://testnet.example.org:9067/rpc", ALLOWLIST),
             Err(LightwalletdError::InvalidEndpoint)
         );
         assert_eq!(
-            validate_testnet_endpoint(
-                "https://testnet.example.org:443",
-                ALLOWLIST
-            ),
+            validate_testnet_endpoint("https://testnet.example.org:443", ALLOWLIST),
             Err(LightwalletdError::EndpointNotAllowlisted)
         );
     }
