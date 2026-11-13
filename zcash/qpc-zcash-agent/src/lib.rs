@@ -15,6 +15,7 @@ use sha2::{Digest, Sha256};
 use zcash_address::{unified, ConversionError, TryFromAddress, ZcashAddress};
 use zcash_protocol::{consensus::NetworkType, PoolType, ShieldedPool};
 
+pub mod lightwalletd;
 pub mod privacy_query;
 pub mod wallet;
 
