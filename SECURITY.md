@@ -120,3 +120,8 @@ The current EVM contract does not make public-chain activity private. Storage, c
 No post-quantum signature/KEM, hybrid classical-plus-PQ authentication, PQ identity format, or migration/recovery protocol is implemented here. The project name and roadmap must not be treated as evidence of quantum resistance. Any future PQC integration needs a reviewed scheme, parameter set, implementation, key lifecycle, chain compatibility analysis, and independent cryptographic review.
 
 The current repository also does not establish a production NEAR-to-Zcash bridge or universal L1 interoperability. The Zcash adapter does not yet create, sign, broadcast, or independently verify shielded payments.
+
+
+## NEAR MVP boundary
+
+The NEAR Rust crate under near/qpc-near-agent-finance is an authorization-and-audit-recording MVP. It is not a deployed contract, escrow, bridge, wallet signer, or settlement verifier. Its policy hash and nonce checks do not make NEAR state private. It has not undergone independent audit or production gas/storage review.
