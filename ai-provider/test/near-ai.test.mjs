@@ -143,7 +143,8 @@ test('rejects SDK model evidence without verified deployment provenance', async 
 test('rejects invalid response signature without exposing response content', async () => {
   const factory = async (options) => ({
     async verify(model) {
-      options.deploymentPolicy({ model, deployment: { runtimeMeasurements: { composeHash: 'approved-compose-hash' } } });
+      options.modelVerification.verifiers.deployment({ runtimeMeasurements: { composeHash: 'approved-compose-hash' } });
+      options.deploymentPolicy({ model });
       return { models: [{ deploymentProvenance: 'verified' }] };
     },
     chat: { completions: { create: async () => ({ id: 'id', choices: [{ message: { content: 'must not escape' } }] }) } },
