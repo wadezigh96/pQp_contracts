@@ -19,7 +19,7 @@ use tonic::transport::Endpoint;
 use zcash_client_backend::{
     data_api::{
         chain::{self, BlockCache, BlockSource},
-        scanning::{ScanPriority, ScanRange},
+        scanning::ScanRange,
     },
     proto::{compact_formats::CompactBlock, service::compact_tx_streamer_client::CompactTxStreamerClient},
     sync,
@@ -110,7 +110,7 @@ impl SqliteBlockCache {
                 return Err(BlockCacheError::MissingHeight(expected));
             }
             let block = CompactBlock::decode(bytes.as_slice())?;
-            if block.height != height {
+            if block.height != u64::from(height) {
                 return Err(BlockCacheError::InvalidHeight(height));
             }
             blocks.push(block);
@@ -159,7 +159,7 @@ impl BlockSource for SqliteBlockCache {
                 row.map_err(|error| chain::error::Error::BlockSource(BlockCacheError::Sqlite(error)))?;
             let block = CompactBlock::decode(bytes.as_slice())
                 .map_err(|error| chain::error::Error::BlockSource(BlockCacheError::Protobuf(error)))?;
-            if block.height != height {
+            if block.height != u64::from(height) {
                 return Err(chain::error::Error::BlockSource(
                     BlockCacheError::InvalidHeight(height),
                 ));
@@ -205,7 +205,7 @@ impl BlockCache for SqliteBlockCache {
     }
 
     async fn read(&self, range: &ScanRange) -> Result<Vec<CompactBlock>, Self::Error> {
-        self.query_blocks(range.block_range())
+        self.query_blocks(range.block_range().clone())
     }
 
     async fn insert(&self, compact_blocks: Vec<CompactBlock>) -> Result<(), Self::Error> {
