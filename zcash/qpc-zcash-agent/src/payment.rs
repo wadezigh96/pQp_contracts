@@ -1,12 +1,11 @@
-//! Payment intent and replay-resistant lifecycle tracking.
+//! Payment intent and in-memory lifecycle tracking.
 //!
 //! Amounts are integer zatoshi (1 ZEC = 100,000,000 zatoshi). No floating
 //! point amounts, raw destination addresses, transaction IDs, or keys are
 //! included in public intent/receipt structures.
 //!
-//! The in-memory tracker is a testable policy component, not durable replay
-//! protection. Production must persist (source chain, source agent, nonce)
-//! atomically in a database or contract.
+//! PaymentTracker is an in-memory policy/test helper. Use PersistentPaymentStore
+//! for durable replay protection across restarts and concurrent processes.
 
 use std::collections::{HashMap, HashSet};
 
@@ -14,12 +13,33 @@ use std::collections::{HashMap, HashSet};
 pub struct PaymentId([u8; 32]);
 
 impl PaymentId {
-    pub const fn new(bytes: [u8; 32]) -> Self { Self(bytes) }
-    pub const fn as_bytes(&self) -> &[u8; 32] { &self.0 }
+    pub const fn new(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    pub const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum SourceChain { Near, Ethereum, BnbSmartChain, Solana }
+pub enum SourceChain {
+    Near,
+    Ethereum,
+    BnbSmartChain,
+    Solana,
+}
+
+impl SourceChain {
+    pub(crate) const fn storage_key(self) -> &'static str {
+        match self {
+            Self::Near => "near",
+            Self::Ethereum => "ethereum",
+            Self::BnbSmartChain => "bnb_smart_chain",
+            Self::Solana => "solana",
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PaymentIntent {
@@ -34,22 +54,40 @@ pub struct PaymentIntent {
 
 impl PaymentIntent {
     pub fn validate(&self, now_unix: u64) -> Result<(), IntentError> {
-        if self.amount_zatoshis == 0 { return Err(IntentError::ZeroAmount); }
-        if self.expires_at_unix <= now_unix { return Err(IntentError::Expired); }
+        if self.amount_zatoshis == 0 {
+            return Err(IntentError::ZeroAmount);
+        }
+        if self.expires_at_unix <= now_unix {
+            return Err(IntentError::Expired);
+        }
         Ok(())
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IntentError {
-    ZeroAmount, Expired, DuplicatePaymentId, DuplicateNonce, UnknownPaymentId, InvalidTransition,
+    ZeroAmount,
+    Expired,
+    DuplicatePaymentId,
+    DuplicateNonce,
+    UnknownPaymentId,
+    InvalidTransition,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PaymentState {
-    Created, PolicyApproved, RouteQuoted, DestinationValidated, SourceSettled,
-    ZcashBroadcast, ZcashConfirmed, ReceiptVerified, PendingReconciliation,
-    Completed, Failed, Expired,
+    Created,
+    PolicyApproved,
+    RouteQuoted,
+    DestinationValidated,
+    SourceSettled,
+    ZcashBroadcast,
+    ZcashConfirmed,
+    ReceiptVerified,
+    PendingReconciliation,
+    Completed,
+    Failed,
+    Expired,
 }
 
 impl PaymentState {
@@ -68,7 +106,9 @@ impl PaymentState {
             ZcashBroadcast => matches!(next, ZcashConfirmed | PendingReconciliation | Failed),
             ZcashConfirmed => matches!(next, ReceiptVerified | PendingReconciliation),
             ReceiptVerified => matches!(next, Completed | PendingReconciliation),
-            PendingReconciliation => matches!(next, ZcashBroadcast | ZcashConfirmed | Failed | Expired),
+            PendingReconciliation => {
+                matches!(next, ZcashBroadcast | ZcashConfirmed | Failed | Expired)
+            }
             Completed | Failed | Expired => false,
         }
     }
@@ -97,10 +137,21 @@ impl PaymentTracker {
 
     /// Repeated delivery of the current state is idempotent. Older or
     /// out-of-order callbacks cannot move the payment backwards.
-    pub fn transition(&mut self, id: PaymentId, next: PaymentState) -> Result<PaymentState, IntentError> {
-        let current = self.states.get_mut(&id).ok_or(IntentError::UnknownPaymentId)?;
-        if *current == next { return Ok(*current); }
-        if !current.can_transition_to(next) { return Err(IntentError::InvalidTransition); }
+    pub fn transition(
+        &mut self,
+        id: PaymentId,
+        next: PaymentState,
+    ) -> Result<PaymentState, IntentError> {
+        let current = self
+            .states
+            .get_mut(&id)
+            .ok_or(IntentError::UnknownPaymentId)?;
+        if *current == next {
+            return Ok(*current);
+        }
+        if !current.can_transition_to(next) {
+            return Err(IntentError::InvalidTransition);
+        }
         *current = next;
         Ok(*current)
     }
