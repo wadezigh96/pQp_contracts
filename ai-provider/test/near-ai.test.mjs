@@ -15,7 +15,7 @@ function fakeFactory({ signatureKind = 'provider_tee', models = [{ deploymentPro
   const factory = async (options) => ({
     async verify(model) {
       calls.push(['verify', model]);
-      options.deploymentPolicy({ model, deployment: { runtimeMeasurements: { composeHash } } });
+      options.modelVerification.verifiers.deployment({ runtimeMeasurements: { composeHash } });
       return { models };
     },
     chat: { completions: { create: async (input) => {
@@ -113,7 +113,7 @@ test('configures SDK for E2EE, fresh attestation checks, and no OHTTP assumption
     captured = options;
     return {
       async verify(model) {
-        options.deploymentPolicy({ model, deployment: { runtimeMeasurements: { composeHash: 'approved-compose-hash' } } });
+        options.modelVerification.verifiers.deployment({ runtimeMeasurements: { composeHash: 'approved-compose-hash' } });
         return { models: [{ deploymentProvenance: 'verified' }] };
       },
       chat: { completions: { create: async () => ({ id: 'id', choices: [{ message: { content: 'ok' } }] }) } },
@@ -125,7 +125,7 @@ test('configures SDK for E2EE, fresh attestation checks, and no OHTTP assumption
   assert.equal(captured.e2ee, true);
   assert.equal(captured.attestationCacheTimeToLiveMs, 0);
   assert.equal(captured.signingAlgo, 'ed25519');
-  assert.equal(captured.deploymentPolicy instanceof Function, true);
+  assert.equal(captured.modelVerification.verifiers.deployment instanceof Function, true);
 });
 
 test('rejects SDK model evidence without verified deployment provenance', async () => {
