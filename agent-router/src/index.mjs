@@ -192,3 +192,8 @@ export async function verifyPaymentStatus(status, verifyDestination) {
 export const QPC_PAYMENT_TERMINAL_STATES = Object.freeze([
   "SETTLED", "FAILED", "REFUNDED", "INCOMPLETE_DEPOSIT",
 ]);
+
+export {
+  buildNearToZcashShieldedDispatch,
+  computeNearToZcashPolicyArgsHash,
+} from "./near-zcash-intent.mjs";

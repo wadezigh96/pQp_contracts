@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "QPC agent-operated NEAR to Ethereum cross-chain payment adapter",
+  "description": "QPC NEAR-to-Ethereum adapter plus local NEAR-to-Zcash shielded request builder",
   "scripts": { "test": "node --test" },
   "engines": { "node": ">=20" }
 }
