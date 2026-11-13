@@ -62,12 +62,19 @@ export function createNearAIProvider({
         responseCacheTimeToLiveMs: 5 * 60 * 1_000,
         modelVerification: {
           verifiers: {
+            // This callback runs after the SDK authenticates the measured deployment.
+            // Its success marks deploymentProvenance as verified in the SDK result.
             deployment: (deployment) => {
               const composeHash = deployment?.runtimeMeasurements?.composeHash;
               if (typeof composeHash !== 'string' || !allowedComposeHashes.has(composeHash))
                 throw safeFailure('deployment_measurement_not_allowlisted');
             },
           },
+        },
+        // Additional SDK policy receives the model ID and runs after the verifier above.
+        deploymentPolicy: ({ model: requestedModel }) => {
+          if (requestedModel !== model || !allowedModels.has(requestedModel))
+            throw safeFailure('deployment_model_mismatch');
         },
       })).catch(() => { clientPromise = undefined; throw safeFailure('sdk_initialization_failed'); });
     }
