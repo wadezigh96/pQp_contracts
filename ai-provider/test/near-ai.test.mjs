@@ -16,6 +16,7 @@ function fakeFactory({ signatureKind = 'provider_tee', models = [{ deploymentPro
     async verify(model) {
       calls.push(['verify', model]);
       options.modelVerification.verifiers.deployment({ runtimeMeasurements: { composeHash } });
+      options.deploymentPolicy({ model });
       return { models };
     },
     chat: { completions: { create: async (input) => {
@@ -114,6 +115,7 @@ test('configures SDK for E2EE, fresh attestation checks, and no OHTTP assumption
     return {
       async verify(model) {
         options.modelVerification.verifiers.deployment({ runtimeMeasurements: { composeHash: 'approved-compose-hash' } });
+      options.deploymentPolicy({ model });
         return { models: [{ deploymentProvenance: 'verified' }] };
       },
       chat: { completions: { create: async () => ({ id: 'id', choices: [{ message: { content: 'ok' } }] }) } },
@@ -126,6 +128,7 @@ test('configures SDK for E2EE, fresh attestation checks, and no OHTTP assumption
   assert.equal(captured.attestationCacheTimeToLiveMs, 0);
   assert.equal(captured.signingAlgo, 'ed25519');
   assert.equal(captured.modelVerification.verifiers.deployment instanceof Function, true);
+  assert.equal(captured.deploymentPolicy instanceof Function, true);
 });
 
 test('rejects SDK model evidence without verified deployment provenance', async () => {
