@@ -9,7 +9,10 @@
 use std::fmt;
 
 pub const ZECBLOCK_PRIVATE_ORIGIN: &str = "https://private.zecblock.com";
-pub const MAX_PIR_PAYLOAD_BYTES: usize = 1024 * 1024;
+/// Defensive transport ceiling, not a ZecBlock wire-protocol constant.
+/// Allows the approximately 1.2 MB transaction upload described by ZecBlock
+/// while bounding memory use until a production transport contract is published.
+pub const MAX_PIR_PAYLOAD_BYTES: usize = 2 * 1024 * 1024;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EncryptedPirQuery(Vec<u8>);
