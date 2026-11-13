@@ -1,6 +1,6 @@
 # QPC AI Provider — Contract Tests and Coverage
 
-**Status:** initial executable offline contract suite implemented. Live NEAR AI integration and full acceptance remain gated.
+**Status:** executable offline test files are implemented. Their execution in this environment has not yet been independently observed; GitHub Actions has been configured, but no run result is currently available. Live NEAR AI integration and full acceptance remain gated.
 
 Run from `ai-provider/` with Node.js `>=24.22.1`:
 
@@ -10,7 +10,7 @@ npm test
 
 The suite uses a deterministic fake SDK client. It does not call NEAR AI, require a real credential, or prove real attestation correctness.
 
-## Executable coverage
+## Implemented test coverage (execution not yet confirmed)
 
 | Scenario | Expected result | Test status |
 |---|---|---|
@@ -27,7 +27,12 @@ The suite uses a deterministic fake SDK client. It does not call NEAR AI, requir
 | Wallet/signing surface | No signer or transaction methods; adapter implements provider-neutral base class | PASS |
 | SDK security configuration | E2EE on, attestation cache TTL zero, deployment verifier and model policy supplied | PASS |
 | SDK model report without verified deployment provenance | Reject before inference | PASS |
-| Invalid response receipt | Reject without returning response text | PASS |
+| Invalid response receipt | Reject without returning response text | Implemented; execution pending |
+| Agent Runtime labels output untrusted | No action authorization or execution | Implemented; execution pending |
+| Invalid provider contract | Reject construction | Implemented; execution pending |
+| Wallet/signer capability supplied | Reject construction | Implemented; execution pending |
+| Provider exception | Redact details | Implemented; execution pending |
+| Malformed provider output | Reject | Implemented; execution pending |
 
 ## Additional executable Agent Runtime boundary coverage
 
