@@ -1,8 +1,0 @@
-[profile.default]
-solc_version = "0.8.24"
-src = "contracts"
-out = "out"
-test = "test"
-script = "script"
-optimizer = true
-optimizer_runs = 200
