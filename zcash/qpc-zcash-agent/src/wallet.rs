@@ -166,7 +166,6 @@ impl BlockSource for SqliteBlockCache {
             }
             blocks.push(block);
         }
-        drop(rows);
         drop(statement);
         drop(connection);
 
