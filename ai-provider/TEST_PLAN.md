@@ -24,7 +24,10 @@ The suite uses a deterministic fake SDK client. It does not call NEAR AI, requir
 | Deployment preflight and receipt verification order | Verify -> inference -> verify response | PASS |
 | Provider error containing secret text | Return stable redacted error | PASS |
 | Empty and oversized prompt | Reject | PASS |
-| Wallet/signing surface | No signer or transaction methods | PASS |
+| Wallet/signing surface | No signer or transaction methods; adapter implements provider-neutral base class | PASS |
+| SDK security configuration | E2EE on, attestation cache TTL zero, deployment verifier and model policy supplied | PASS |
+| SDK model report without verified deployment provenance | Reject before inference | PASS |
+| Invalid response receipt | Reject without returning response text | PASS |
 
 ## Remaining acceptance work
 
