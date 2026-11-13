@@ -1,0 +1,30 @@
+name: Router boundaries
+on:
+  push:
+    branches: ['**']
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  router:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Parse every module and test
+        run: find agent-router -type d -name node_modules -prune -o -name '*.mjs' -print0 | xargs -0 -n1 node --check
+      - name: Public API and mocked integration tests
+        run: node --test agent-router/test/*.test.mjs
+  hybrid-auth-prototype:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: agent-router/pq-auth/package-lock.json
+      - run: npm ci --prefix agent-router/pq-auth --ignore-scripts --no-audit --no-fund
+      - run: npm test --prefix agent-router/pq-auth

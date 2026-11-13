@@ -1,0 +1,22 @@
+   Compiling qpc-near-offline-vm v0.1.0 (/home/runner/.reason/workspace/sessions/ac964da9-e70d-4a02-ad6e-670435ce1d0a/repo/near/offline-vm)
+    Finished `test` profile [unoptimized] target(s) in 1.21s
+warning: the following packages contain code that will be rejected by a future version of Rust: wasmparser v0.78.2
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (near/offline-vm/target/debug/build/qpc-near-offline-vm/4a1b61b8f9beb33a/out/qpc_near_offline_vm-4a1b61b8f9beb33a)
+
+running 1 test
+Executing WASM sha256=6ea378e90e3cedef1c537bf40975bf55d9aafd9492cdb0d92487b9d6d5b1329e, protocol=79
+
+thread 'tests::wasm_authorization_is_durable_but_cannot_execute_or_settle' (209) panicked at src/lib.rs:129:13:
+new: Some(CompilationError(PrepareError(Deserialization)))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test tests::wasm_authorization_is_durable_but_cannot_execute_or_settle ... FAILED
+
+failures:
+
+failures:
+    tests::wasm_authorization_is_durable_but_cannot_execute_or_settle
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.08s
+
+error: test failed, to rerun pass `--lib`

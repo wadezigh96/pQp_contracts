@@ -1,0 +1,9 @@
+{
+  "name": "qpc-near-offline-wasm-tools",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Pinned offline WASM compatibility lowering only; no chain connection",
+  "devDependencies": {
+    "binaryen": "123.0.0"
+  }
+}

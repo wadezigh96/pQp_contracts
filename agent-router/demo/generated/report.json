@@ -1,0 +1,126 @@
+{
+  "schema": "qpc.phase2.simulation.v1",
+  "mode": "SIMULATED",
+  "nowUnix": 1800000001,
+  "source": "docs/fixtures/cross-l1-v1.json",
+  "authorizationCommitment": "535ffb109f13c185466775a8497caba0561ac26474f735b07b68e72bad6778a9",
+  "sourceNetwork": "near:testnet",
+  "destinationNetwork": "zcash:testnet",
+  "amountAtomic": "123456789",
+  "recipientCommitment": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "realTransactions": 0,
+  "networkRequests": 0,
+  "realSettlements": 0,
+  "mocks": [
+    "Agent identity: exact fixture commitment allowlist, not cryptographic authentication",
+    "Destination evidence: exact synthetic fixture equality, not a chain verifier"
+  ],
+  "replayStorage": "Real FileIntentStore; fresh local temporary directory per run, removed afterward",
+  "unsignedDispatch": {
+    "state": "PREPARED_AUTHORIZATION_ONLY",
+    "methodName": "authorize_envelope",
+    "execution": false
+  },
+  "mockVerifierCalls": 3,
+  "persistedState": "AUTHORIZED",
+  "history": [
+    {
+      "state": "CREATED",
+      "atUnix": 1800000001
+    },
+    {
+      "state": "AUTHORIZED",
+      "atUnix": 1800000001
+    }
+  ],
+  "cases": [
+    {
+      "id": "unauthorized-execution",
+      "title": "Execute before authorization",
+      "gate": "FileIntentStore.reserveSubmission",
+      "outcome": "REJECTED",
+      "detail": "invalid transition CREATED -> SUBMITTING",
+      "state": "NO_EXECUTION"
+    },
+    {
+      "id": "valid-authorization",
+      "title": "Exact approved envelope",
+      "gate": "FileIntentStore.authorize",
+      "outcome": "ACCEPTED_SIMULATION_ONLY",
+      "detail": "Real authorization gate accepted the fixture commitment using an explicit mock allowlist; no signature or chain was checked.",
+      "state": "AUTHORIZED"
+    },
+    {
+      "id": "replay",
+      "title": "Reuse nonce and intent",
+      "gate": "FileIntentStore.authorize",
+      "outcome": "REJECTED",
+      "detail": "authorization nonce or intent already consumed",
+      "state": "NO_EXECUTION"
+    },
+    {
+      "id": "expiry",
+      "title": "At the exact expiry boundary",
+      "gate": "FileIntentStore.authorize",
+      "outcome": "REJECTED",
+      "detail": "authorization has expired",
+      "state": "NO_EXECUTION"
+    },
+    {
+      "id": "rejected-authorization",
+      "title": "Alter an approved envelope",
+      "gate": "FileIntentStore.authorize",
+      "outcome": "REJECTED",
+      "detail": "agent authorization verification failed",
+      "state": "NO_EXECUTION"
+    },
+    {
+      "id": "wrong-chain",
+      "title": "Evidence from another chain",
+      "gate": "verifyCrossL1SettlementEvidence",
+      "outcome": "REJECTED",
+      "detail": "settlement destination network mismatch",
+      "state": "NO_EXECUTION"
+    },
+    {
+      "id": "wrong-recipient",
+      "title": "Evidence pays another recipient",
+      "gate": "verifyCrossL1SettlementEvidence",
+      "outcome": "REJECTED",
+      "detail": "settlement recipient commitment mismatch",
+      "state": "NO_EXECUTION"
+    },
+    {
+      "id": "wrong-amount",
+      "title": "Evidence changes the amount",
+      "gate": "verifyCrossL1SettlementEvidence",
+      "outcome": "REJECTED",
+      "detail": "settlement amount mismatch",
+      "state": "NO_EXECUTION"
+    },
+    {
+      "id": "forged-evidence",
+      "title": "Well-shaped fabricated proof",
+      "gate": "verifyCrossL1SettlementEvidence",
+      "outcome": "REJECTED",
+      "detail": "chain-specific evidence verification failed",
+      "state": "NO_EXECUTION"
+    },
+    {
+      "id": "matching-mock-evidence",
+      "title": "Matching synthetic evidence",
+      "gate": "verifyCrossL1SettlementEvidence",
+      "outcome": "ACCEPTED_SIMULATION_ONLY",
+      "detail": "Bindings and explicit mock fixture equality passed. Synthetic FINALIZED is input data, not observed chain finality.",
+      "state": "MOCK_VALIDATED_NOT_SETTLED"
+    },
+    {
+      "id": "settlement-blocked",
+      "title": "Try to claim native settlement",
+      "gate": "settleNativeTransfer",
+      "outcome": "REJECTED",
+      "detail": "Settlement BLOCKED: real native verifier and durable settlement integration not implemented",
+      "state": "NO_EXECUTION"
+    }
+  ]
+}
