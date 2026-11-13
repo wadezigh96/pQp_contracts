@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**Human-Authorized Agentic Finance Infrastructure**
+**Quantum-Resistant Agentic Finance Infrastructure**
 
 **Human intent → Guardrails → Agent execution → On-chain settlement → Audit**
 
