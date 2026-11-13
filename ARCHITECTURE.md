@@ -1,18 +1,19 @@
-# QPC Agent Finance — Architecture
+# QPC — Quantum Persistence Contract: Architecture
 
-## 1. Purpose and implementation boundary
+## 1. QPC vision and implementation boundary
 
-QPC Agent Finance is a smart-contract policy enforcement layer for agent-controlled execution.
+QPC (Quantum Persistence Contract) is the long-term vision for a privacy-oriented, security-focused on-chain framework for agentic finance. The first intended ecosystem target is NEAR. The architecture is intended to expand to additional Layer 1 networks through chain-specific implementations and adapters rather than assuming one contract is portable to every chain.
 
-Its core separation is:
+The intended separation is:
 
 - **Human owner:** defines and controls authority.
 - **Agent:** submits requests within the granted policy.
-- **QPC contract:** deterministically checks and enforces the on-chain policy.
+- **QPC enforcement layer:** validates authorization and policy before execution.
+- **Chain/payment adapter:** connects the policy decision to a specific network and payment rail.
 
-The agent does not receive the owner's private key and cannot change its own policy.
+The agent must not receive the owner's root key or be able to expand its own authority.
 
-This document distinguishes **implemented contract behavior** from **planned application-layer work**. A diagram or future integration listed here is not evidence that the feature is already implemented.
+**Current implementation boundary:** this repository currently contains an EVM/Solidity prototype. It is not a NEAR-native contract, private/shielded payment implementation, x402 adapter, universal multi-L1 deployment, or post-quantum cryptographic implementation. Those are roadmap objectives. This document distinguishes existing code from planned work.
 
 ## 2. Current implementation status
 
@@ -33,7 +34,12 @@ This document distinguishes **implemented contract behavior** from **planned app
 | DEX, lending, and payment adapters | Not implemented | Future integration work |
 | Frontend, API, and visual policy builder | Not implemented | Future application work |
 | Separate settlement engine | Not implemented | No standalone settlement module exists |
-| Cross-chain bridge or cross-chain agent payments | Not implemented | Not part of this contract |
+| NEAR-native contract implementation | Not implemented | First ecosystem target; requires a separate NEAR implementation |
+| Private/shielded payment rail | Not implemented | Requires chain- and wallet-specific privacy design |
+| x402 payment adapter | Not implemented | x402 does not itself provide payment privacy |
+| Additional L1 implementations | Not implemented | Requires a separate adapter and security review per chain |
+| Post-quantum signatures/key verification | Not implemented | No ML-DSA, SLH-DSA, or other PQ signature verification in this code |
+| Cross-chain bridge or cross-chain agent payments | Not implemented | Requires separately designed and audited interoperability protocol |
 
 The repository currently contains a core contract, Foundry tests, and a deployment script. It does not contain the future frontend/API/adapters shown later in this document.
 
@@ -209,34 +215,63 @@ For native execution, the contract forwards the requested native value as part o
 
 Events and the nonce provide on-chain traceability, but they are not by themselves a complete off-chain audit product, transaction indexer, accounting service, or proof that an external protocol performed the intended economic action.
 
-## 9. Planned application layer — not implemented
+## 9. QPC roadmap — planned, not implemented
 
-The following is a possible future architecture, not a current repository feature:
+The following describes the intended product direction. None of these items should be presented as an active feature until implementation and verification are available.
+
+### 9.1 NEAR-first private-contract direction
+
+NEAR is the first intended ecosystem target. The current EVM/Solidity contract cannot simply be copied to NEAR: a NEAR-native contract and its authorization, storage, execution, and privacy model must be designed and tested for that environment.
+
+Privacy must be specified precisely. The design must identify which transaction fields, balances, identities, metadata, and application state are hidden; which remain public; who can decrypt or prove information; and how recovery and compliance requirements are handled. Do not describe ordinary public on-chain state as private.
+
+### 9.2 Multi-L1 architecture
+
+QPC aims to support multiple L1 networks through chain-specific contract implementations and adapters. Each network has different execution models, account/key systems, finality, fee handling, privacy properties, and verification capabilities. There is no assumption that one Solidity contract can run unchanged on every L1.
+
+### 9.3 Private agent payments and x402
+
+The planned payment layer includes agent-to-agent and agent-to-service payments, potentially using x402 for HTTP payment negotiation and payment requirements.
+
+x402 is a payment protocol/interface, not a privacy guarantee. A private x402 flow would require a supported private settlement rail and an adapter that binds the x402 request to the correct chain, asset, recipient, amount, expiry, and replay-protection context. The adapter must reject unsupported privacy modes rather than silently falling back to transparent settlement. The exact privacy guarantees and metadata exposure must be documented for each supported rail.
+
+### 9.4 Security engineering
+
+QPC's security objective is defense in depth against known attack classes and implementation vulnerabilities. Planned work includes threat modelling, authorization and key-management review, replay protection, safe external-call patterns, fuzzing, invariant/property testing, static analysis, dependency review, incident response, and independent audits.
+
+No smart contract can honestly be described as immune to hackers or bugs. Security claims must be scoped to specific controls, tests, audits, and known limitations.
+
+### 9.5 Post-quantum readiness
+
+Quantum resilience is a research and implementation objective only. It requires selecting standardized post-quantum cryptographic algorithms, evaluating chain-native verification support and gas/cost constraints, defining key rotation and migration, and considering hybrid transition paths. The current Solidity contract does not implement ML-DSA, SLH-DSA, or any other post-quantum signature verification. QPC must not be marketed as quantum-resistant until the relevant implementation has been independently reviewed and tested.
+
+### 9.6 Conceptual future architecture
 
 ```
-User
- |
- v
-Frontend / API                 [PLANNED]
- |
- v
-Policy Builder                 [PLANNED]
- |
- v
-Agent service                  [PLANNED]
- |
- v
-QPCAgentFinance                [IMPLEMENTED CORE]
- |
- +--> DEX adapter              [PLANNED]
- +--> Lending adapter          [PLANNED]
- +--> Payment adapter          [PLANNED]
- +--> Other protocol adapters  [PLANNED]
+Human / Agent
+      |
+      v
+Policy + Authorization Layer
+      |
+      v
+QPC chain-specific implementation
+      |
+      +--> NEAR contract and privacy design       [PLANNED FIRST]
+      +--> EVM-compatible L1 adapter               [CURRENT PROTOTYPE ONLY]
+      +--> Other L1 adapters                       [PLANNED]
+      |
+      v
+Private payment integration                       [PLANNED]
+      |
+      +--> Agent-to-agent payments
+      +--> Agent-to-service payments
+      +--> x402 negotiation/payment adapter
+      |
+      v
+Events, proofs, and audit tooling                  [PLANNED EXTENSIONS]
 ```
 
-Adapters would translate an application's intent into specific target calls and selectors. They must not bypass QPC policy checks. Each adapter requires its own threat model, allowlist design, tests, and review before it can be described as supported.
-
-The current contract is protocol-agnostic: it does not natively integrate with a specific DEX, lending market, payment provider, chain bridge, or wallet service.
+Each chain, privacy rail, x402 integration, and cryptographic component needs its own threat model, tests, and review. Support on one network does not imply support or equivalent privacy/security on another.
 
 ## 10. Test architecture
 

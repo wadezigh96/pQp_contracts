@@ -2,23 +2,37 @@
 
 <div align="center">
 
-**Policy-Controlled Agentic Finance Infrastructure**
+**Private On-chain Infrastructure for Agentic Finance**
 
-**Human intent → Policy → Agent execution → On-chain settlement → Audit**
+**Human intent → Privacy-aware policy → Agent authorization → Private payment rail → Verifiable audit**
 
 </div>
 
 ---
 
-## About
+## About QPC
 
-QPC Agent Finance is a standalone smart-contract foundation for autonomous and AI-assisted finance.
+**QPC — Quantum Persistence Contract** is the long-term vision for a security-focused, privacy-oriented on-chain contract framework for autonomous agents and AI-assisted finance.
 
-The core principle is simple:
+The initial ecosystem target is **NEAR**, with a modular architecture intended to support additional Layer 1 networks through chain-specific contract and wallet adapters. QPC is intended to give agents bounded authority to perform private payments and other approved actions while keeping control with the human or organization that owns the policy.
 
-> **The agent may execute within a policy, but the agent never becomes the owner.**
+The core principle is:
 
-The contract separates **human authority** from **agent execution authority**. Policies define what an agent can do, how much it can spend, where it can send funds, which contract functions it can call, and when its authority expires.
+> **An agent may act only within an explicit policy; it never becomes the owner or root authority.**
+
+QPC's intended security model combines least-privilege authorization, spending limits, expiry, revocation, replay protection, secure key handling, privacy-preserving payment design, and independent security verification. The goal is to reduce attack surface and resist known classes of vulnerabilities—not to claim that any contract can be made immune to hackers or bugs.
+
+### Privacy and agent payments
+
+QPC is intended to support private agent-to-agent and agent-to-service payments, including payment flows that use **x402**. x402 is a payment protocol/interface; it does not make a payment private by itself. Privacy must be provided by the selected chain, wallet, cryptographic protocol, and payment adapter. The integration must state what is hidden, what remains public, and what metadata may still leak.
+
+### Quantum-resilience objective
+
+Quantum resistance is a design objective, not a currently implemented property. QPC will require a reviewed post-quantum cryptography strategy, including standardized algorithms and chain-compatible key/signature verification, before any component can be described as post-quantum secure. The current Solidity contract does not implement ML-DSA, SLH-DSA, or another post-quantum signature scheme.
+
+### Current repository status
+
+This repository currently contains an **EVM/Solidity policy-contract prototype** and Foundry tests. It is not yet a NEAR-native private contract, a universal multi-L1 deployment, a shielded payment system, an x402 payment adapter, or a post-quantum implementation. Those are planned engineering milestones and must be implemented and tested separately.
 
 
 
@@ -270,31 +284,41 @@ The intended development loop is:
 
 ---
 
-## Future application layer
+## Roadmap — planned, not yet implemented
 
-The core contract intentionally does not contain protocol-specific logic.
+The roadmap is modular. Each item remains **planned** until its code, tests, threat model, and integration evidence exist.
 
-A future application can sit above it:
+1. **NEAR-first private-contract research and prototype:** design a NEAR-native implementation and evaluate the actual privacy guarantees available from the chosen execution and cryptographic architecture. The current Solidity contract is not deployable to NEAR as-is.
+2. **Security engineering:** threat modelling, secure authorization, key lifecycle, replay protection, input validation, reentrancy/authorization review where applicable, fuzzing, invariant testing, static analysis, and independent audits. Security controls reduce risk; they cannot guarantee immunity from every exploit or bug.
+3. **Private agent payments:** design agent-to-agent and agent-to-service payment flows with explicit privacy properties, recovery rules, and auditable authorization.
+4. **x402 integration:** add a payment adapter that can interpret/serve x402 payment requests and route approved payments through a supported chain/wallet rail. x402 itself is not a privacy layer; private settlement depends on the underlying rail.
+5. **Multi-L1 expansion:** add chain-specific adapters and contract implementations. “Support for all L1s” is an architectural aspiration, not a claim that every L1 can share one contract or one privacy/security model.
+6. **Post-quantum readiness:** evaluate standardized post-quantum signatures and key-agreement choices, chain verification constraints, migration, hybrid transition, and cryptographic agility. No post-quantum protection is active in the current contract.
+
+A conceptual future architecture:
 
 ```
-User / AI Agent
+Human / Agent
       │
       ▼
-Application / API
+Policy + Authorization Layer
       │
       ▼
-Policy Builder
+QPC chain adapter interface
+      │
+      ├── NEAR implementation       [PLANNED FIRST TARGET]
+      ├── EVM-compatible L1 adapter  [PROTOTYPE EXISTS; NOT UNIVERSAL]
+      ├── Other L1 adapters          [PLANNED]
       │
       ▼
-QPCAgentFinance
+Privacy-preserving payment rail    [PLANNED]
       │
-      ├── DEX
-      ├── Lending
-      ├── Payments
-      └── Other protocols
+      ├── Agent-to-agent payments
+      ├── Agent-to-service payments
+      └── x402 payment adapter
 ```
 
-This keeps integrations replaceable while the security boundary remains centralized in the QPC contract.
+Privacy, security, and quantum-resilience properties must be evaluated independently for every chain and adapter. A feature on one network must not be presented as available on another without implementation and verification.
 
 ---
 
