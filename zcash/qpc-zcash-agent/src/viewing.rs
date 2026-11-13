@@ -16,8 +16,8 @@ use crate::{
 };
 
 use rand_core::OsRng;
-use zcash_client_backend::keys::UnifiedFullViewingKey;
 use zcash_client_backend::data_api::{AccountBirthday, AccountPurpose, WalletWrite};
+use zcash_client_backend::keys::UnifiedFullViewingKey;
 use zcash_client_sqlite::{util::SystemClock, wallet::init::WalletMigrator, WalletDb};
 use zcash_protocol::consensus::Network;
 
@@ -198,13 +198,8 @@ mod tests {
         let db_path = private.join("qpc-view-only.sqlite");
         let ufvk = testnet_ufvk();
 
-        import_testnet_ufvk_view_only(
-            &db_path,
-            "qpc-view",
-            &ufvk,
-            verified_testnet_tree_state(),
-        )
-        .expect("first view-only import");
+        import_testnet_ufvk_view_only(&db_path, "qpc-view", &ufvk, verified_testnet_tree_state())
+            .expect("first view-only import");
 
         assert!(db_path.exists());
         #[cfg(unix)]
