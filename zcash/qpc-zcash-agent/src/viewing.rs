@@ -18,7 +18,7 @@ use zcash_client_sqlite::{
     util::SystemClock,
     wallet::{init::WalletMigrator, WalletDb},
 };
-use zcash_keys::keys::UnifiedFullViewingKey;
+use zcash_client_backend::keys::UnifiedFullViewingKey;
 use zcash_protocol::consensus::Network;
 
 const ACCOUNT_NAME_MAX_BYTES: usize = 64;
