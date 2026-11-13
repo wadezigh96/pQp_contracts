@@ -60,11 +60,14 @@ export function createNearAIProvider({
         // Force a fresh preflight instead of trusting a long-lived cached attestation.
         attestationCacheTimeToLiveMs: 0,
         responseCacheTimeToLiveMs: 5 * 60 * 1_000,
-        deploymentPolicy: ({ model: requestedModel, deployment }) => {
-          if (requestedModel !== model) throw safeFailure('deployment_model_mismatch');
-          const composeHash = deployment?.runtimeMeasurements?.composeHash;
-          if (typeof composeHash !== 'string' || !allowedComposeHashes.has(composeHash))
-            throw safeFailure('deployment_measurement_not_allowlisted');
+        modelVerification: {
+          verifiers: {
+            deployment: (deployment) => {
+              const composeHash = deployment?.runtimeMeasurements?.composeHash;
+              if (typeof composeHash !== 'string' || !allowedComposeHashes.has(composeHash))
+                throw safeFailure('deployment_measurement_not_allowlisted');
+            },
+          },
         },
       })).catch(() => { clientPromise = undefined; throw safeFailure('sdk_initialization_failed'); });
     }
