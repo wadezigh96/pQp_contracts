@@ -34,6 +34,17 @@ Quantum resistance is a design objective, not a currently implemented property. 
 
 This repository currently contains an **EVM/Solidity policy-contract prototype** and Foundry tests. It is not yet a NEAR-native private contract, a universal multi-L1 deployment, a shielded payment system, an x402 payment adapter, or a post-quantum implementation. Those are planned engineering milestones and must be implemented and tested separately.
 
+## NEAR Hackathon — Open Innovation
+
+**Primary track:** Open Innovation (`open`)  
+**Potential additional tracks:** Privacy & Private AI (`privacy`), AI Security & Defense (`security`), Agent Economy (`agents`).
+
+QPC's Open Innovation proposal combines human-bounded agent authority, privacy-policy-aware payment routing, and chain-specific settlement. Its key safety property is **fail-closed privacy**: if a payment requests a shielded/private rail and no verified compatible rail is available, QPC rejects or holds the request rather than silently sending a transparent payment.
+
+Additional tracks should only be selected in the final submission if the public demo genuinely demonstrates their requirements. A roadmap item alone is not a working feature.
+
+The NEAR-first hackathon design and acceptance criteria are documented in [QPC_NEAR_HACKATHON_SPEC.md](docs/QPC_NEAR_HACKATHON_SPEC.md). The document is a design specification, not evidence that the NEAR contract, private settlement rail, x402 adapter, or post-quantum verification has already been implemented.
+
 
 
 ## Core workflow
@@ -127,6 +138,8 @@ AI logic is **not trusted as a security boundary**. The smart contract remains t
 
 ```
 qpc_contracts/
+├── docs/
+│   └── QPC_NEAR_HACKATHON_SPEC.md  # NEAR-first hackathon technical specification
 ├── contracts/
 │   └── QPCAgentFinance.sol       # Core policy + execution contract
 │

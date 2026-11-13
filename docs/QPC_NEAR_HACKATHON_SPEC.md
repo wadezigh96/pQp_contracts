@@ -1,0 +1,263 @@
+# QPC — NEAR-First Hackathon Technical Specification
+
+**Project:** QPC — Quantum Persistence Contract  
+**Positioning:** Private on-chain infrastructure for policy-controlled agentic finance  
+**Hackathon primary track:** Open Innovation (`open`)  
+**Additional fitting tracks:** Privacy & Private AI (`privacy`), AI Security & Defense (`security`), Agent Economy (`agents`)  
+**Status:** Design specification; NEAR-native implementation and privacy payment rail are not yet implemented.
+
+---
+
+## 1. Executive summary
+
+QPC proposes a NEAR-first, chain-extensible policy and payment-control layer for autonomous agents. A human or organization defines an authorization policy; an agent can request a payment or action only within that policy; a chain-specific adapter validates and executes the approved operation; and the system produces a verifiable audit record without placing the owner's root authority in the agent.
+
+The new idea for **Open Innovation** is to combine three concerns that are usually treated separately:
+
+1. **Agent authority:** explicit, bounded, revocable permissions.
+2. **Privacy-aware payment routing:** a payment request must declare its privacy requirements, and the router must reject unsupported privacy modes rather than silently downgrade to a transparent transfer.
+3. **Chain abstraction:** a common policy intent can be evaluated consistently while settlement remains specific to each chain and payment rail.
+
+QPC is not claiming to make every L1 private, quantum-resistant, or immune to exploits. It defines interfaces and verification requirements so those properties can be implemented and assessed per adapter.
+
+## 2. Problem statement
+
+Agents increasingly need to pay APIs, other agents, compute providers, and services. Giving an agent an unrestricted wallet key creates excessive authority. A normal on-chain transfer may expose payment metadata. A payment negotiation protocol alone does not solve privacy, authorization, replay, or key-management risks. Cross-chain execution further complicates asset identity, recipient validation, finality, and failure recovery.
+
+QPC addresses this as a policy-enforcement and payment-routing problem rather than trusting an AI model to behave safely.
+
+## 3. Design principles
+
+- **Human remains root authority:** an agent cannot grant itself permissions, change policy ceilings, or replace the owner.
+- **Least privilege:** every agent receives only the permissions needed for a task.
+- **Fail closed:** invalid, expired, replayed, or unsupported requests are rejected.
+- **Privacy must be explicit:** every payment declares its privacy mode and acceptable disclosure.
+- **No silent privacy downgrade:** if the requested shielded/private rail is unavailable, the payment is rejected or held for explicit human action; it is never transparently rerouted without consent.
+- **Chain-specific execution:** a shared interface does not imply identical contract semantics across L1s.
+- **Cryptographic agility:** algorithms and key formats must be replaceable through reviewed versioned interfaces.
+- **Evidence before claims:** a capability is marked implemented only after code, tests, and demo evidence exist.
+
+## 4. System architecture
+
+### 4.1 Logical components
+
+| Component | Responsibility | Hackathon status |
+|---|---|---|
+| Policy registry / controller | Owner-defined agent permissions, limits, expiry, revocation | Prototype target |
+| Agent request gateway | Receives normalized payment/action intents | Prototype target |
+| Policy evaluator | Validates identity, scope, amount, recipient, expiry, nonce and privacy mode | Prototype target |
+| NEAR adapter | Executes or records approved NEAR-side operations | Prototype target |
+| x402 adapter | Parses HTTP 402 payment requirements and binds them to a QPC policy decision | Interface/design; end-to-end integration pending |
+| Privacy policy router | Enforces declared privacy requirements and refuses unsupported rails | Prototype target; privacy guarantees depend on selected rail |
+| Audit/event layer | Emits request ID, policy version, outcome and public-safe evidence | Prototype target |
+| Other L1 adapters | Chain-specific policy and settlement implementations | Future |
+| Post-quantum crypto module | Standardized PQ verification and migration | Research/future; not active |
+
+### 4.2 Request lifecycle
+
+```
+Human defines policy
+        |
+        v
+Agent creates payment intent
+        |
+        v
+Normalize request (chain, asset, amount, recipient,
+expiry, nonce, service, privacy requirement)
+        |
+        v
+QPC policy evaluation
+        |
+        +---- invalid / expired / over limit ----> REJECT
+        |
+        +---- privacy rail unsupported ----------> REJECT / HOLD
+        |
+        v
+Human approval if policy requires it
+        |
+        v
+Chain + payment adapter
+        |
+        v
+Settlement / execution result
+        |
+        v
+Public-safe audit event + private receipt reference
+```
+
+The policy engine must not treat model output as proof of authorization. Authorization must be validated from cryptographic credentials and contract state.
+
+## 5. Policy model
+
+A policy should include, at minimum:
+
+- owner / policy controller identity
+- agent public key or scoped credential identifier
+- allowed action types and service identifiers
+- allowed chain and asset identifiers
+- maximum amount per payment
+- cumulative spending ceiling and accounting window
+- recipient or merchant constraints
+- policy activation and expiry timestamps
+- nonce / replay-protection domain
+- privacy mode: `transparent`, `confidential-computation`, or `shielded-settlement`
+- minimum privacy requirement and allowed fallback behavior
+- optional human approval threshold
+- policy version and revocation status
+
+The exact storage layout and serialization must be adapted to NEAR's account and contract model. Do not copy Solidity storage assumptions into a NEAR contract.
+
+## 6. Privacy model and honest disclosure
+
+### 6.1 Privacy classes
+
+**Transparent settlement:** public chain data may expose sender/account, recipient, amount, asset, timing, and contract interaction. It must never be labelled private.
+
+**Confidential computation:** sensitive policy evaluation or agent context may be processed in a confidential environment such as a TEE, subject to attestation, implementation, side-channel, operator, and availability risks. A TEE does not automatically hide public settlement metadata.
+
+**Shielded settlement:** sender/recipient/value confidentiality must be provided by a payment rail designed for shielded transactions. The adapter must verify that the selected rail actually supports the requested properties.
+
+### 6.2 Fail-closed routing
+
+If a request specifies `shielded-settlement`, QPC must not send it through a transparent NEAR transfer simply because the private rail is unavailable. The request must fail or remain pending for an explicit human decision.
+
+The router must disclose residual metadata, including possible timing correlation, service endpoint metadata, network-level information, and public policy or commitment data.
+
+### 6.3 NEAR-first implementation boundary
+
+NEAR is the first target for the hackathon prototype, but ordinary NEAR contract state and transfers must be treated as public unless a specific, verified privacy mechanism is used. NEAR AI Cloud / TEE can be evaluated for confidential computation; it must not be represented as a native shielded-payment feature.
+
+A separate shielded payment rail may be integrated later through an adapter. Each rail needs its own threat model, key custody model, recovery procedure, and proof of settlement.
+
+## 7. x402 payment integration
+
+x402 is treated as a payment negotiation/interface layer, not as a privacy system.
+
+Planned flow:
+
+1. A service responds with an HTTP 402 payment requirement.
+2. The x402 adapter parses network, asset, amount, recipient, and expiry.
+3. QPC binds those fields to a unique request ID and the agent's policy.
+4. Policy evaluation checks spending ceilings, recipient/service permissions, expiry, nonce, chain and privacy requirement.
+5. If permitted, the selected chain/payment adapter prepares the payment.
+6. Settlement evidence is returned to the service using the supported x402 mechanism.
+7. QPC records a public-safe result and a reference to any private receipt.
+
+Required protections:
+
+- reject mismatched network, token, recipient, amount, or expiry
+- prevent replay through request IDs/nonces and domain separation
+- bind approval to the exact payment payload
+- do not trust a client-supplied "paid" boolean
+- verify settlement through the selected rail's authoritative evidence
+- do not silently replace a requested shielded rail with transparent settlement
+- keep credentials and secret payment metadata out of public events and logs
+
+The precise x402 version, facilitator, settlement network, and SDK must be selected and tested before claiming end-to-end compatibility.
+
+## 8. NEAR-first prototype scope
+
+The hackathon prototype should demonstrate one narrow, working vertical slice rather than claim a universal system.
+
+### Required demo slice
+
+1. Create a policy for a test agent with a fixed recipient/service, asset, amount ceiling, expiry and nonce domain.
+2. Submit a valid agent payment intent.
+3. Show QPC accepting the request only when every policy check passes.
+4. Submit an over-limit, wrong-recipient, expired, and replayed request; show each rejected.
+5. Submit a request requiring shielded settlement when no verified shielded rail is configured; show a fail-closed rejection/hold, not a transparent transfer.
+6. Demonstrate a testnet NEAR transaction only for the explicitly supported transparent/test settlement path, if implemented.
+7. Show a public-safe audit record with request ID, policy version, decision and settlement reference.
+
+### Explicitly out of scope for the initial demo
+
+- claiming that NEAR transfers are shielded
+- production custody or real-value payments
+- universal support for all L1s
+- production x402 compatibility without a real tested adapter
+- Zcash or another shielded rail without a verified adapter and recovery model
+- post-quantum signature verification
+- claims of immunity to hacking, bugs, or quantum attacks
+
+## 9. Security and adversarial requirements
+
+Threat model and tests must cover:
+
+- unauthorized agent and forged credential
+- owner/policy takeover and privilege escalation
+- replay, duplicate request, stale nonce, and cross-chain replay
+- amount, asset, network, recipient, or expiry substitution
+- integer overflow/underflow and decimal normalization errors
+- reentrancy and malicious external contracts where applicable
+- asynchronous execution, timeout, partial failure and duplicate callbacks
+- compromised agent key and policy revocation races
+- TEE attestation failure, stale measurements, compromised host assumptions, and side-channel limitations
+- privacy downgrade, metadata leakage, and receipt correlation
+- adapter misconfiguration and unsupported chain behavior
+- dependency, compiler, build, and deployment supply-chain risks
+
+Required controls include least privilege, explicit domain separation, bounded amounts, expiry, replay protection, deterministic policy checks, safe external-call handling, revocation, pause/recovery procedures, versioned adapters, fuzzing, invariant tests, and independent review.
+
+A test suite reduces uncertainty; it does not prove the absence of vulnerabilities. No "unhackable" or "bug-proof" claim is permitted.
+
+## 10. Multi-L1 adapter contract
+
+Each future L1 adapter must publish a capability manifest:
+
+- chain ID / network identifier and environment
+- execution and finality model
+- supported asset identifiers and decimal rules
+- account/key model
+- policy enforcement location
+- privacy modes genuinely supported
+- cryptographic algorithms and signature verification method
+- settlement proof/evidence format
+- timeout, cancellation, and recovery behavior
+- known metadata exposure and limitations
+- test coverage and independent audit status
+
+An adapter must declare unsupported features rather than emulate them insecurely. A NEAR implementation, EVM implementation, and UTXO/shielded adapter are separate implementations behind a common intent interface.
+
+## 11. Quantum-resilience roadmap
+
+"Quantum Persistence" is the project name and long-term objective, not a claim that the current prototype is quantum-safe.
+
+Before any post-quantum claim, QPC must:
+
+1. Identify every signature, key agreement, hash, and commitment used.
+2. Select applicable standardized algorithms (for example, ML-DSA for signatures and SLH-DSA as a hash-based signature option) based on the chain's verification support and security review.
+3. Define key formats, signature encoding, gas/size limits, rotation and recovery.
+4. Consider hybrid classical + post-quantum migration where technically sound.
+5. Test verification vectors, malformed inputs, downgrade resistance, and interoperability.
+6. Obtain independent cryptographic review.
+
+The current Solidity contract does not implement ML-DSA, SLH-DSA, or post-quantum verification. The NEAR prototype must not claim otherwise unless implemented and measured.
+
+## 12. Hackathon track strategy
+
+**Primary: Open Innovation (`open`).** QPC's central contribution is a new composition of human-bounded agent authority, privacy-policy-aware payment routing, and chain-specific settlement with fail-closed privacy behavior.
+
+**Additional tracks to select if the final prototype genuinely demonstrates them:**
+
+- **Privacy & Private AI (`privacy`):** only if the demo implements a real confidential-computation or privacy-preserving payment component and clearly states what is and is not hidden.
+- **AI Security & Defense (`security`):** if the demo proves policy enforcement, spending limits, scoped keys/credentials, revocation, and adversarial rejection cases.
+- **Agent Economy (`agents`):** if an agent actually requests and completes a service/payment flow.
+
+Do not select tracks based only on roadmap promises. The submission form allows multiple fitting tracks, but each selected track should be supported by the working demo.
+
+## 13. Acceptance criteria for a credible submission
+
+- A public repository with reproducible setup instructions.
+- A runnable prototype, not only architecture diagrams.
+- A short demo showing one successful allowed flow and several rejected adversarial flows.
+- Test output tied to the submitted commit.
+- README clearly labels implemented, partial, simulated, and planned components.
+- No claim of private NEAR settlement unless a real private rail is used.
+- No claim of post-quantum security unless the algorithms are implemented and verified.
+- A public demo post and repository link submitted before the event deadline.
+
+## 14. Current baseline disclosure
+
+The existing `QPCAgentFinance.sol` is an EVM/Solidity prototype with owner-managed agent policies, spending limits, allowlists, expiry, pause, nonce/events, and reentrancy protection as documented in the repository. It is not a NEAR contract and does not currently provide private settlement, x402, multi-L1 execution, or post-quantum cryptography.
+
+The NEAR-first prototype described in this document is a proposed new implementation slice. Do not treat this specification as evidence that it has been built.
