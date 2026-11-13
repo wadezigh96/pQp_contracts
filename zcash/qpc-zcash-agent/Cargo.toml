@@ -1,0 +1,24 @@
+[package]
+name = "qpc-zcash-agent"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Fail-closed Zcash wallet adapter boundary for QPC agentic payments"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+rand_core = { version = "=0.6.4", features = ["getrandom"] }
+sha2 = "=0.10.9"
+http = "1"
+tokio = { version = "1", features = ["time"] }
+zcash_address = "=0.13.0"
+zcash_client_backend = { version = "=0.24.0", default-features = false, features = ["lightwalletd-tonic-tls-webpki-roots", "lightwalletd-tonic-transport", "orchard", "sync"] }
+zcash_client_sqlite = { version = "=0.22.0", default-features = false, features = ["orchard"] }
+zcash_protocol = "=0.10.6"
+
+[dev-dependencies]
+tempfile = "3"
+zcash_keys = "=0.16.1"
+zip32 = "=0.2.1"
