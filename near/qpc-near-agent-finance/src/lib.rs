@@ -334,7 +334,7 @@ mod tests {
         context("attacker.testnet", NOW);
         contract.configure_agent(
             account("victim.testnet"), "evil".to_string(), account("router.testnet"),
-            NOW + 100, 100, 100,
+            NOW + 100, U128(100), U128(100),
         );
     }
 
