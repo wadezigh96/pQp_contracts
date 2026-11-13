@@ -307,13 +307,92 @@ This keeps integrations replaceable while the security boundary remains centrali
 </div>
 
 
+## QPC design principles and security requirements
+
+These principles define the intended system architecture. They are **design requirements**, not claims that every capability is already implemented.
+
+### 1. Quantum Persistence: post-quantum readiness
+
+Quantum resistance is a design target. QPC must not claim post-quantum security until suitable post-quantum cryptography is implemented, interoperable with the relevant chain adapters, and tested.
+
+Required work includes:
+- define cryptographic agility and versioned identity/authorization formats;
+- evaluate standardized post-quantum signature and key-establishment algorithms against the threat model;
+- design a carefully reviewed hybrid classical + post-quantum migration path where chain capabilities permit;
+- define key rotation, compromise recovery, downgrade prevention, and algorithm deprecation;
+- test cross-chain verification, serialization, resource limits, and failure handling.
+
+**Current status:** post-quantum signatures, hybrid authentication, PQ key establishment, and PQ recovery are not implemented or active. Hashing and nonce checks do not make a system quantum-resistant.
+
+### 2. Comprehensive cybersecurity
+
+The security model must protect the complete authorization-to-settlement lifecycle, not only the smart contract call. Threat coverage must include:
+
+- stolen agent credentials, forged or unauthorized requests, and privilege escalation;
+- replay across agents, chains, contracts, assets, and policy versions;
+- parameter substitution, including recipient, amount, asset, destination, fees, calldata, and expiry;
+- reentrancy, malicious tokens/contracts, allowance abuse, integer/serialization edge cases, and policy mutation;
+- compromised or unavailable RPCs, routers, relayers, signers, light clients, and proof providers;
+- chain reorganizations, finality disagreements, duplicate delivery, timeout, partial failure, and refund/reconciliation paths;
+- key rotation/revocation, emergency pause, monitoring, and incident recovery.
+
+Each adapter must enforce its own chain-specific threat model and finality rules. Tests, fuzzing, invariant checks, static analysis, independent review, and operational controls are required; CI success alone is not an audit.
+
+### 3. Private on-chain and private agentic operation
+
+Privacy is an end-to-end requirement across:
+- **identity:** minimize public linkage between human owners, agent identities, and wallets;
+- **authorization:** disclose only the policy facts needed to authorize an action, using suitable cryptographic proofs where supported;
+- **communication:** authenticate and protect agent-to-agent messages, prevent replay, and minimize metadata leakage;
+- **settlement:** use chain-native privacy mechanisms where available and verify their receipts without silently falling back to public transfers.
+
+A hidden recipient reference, encrypted off-chain message, or hash by itself does not make public chain state private. Public chains expose varying combinations of calldata, state, events, transaction timing, and network metadata. Zcash shielded transfers have a distinct UTXO and note model; they must not be represented as EVM smart-contract calls.
+
+**Current status:** the NEAR MVP records an authorization event and is not a private NEAR execution layer. The current Zcash work is an adapter prototype and does not yet construct, sign, broadcast, or independently verify a shielded payment.
+
+### 4. Multi-L1 adapters, not a universal contract
+
+QPC is intended to support independent adapters with a shared authorization intent format and chain-specific enforcement. It must not assume that one smart contract or one finality model works on every network.
+
+| Network | Adapter model | Chain-specific security responsibilities |
+|---|---|---|
+| NEAR | NEAR Rust contract and NEAR transaction adapter | account/function-call authorization, access control, nonce, gas, receipt and finality verification |
+| Ethereum | EVM contract and transaction adapter | EVM call/value policy, chain ID, nonce, calldata, token behavior, confirmations/finality |
+| BSC | EVM-compatible adapter, separately configured | BSC chain ID, RPC/finality assumptions, token and contract policy; do not infer safety solely from EVM compatibility |
+| Solana | Solana program/client adapter | program IDs, instruction/account constraints, signer and PDA rules, recent blockhash/replay handling, commitment/finality |
+| Zcash | Shielded UTXO wallet and light-client adapter | Unified Address/network validation, shielded note handling, nullifier/replay controls, witness/consensus and shielded receipt verification |
+
+**Current status:** NEAR has an authorization-contract MVP; EVM has the existing Solidity policy contract; Zcash has a wallet/adapter prototype. Production-grade, independently verified adapters and settlement are not yet complete for all listed networks. Ethereum, BSC, and Solana must not be presented as integrated merely because an adapter is planned.
+
+### 5. One authorization bound across networks
+
+Every cross-network action must be represented by one canonical, versioned authorization intent. At minimum, its signed or otherwise cryptographically authenticated commitment must bind:
+
+- authorization/intent ID and agent identity;
+- source chain, source account, destination chain, and destination account or privacy-preserving recipient commitment;
+- asset identifier on each chain, amount, decimals, and any conversion/fee limits;
+- exact action and permitted parameters;
+- nonce and replay domain, including chain/contract/adapter identity;
+- policy ID and policy version;
+- issue time, expiry/deadline, and cancellation/revocation state;
+- settlement condition and required evidence type;
+- transaction/receipt identifier and verified settlement evidence when settlement occurs.
+
+Adapters must validate the same intent commitment against their own chain-specific rules. A destination transaction must not be accepted if any bound field changes, if the intent is expired or revoked, or if its nonce/replay domain has already been consumed. Source and destination identifiers, amounts, and asset mappings must be explicit; no adapter may silently reinterpret them.
+
+A transaction hash supplied by an agent or relayer is not proof of settlement by itself. The receiving side must independently verify the appropriate chain receipt/finality or shielded proof before marking an intent settled. Timeout, reorg, partial completion, and refund states must be explicit and idempotent.
+
+**Current status:** the existing NEAR MVP binds a limited Zcash Testnet payment intent and records authorization only. It does not yet implement the complete cross-L1 authorization envelope, cross-chain proof verification, atomic settlement, or refund protocol. Do not treat the full one-authorization model as active until those components are implemented and tested.
+
+---
+
 ## Privacy and quantum-resistance status
 
 The name **Quantum Persistence Contract** describes the project's direction, not a currently achieved cryptographic guarantee.
 
 - The current EVM contract is public-chain software. Contract storage, calldata, transaction metadata, and emitted events are observable; the contract does not provide private on-chain execution by itself.
 - No post-quantum signature, key-encapsulation mechanism, hybrid classical/PQ authentication, or PQ key-rotation/recovery protocol is implemented in this repository's current contract.
-- The current cross-chain work is a prototype boundary, not a universal L1 network. The repository does not yet contain a production NEAR smart contract or production adapters for all L1s.
+- The current cross-chain work is a prototype boundary, not a universal L1 network. A NEAR Rust authorization-contract MVP exists, but it is not deployed or production-ready; production adapters for all L1s are not yet implemented.
 - The Zcash adapter currently provides address/policy validation, local wallet database initialization, replay protection, and a read-only lightwalletd probe. It does not yet scan shielded notes, construct/sign/broadcast payments, or independently prove shielded receipts.
 
 Do not describe QPC as quantum-resistant, private-on-chain, a live bridge, or production-ready until those capabilities are implemented and independently reviewed.
