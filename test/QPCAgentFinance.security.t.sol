@@ -291,11 +291,11 @@ contract QPCAgentFinanceSecurityTest {
     }
 
     function testRejectZeroTokenTransfer() public {
-        configure(10 ether, 1 ether, 1 days);
         vm.prank(OWNER);
         qpc.setTokenPolicy(AGENT, TOKEN, 100, 100);
         vm.prank(OWNER);
         qpc.setRecipientPermission(AGENT, RECIPIENT, true);
+        configure(10 ether, 1 ether, 1 days);
 
         vm.prank(AGENT);
         (bool ok,) = address(qpc).call(
@@ -391,7 +391,7 @@ contract QPCAgentFinanceTokenSecurityTest {
         require(!ok, "recipient allowlist bypass");
     }
 
-    function testFailedTokenTransferDoesNotConsumeCap() public {
+    function testTokenTransferFailureDoesNotConsumeCap() public {
         configureToken(100, 100);
         activateAgent();
         token.mint(address(qpc), 100);
