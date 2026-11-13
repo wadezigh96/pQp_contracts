@@ -20,6 +20,7 @@ enum StorageKey {
 
 #[derive(BorshDeserialize, BorshSerialize, Clone)]
 pub struct AgentPolicy {
+    active: bool,
     policy_id: String,
     router: AccountId,
     expires_at_unix: u64,
@@ -33,6 +34,7 @@ pub struct AgentPolicy {
 #[derive(Serialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct AgentPolicyView {
+    pub active: bool,
     pub policy_id: String,
     pub router: AccountId,
     pub expires_at_unix: u64,
@@ -91,28 +93,36 @@ impl QPCNear {
         let total_cap = total_cap.0;
         assert!(max_per_payment > 0 && total_cap >= max_per_payment, "invalid spending limits");
 
-        let next_version = self.agents.get(&agent)
-            .map(|old| old.policy_version.checked_add(1).expect("policy version overflow"))
-            .unwrap_or(1);
+        let (next_version, next_nonce) = self.agents.get(&agent)
+            .map(|old| (
+                old.policy_version.checked_add(1).expect("policy version overflow"),
+                old.next_nonce,
+            ))
+            .unwrap_or((1, 0));
         self.agents.insert(&agent, &AgentPolicy {
+            active: true,
             policy_id,
             router,
             expires_at_unix,
             max_per_payment,
             total_cap,
             spent: 0,
-            next_nonce: 0,
+            next_nonce,
             policy_version: next_version,
         });
     }
 
     pub fn revoke_agent(&mut self, agent: AccountId) {
         self.assert_owner();
-        self.agents.remove(&agent);
+        if let Some(mut policy) = self.agents.get(&agent) {
+            policy.active = false;
+            self.agents.insert(&agent, &policy);
+        }
     }
 
     pub fn get_agent_policy(&self, agent: AccountId) -> Option<AgentPolicyView> {
         self.agents.get(&agent).map(|p| AgentPolicyView {
+            active: p.active,
             policy_id: p.policy_id,
             router: p.router,
             expires_at_unix: p.expires_at_unix,
@@ -144,6 +154,7 @@ impl QPCNear {
     ) -> DispatchReceipt {
         let agent = env::predecessor_account_id();
         let mut policy = self.agents.get(&agent).expect("agent is not configured");
+        assert!(policy.active, "agent is revoked");
         let now = now_unix();
 
         assert!(!request_id.is_empty() && request_id.len() <= 128, "invalid request id");
@@ -336,6 +347,31 @@ mod tests {
             account("victim.testnet"), "evil".to_string(), account("router.testnet"),
             NOW + 100, U128(100), U128(100),
         );
+    }
+
+    #[test]
+    fn revocation_and_reconfiguration_preserve_monotonic_nonce() {
+        let mut contract = setup();
+        dispatch(&mut contract, "agent.testnet", 0, "1000", EXPECTED_HASH);
+
+        context("owner.testnet", NOW);
+        contract.revoke_agent(account("agent.testnet"));
+        let revoked = contract.get_agent_policy(account("agent.testnet")).unwrap();
+        assert!(!revoked.active);
+        assert_eq!(revoked.next_nonce, 1);
+
+        contract.configure_agent(
+            account("agent.testnet"),
+            "policy-main".to_string(),
+            account("router.testnet"),
+            NOW + 20_000,
+            U128(5_000),
+            U128(10_000),
+        );
+        let renewed = contract.get_agent_policy(account("agent.testnet")).unwrap();
+        assert!(renewed.active);
+        assert_eq!(renewed.policy_version, 2);
+        assert_eq!(renewed.next_nonce, 1);
     }
 
     #[test]
