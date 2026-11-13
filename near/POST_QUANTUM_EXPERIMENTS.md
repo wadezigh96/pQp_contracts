@@ -4,18 +4,18 @@
 
 ## What NEAR already provides
 
-NEAR Core 2.13 / protocol version 85 introduced ML-DSA-65 (NIST FIPS 204) as a transaction-signature and access-key scheme. A NEAR node verifies the transaction signature before executing its actions. A QPC contract call can therefore be submitted by an account whose access key is ML-DSA-65, while QPC continues to enforce its own agent policy, exact argument hash, nonce, expiry, and spending limits.
+Current [NEAR access-key documentation](https://docs.near.org/protocol/accounts-contracts/access-keys) lists ML-DSA-65 (NIST FIPS 204) as a supported access-key signature scheme. A NEAR node verifies the transaction signature before executing its actions. A QPC contract call can therefore be submitted by an account whose access key is ML-DSA-65, while QPC continues to enforce its own agent policy, exact argument hash, nonce, expiry, and spending limits. Tooling support is client-specific; NEAR's current [API documentation](https://docs.near.org/tools/near-api) lists `near-kit`, `near-kit-rs`, and `near-kit-py`, and notes `near-api-js` support is pending.
 
 This is **protocol-level transaction authentication**, not in-contract ML-DSA verification.
 
 ## Hard boundary
 
 - QPC NEAR does not implement an ML-DSA verifier in WASM.
-- NEAR does not currently expose an `ml_dsa_verify` contract host function.
 - A successful call only proves that the NEAR runtime accepted the transaction under an authorized access key. It does not mean QPC independently inspected or verified an ML-DSA signature.
-- ML-DSA-65 access keys do not make validator, staking, block, or chunk signatures post-quantum.
+- NEAR's [published post-quantum roadmap](https://www.near.org/blog/near-quantum-safe-roadmap) distinguishes account signing from consensus: ML-DSA-65 access keys do not make validator, staking, block, or chunk signatures post-quantum.
 - SLH-DSA (NIST FIPS 205) is not a NEAR transaction-key scheme in this experiment. It may be evaluated off-chain in a separate test harness, but it must not authorize QPC execution until a supported verification and trust path exists.
 - ML-KEM (NIST FIPS 203) is key establishment, not a digital signature scheme.
+- The published [x402 exact-NEAR scheme](https://github.com/x402-foundation/x402/blob/main/specs/schemes/exact/scheme_exact_near.md) lists Ed25519 and secp256k1 signatures, not ML-DSA-65. Do not describe that x402 signing path as post-quantum.
 
 ## Experiment A — protocol-level ML-DSA-65 transaction authentication
 

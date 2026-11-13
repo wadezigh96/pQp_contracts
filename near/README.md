@@ -35,4 +35,4 @@ cargo build --release --target wasm32-unknown-unknown -p qpc-near-escrow
 
 ## Safety boundary
 
-This is an experimental prototype, not audited or production-ready. No mainnet deployment or live payment is authorized. It does not implement ML-DSA/SLH-DSA verification and makes no post-quantum security claim.
+This is an experimental prototype, not audited or production-ready. No mainnet deployment or live payment is authorized. NEAR supports ML-DSA-65 access keys for transaction signing, but this contract does not implement an in-contract ML-DSA/SLH-DSA verifier. Runtime acceptance of an ML-DSA-signed transaction is not QPC contract-level signature verification and does not make NEAR consensus or cross-chain signing post-quantum. See [NEAR's access-key documentation](https://docs.near.org/protocol/accounts-contracts/access-keys) and the [QPC experiment plan](POST_QUANTUM_EXPERIMENTS.md).

@@ -2,13 +2,15 @@
 
 ## Project status
 
-QPC (Quantum Persistence Contract) is experimental. The existing EVM policy core is a prototype, not an independently audited production security system. Ethereum, BSC, Solana and post-quantum cryptography are separate implementation boundaries.
+QPC (Quantum Persistence Contract) is experimental. The EVM and NEAR policy contracts are prototypes, not independently audited production security systems. Ethereum, BSC, NEAR, Solana, Zcash wallet tooling, and post-quantum cryptography are separate implementation boundaries.
 
 ## Separation requirements
 
 - Ethereum: its own adapter, deployment script, chain-ID assertion, tests and release configuration.
 - BNB Smart Chain: its own adapter, deployment script, chain-ID assertion, tests and release configuration.
+- NEAR: native policy/escrow code; protocol-supported ML-DSA access-key signing is distinct from contract-level verification and consensus signatures.
 - Solana: independent Rust program with native account/signer/PDA/CPI validation.
+- Zcash: Rust wallet-adapter prototype, not a smart contract or a live shielded-payment service.
 - PQC: separate cryptographic integration; do not represent a roadmap or interface specification as working cryptography.
 
 ## EVM threat model
@@ -20,8 +22,12 @@ Known limitations requiring remediation before production:
 - Token calls must reject EOAs and malformed/non-standard return behavior safely.
 - Owner key compromise remains a root trust failure.
 - External target contracts can be upgraded or change behavior.
-- The contract does not provide post-quantum signature verification.
+- The EVM contract does not provide post-quantum signature verification.
 - No independent audit has been completed.
+
+## NEAR, agent payments, and x402 boundaries
+
+NEAR supports ML-DSA-65 access keys for transaction signing, but the QPC NEAR contracts do not implement an in-contract ML-DSA verifier. This account-authentication path does not make NEAR validator consensus, cross-chain threshold signing, or other chain contracts post-quantum. The current NEAR-to-Zcash helper prepares a request only; the Zcash prototype does not construct, sign, or broadcast shielded payments. QPC has no x402 integration. Even where a network has an x402 scheme, the scheme and facilitator determine signing and settlement behavior; x402 itself does not guarantee shielded privacy or quantum resistance. The published NEAR exact scheme specifies Ed25519 and secp256k1, not ML-DSA.
 
 ## PQ cryptography
 

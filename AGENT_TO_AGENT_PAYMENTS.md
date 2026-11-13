@@ -1,12 +1,12 @@
-# QPC Agent-to-Agent Cross-Chain Payment Network
+# QPC Agent-to-Agent Payment Architecture
 
-**Status: architecture specification plus chain-specific prototypes. Cross-chain routing, provider settlement, escrow interoperability, and end-to-end agent runtime are not yet implemented or deployed.**
+**Status: architecture specification plus prototypes. A NEAR-to-Ethereum 1Click router path and NEAR same-chain escrow code exist; the router tests use mocks, and no live end-to-end provider route or production deployment is claimed. The Zcash adapter has no shielded send path. QPC has no x402 integration.**
 
 ## Product definition
 
-QPC is intended to let each agent using QPC initiate and receive payments across supported networks, including NEAR, Ethereum, BNB Smart Chain, Solana, and Zcash. A logical agent identity may expose several independently verified chain endpoints. A payment is complete only after the source-side authorization and destination-side receipt have both been independently verified.
+The design target is to let an agent initiate and receive payments across independently supported networks, including NEAR, Ethereum, BNB Smart Chain, Solana, and Zcash. Listing a network here is not a claim that every route is implemented or live. A logical agent identity may expose several independently verified chain endpoints. A payment is complete only after the source-side authorization and destination-side receipt have both been independently verified.
 
-QPC is not itself a bridge, exchange, custodian, or universal token. It does not make unrelated chains share balances or signatures. Cross-chain value movement requires a separately selected interoperability provider, intent solver, bridge, or liquidity route with an explicit trust and failure model. Do not claim atomicity, trustlessness, or anonymity unless the exact route proves those properties.
+QPC is not itself a bridge, exchange, custodian, or universal token. It does not make unrelated chains share balances or signatures. Cross-chain value movement requires a separately selected interoperability provider, intent solver, bridge, or liquidity route with an explicit trust and failure model. Do not claim atomicity, trustlessness, anonymity, or post-quantum protection unless the exact route implements and proves those properties.
 
 ## Core model: one agent, multiple chain payment endpoints
 
@@ -20,16 +20,24 @@ An agent has one logical QPC identity and may register chain-specific endpoints:
 
 Endpoint ownership must be authenticated by the agent and independently verifiable. A registry entry alone is not proof of ownership. Endpoint rotation, revocation, recovery, and compromised-key handling must be specified. Never reuse one chain's private key as another chain's key.
 
-A Zcash endpoint is not an EVM contract address. Zcash is a UTXO-based Layer 1 with transparent and shielded pools. QPC's Zcash integration is a Rust wallet/transaction adapter that works with Zcash wallet state and transaction semantics; it is not a Solidity contract deployed on Zcash. QPC policy for Zcash actions is enforced by the agent runtime and durable local policy/replay state, not by a QPC smart contract running on Zcash.
+A Zcash endpoint is not an EVM contract address. Zcash is a UTXO-based Layer 1 with transparent and shielded pools. QPC's Zcash code is an early Rust wallet-adapter prototype, not a working wallet or a Solidity contract deployed on Zcash; it has receiver-policy and wallet/sync scaffolding but no transaction send path. QPC policy for Zcash actions is intended to be enforced by the agent runtime and durable local policy/replay state, not by a QPC smart contract running on Zcash.
 
 ## Components
 
-1. **Agent identity and endpoint registry:** signed agent manifest maps one logical identity to independently verified chain endpoints, supported assets, capabilities, and key references.
-2. **Agent runtime / payment router:** discovers recipient endpoints, requests quotes, compares routes, constructs typed payment intents, checks policy, and monitors settlement.
-3. **Chain-native QPC policy adapter:** NEAR, Ethereum, BSC, and Solana enforce their own on-chain policy checks. Zcash authorization is performed by the agent runtime and Zcash adapter boundary; Zcash itself does not execute QPC smart contracts.
-4. **Chain-local payment adapter / escrow:** performs chain-specific source settlement and destination receipt handling. The Zcash adapter uses a maintained Rust wallet stack, SQLite wallet state, compact-block synchronization, and shielded transaction capabilities when those capabilities are implemented and reviewed.
+1. **Agent identity and endpoint registry:** design target for a signed agent manifest mapping one logical identity to independently verified chain endpoints, supported assets, capabilities, and key references.
+2. **Agent runtime / payment router:** prototype code covers a NEAR-to-Ethereum NEAR Intents 1Click path; it does not constitute a universal, live-verified router.
+3. **Chain-native QPC policy adapter:** NEAR and EVM policy/escrow prototypes enforce chain-specific rules. Solana is a separate program boundary. Zcash authorization belongs to the agent runtime and adapter boundary; Zcash itself does not execute QPC smart contracts.
+4. **Chain-local payment adapter / escrow:** chain-specific settlement and receipt handling require native implementations. The Zcash Rust prototype currently has address/receiver policy and wallet/database/sync scaffolding; it does not construct, sign, or broadcast shielded transactions or verify a live recipient receipt.
 5. **Interoperability / liquidity network:** an established bridge, intent solver, messaging protocol, or liquidity provider transports value or coordinates settlement. QPC must not invent its own bridge.
 6. **Settlement monitor and evidence store:** independently verifies source and destination chain evidence, confirmation/finality, payment IDs, reorgs, timeouts, and recovery.
+
+## x402 support boundary
+
+x402 is a payment negotiation/payload standard for paid resource access. Its core message format is separate from scheme- and network-specific signing and settlement. QPC does not currently implement x402.
+
+The official x402 documentation lists an `exact` NEAR implementation in the TypeScript SDK. The published NEAR scheme is x402 v2 and uses a client-signed NEP-366 `SignedDelegateAction` for one NEP-141 `ft_transfer`, followed by facilitator verification and relayer settlement. The scheme lists Ed25519 and secp256k1 signatures, not ML-DSA-65; it therefore must not be described as a post-quantum route. See the [x402 SDK matrix](https://docs.x402.org/sdk-features) and [NEAR exact scheme](https://github.com/x402-foundation/x402/blob/main/specs/schemes/exact/scheme_exact_near.md).
+
+x402 itself does not provide shielded-payment privacy, cross-chain routing, or anonymity. A facilitator and the underlying network/asset scheme determine what is verified, settled, and observable. Any future QPC adapter must specify supported schemes, network IDs, facilitator trust, spending controls, receipt verification, and metadata exposure. Do not label an x402 handshake as a private or post-quantum payment.
 
 ## Typed payment intent
 
@@ -50,6 +58,8 @@ Use typed canonical payloads and domain-separated signatures. Do not rely only o
 
 ## Example A: Agent A on NEAR pays Agent B on Zcash
 
+The following is a **target architecture flow**, not an executable QPC payment route. Current code can prepare a local NEAR-to-Zcash request payload only; it cannot resolve the private recipient, send ZEC, or verify a shielded receipt.
+
 1. **Private recipient registration:** Agent B supplies a Zcash Unified Address through a private authenticated channel. The address is held only inside the destination wallet adapter; it is not written to a NEAR event or public route message.
 2. **Shielded receiver validation:** the adapter decodes the UA for the expected Zcash network and selects an allowed shielded receiver. Prefer Orchard. Sapling may be accepted when explicitly supported by the wallet and policy. If no allowed shielded receiver is present, reject the payment. Never silently fall back to a transparent t-address.
 3. **Opaque destination reference:** create a random opaque payment reference or commitment that does not encode the UA, viewing key, agent identity, or note data. Bind it to the payment ID and expiry in private adapter state.
@@ -61,6 +71,8 @@ Use typed canonical payloads and domain-separated signatures. Do not rely only o
 9. **Completion or reconciliation:** mark complete only after the destination wallet evidence and source/provider evidence satisfy policy. If either side is ambiguous, move to PENDING_RECONCILIATION; do not report success. Refund or compensation follows the selected provider's documented mechanism and must not produce both a refund and a destination payment for one payment ID.
 
 ## Example B: Agent A on Zcash pays Agent B on NEAR
+
+This is also a target flow, not a currently supported Zcash-origin payment. The adapter has no wallet-key import or shielded transaction send path.
 
 1. Agent B publishes a signed NEAR endpoint manifest. Agent A verifies endpoint ownership and the accepted NEAR asset and amount bounds.
 2. Agent A's runtime creates a typed intent binding the Zcash source wallet, NEAR destination account, asset conversion, quote expiry, unique payment ID, and durable nonce.
@@ -74,22 +86,21 @@ Use typed canonical payloads and domain-separated signatures. Do not rely only o
 
 ## Same-chain and cross-chain modes
 
-- **Same-chain NEAR/EVM/Solana:** chain-local transfer or escrow; no bridge is involved.
-- **Cross-chain into Zcash:** source chain authorizes and settles through a provider; Zcash adapter validates a private UA, requires a shielded receiver, syncs wallet state, and verifies incoming receipt.
-- **Cross-chain from Zcash:** local wallet/policy authorizes a shielded source payment; a separately reviewed provider pays the destination chain. Zcash does not run QPC smart contracts.
-- **Cross-chain same asset:** use a supported bridge or liquidity route with explicit source/destination evidence.
-- **Cross-chain different asset:** use an intent/solver or exchange route with explicit conversion, fees, slippage, and minimum received.
+- **Same-chain NEAR:** a NEP-141 escrow prototype exists; it is not an audited or deployed production service.
+- **NEAR to Ethereum:** a NEAR Intents 1Click router prototype prepares/submits a source deposit and checks route status; tests use mocks and do not prove live end-to-end settlement.
+- **Cross-chain into or from Zcash:** design only beyond request preparation and local adapter primitives. No shielded send, live recipient receipt, or provider route is implemented.
+- **Other cross-chain routes:** require a configured and tested provider with explicit source/destination evidence, asset conversion, fees, slippage, and recovery terms.
 - **No supported route:** reject safely. Never simulate settlement or imply that a route exists when none is configured and tested.
 
 ## Network and adapter matrix
 
 | Network | QPC enforcement | Payment layer | Endpoint |
 |---|---|---|---|
-| NEAR | NEAR-native Rust contract | NEAR native asset / NEP-141 FT; same-chain escrow prototype | NEAR account |
+| NEAR | NEAR-native Rust policy contract; NEP-141 escrow prototype | Same-chain escrow prototype; separate NEAR-to-Ethereum 1Click router adapter | NEAR account |
 | Ethereum | Solidity contract | ETH / allowlisted ERC-20 | EVM address |
 | BNB Smart Chain | Separate BSC deployment/configuration | BNB / allowlisted BEP-20-compatible token | BSC address |
-| Solana | Rust/Anchor program | SOL / allowlisted SPL token | Solana public key |
-| Zcash | Agent runtime + Rust wallet adapter; no QPC contract on Zcash | ZEC UTXO wallet; shielded Orchard/Sapling receiving and spending as supported | Private Unified Address |
+| Solana | Separate Rust/Anchor program boundary | No cross-chain route is claimed by this payment architecture | Solana public key |
+| Zcash | Rust wallet-adapter prototype; no QPC contract on Zcash | UA parsing/receiver policy and wallet/sync scaffolding only; no transaction send or live shielded receipt | Private Unified Address |
 
 Each network has its own chain/program ID, token registry, authority, nonce domain, event format, confirmation/finality rules, and recovery process. A shared agent identity does not merge chain state or balances.
 
@@ -170,8 +181,9 @@ A truthful end-to-end demo must show a real supported provider quote, policy aut
 
 ## Current implementation status
 
-- **NEAR:** policy-constrained asynchronous dispatch and a same-chain NEP-141 escrow prototype exist. The tests exercise contract state and policy boundaries; unit tests do not execute the full NEAR receipt graph or prove a bridge route.
+- **NEAR:** policy-constrained asynchronous dispatch and a same-chain NEP-141 escrow prototype exist. The separate NEAR-to-Ethereum 1Click router adapter has mocked tests; neither those tests nor provider status responses alone prove live destination settlement.
 - **Zcash:** the Rust adapter contains Unified Address parsing/shielded receiver policy, a wallet SQLite initialization boundary, compact-block SQLite cache, Testnet light-client sync entry point, payment state tracking, and durable SQLite nonce/replay storage. The current prototype does **not** construct, sign, or broadcast Zcash transactions; it does not import a seed or viewing key; and no live Testnet synchronization or cross-chain provider settlement is claimed by the local tests.
-- **Cross-chain:** no production bridge/provider route, universal agent runtime, or trustless atomic settlement is implemented or deployed. Treat cross-chain flows above as specifications until the stated acceptance evidence exists.
+- **Cross-chain:** the NEAR-to-Ethereum 1Click adapter is a local prototype with mocked tests; no live end-to-end provider route, production deployment, universal agent runtime, or trustless atomic settlement is established. Treat other cross-chain flows above as specifications until the stated acceptance evidence exists.
+- **x402:** no QPC client, server, facilitator, scheme adapter, or receipt-verification integration is present.
 
 No deployment, mainnet transaction, wallet key import, or real payment is authorized by this document.

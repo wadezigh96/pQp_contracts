@@ -2,9 +2,9 @@
 
 ## Purpose
 
-QPC (Quantum Persistence Contract) is designed as a chain-separated security protocol. It aims to enforce least-privilege policies for agent-initiated actions and to provide a reviewed path toward post-quantum authorization.
+QPC (Quantum Persistence Contract) is an experimental, chain-separated security project. It explores least-privilege policies for agent-initiated actions; the name does not mean its contracts are post-quantum.
 
-The repository intentionally separates four components: Ethereum, BNB Smart Chain, Solana, and post-quantum cryptography (PQC).
+The repository separates Ethereum and BNB Smart Chain EVM adapters, NEAR-native contracts, a Solana program boundary, a Zcash wallet-adapter prototype, and a post-quantum cryptography (PQC) integration boundary.
 
 ## Component boundaries
 
@@ -18,6 +18,11 @@ Path: `contracts/bsc/`
 
 A separate BSC Solidity adapter. It may use the shared EVM policy core, but must have independent chain ID checks, deployment configuration, addresses, tests and release validation. Sharing source code does not mean sharing deployments or state.
 
+### NEAR
+Path: `near/`
+
+NEAR-native Rust policy and same-chain NEP-141 escrow prototypes. NEAR runtime ML-DSA-65 access-key signing, where supported by the selected network and tooling, authenticates the submitted transaction; it does not add an ML-DSA verifier to the QPC contract or make NEAR consensus post-quantum. See the [NEAR post-quantum experiment plan](near/POST_QUANTUM_EXPERIMENTS.md).
+
 ### Solana
 Path: `contracts/solana/`
 
@@ -26,7 +31,7 @@ An independent Rust program boundary. Solana account ownership, PDA derivation, 
 ### Post-quantum cryptography
 Path: `contracts/pqc/`
 
-A separate cryptographic subsystem specification and integration boundary. It covers signature verification and key establishment, not a fourth blockchain. FIPS 204 ML-DSA and FIPS 205 SLH-DSA are signature standards; FIPS 203 ML-KEM is key establishment and is not a signature scheme. No cryptographic algorithm is claimed to be implemented until a maintained implementation and test vectors are integrated and reviewed.
+A separate cryptographic subsystem specification and integration boundary. It covers signature verification and key establishment, not a blockchain. FIPS 204 ML-DSA and FIPS 205 SLH-DSA are signature standards; FIPS 203 ML-KEM is key establishment and is not a signature scheme. No QPC-owned PQ algorithm or verifier is implemented. NEAR's support for ML-DSA access-key transaction signatures is a network capability, not an integration in this repository's contract code; see [NEAR's access-key documentation](https://docs.near.org/protocol/accounts-contracts/access-keys).
 
 ## EVM source sharing
 
@@ -42,7 +47,9 @@ A separate cryptographic subsystem specification and integration boundary. It co
 
 ## Current implementation limits
 
-The inherited EVM prototype is not a complete universal cybersecurity system. It does not protect validators, consensus, RPC providers, wallets, bridges, or external contracts. Its selector allowlist does not validate all semantic arguments. It is not post-quantum and has not been independently audited.
+The EVM policy prototype is not a complete universal cybersecurity system. It does not protect validators, consensus, RPC providers, wallets, bridges, or external contracts. Its selector allowlist does not validate all semantic arguments. It is not post-quantum and has not been independently audited.
+
+The NEAR contracts also have no in-contract ML-DSA/SLH-DSA verification. A transaction signed with a NEAR ML-DSA access key is not evidence that QPC itself verified that signature, and it does not make validator/block signatures or cross-chain threshold signing post-quantum. The Zcash adapter is a Rust prototype without shielded transaction construction, signing, broadcast, or a live cross-chain settlement path. QPC has no x402 adapter; x402's payment negotiation format alone does not provide private settlement or post-quantum signing.
 
 ## Testing strategy
 

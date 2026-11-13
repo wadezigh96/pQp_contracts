@@ -54,7 +54,7 @@ Consume a unique source payment key and source execution reference before token 
 
 ## Cryptography and implementation strategy
 
-NEAR block approvals use Ed25519 signatures and stake-weighted consensus. A direct Solidity implementation must correctly handle NEAR public-key/signature encodings, Borsh serialization, SHA-256 header hashing, epoch transitions, and stake threshold arithmetic. This is not interchangeable with the ECDSA validator-quorum signatures currently used by QPC.
+NEAR block approvals currently use Ed25519 signatures and stake-weighted consensus. NEAR's [post-quantum roadmap](https://www.near.org/blog/near-quantum-safe-roadmap) distinguishes account transaction signing from validator consensus; ML-DSA-65 access keys therefore do not make this light-client verification path post-quantum. A direct Solidity implementation must correctly handle NEAR public-key/signature encodings, Borsh serialization, SHA-256 header hashing, epoch transitions, and stake threshold arithmetic. This is not interchangeable with the ECDSA validator-quorum signatures currently used by QPC.
 
 Recommended route:
 1. Build a reproducible off-chain reference verifier in Rust against official NEAR light-client data structures and fixtures.

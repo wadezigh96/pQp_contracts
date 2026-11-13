@@ -1,21 +1,23 @@
 # QPC — Quantum Persistence Contract
 
-**A chain-separated security architecture for Ethereum, BNB Smart Chain, Solana, and post-quantum cryptography.**
+**A chain-separated security project with EVM and NEAR policy prototypes, a Solana program boundary, a Zcash wallet-adapter prototype, and a post-quantum integration boundary.**
 
-QPC is a security protocol project. Its goal is to enforce explicit, least-privilege policies around agent-initiated on-chain actions and to prepare cryptographic identity and authorization for post-quantum standards.
+QPC explores explicit, least-privilege policies for agent-initiated on-chain actions. Its post-quantum work distinguishes chain-provided transaction authentication from cryptography implemented by QPC itself.
 
-> **Important status:** the current Solidity implementation is an EVM policy prototype. It is not yet a post-quantum cryptographic implementation, is not a Solana program, and has not been independently audited. Do not use it to protect production funds.
+> **Important status:** the Solidity and NEAR contracts are experimental policy prototypes; neither has an in-contract post-quantum verifier, and the repository has not been independently audited. The Solana path is a separate program boundary, not the Solidity implementation. Do not use these prototypes to protect production funds.
 
-## Four deliberately separated components
+## Separate implementation boundaries
 
 | Component | Directory | Role |
 |---|---|---|
 | Ethereum | `contracts/ethereum/` | Ethereum-specific QPC deployment adapter |
 | BNB Smart Chain | `contracts/bsc/` | BSC-specific QPC deployment adapter |
+| NEAR | `near/` | NEAR-native policy and same-chain escrow prototypes |
 | Solana | `contracts/solana/` | Independent Rust/Anchor program workspace boundary |
+| Zcash | `zcash/` | Rust wallet-adapter prototype; no QPC smart contract on Zcash |
 | Post-quantum cryptography | `contracts/pqc/` | PQ signature/key-establishment design and integration boundary |
 
-The Ethereum and BSC adapters share only the reviewed EVM policy core in `contracts/shared/`. They have separate entry-point contracts, deployment scripts, chain configuration and test targets. Solana is a separate Rust program; it must not import Solidity or inherit EVM assumptions. PQC is a separate cryptographic subsystem and must not be confused with a chain-specific token or contract.
+The Ethereum and BSC adapters share the EVM policy core in `contracts/shared/`, but use separate entry-point contracts, deployment scripts, chain configuration and test targets. NEAR and Solana are separate Rust program boundaries and must not inherit EVM assumptions. The Zcash code is a wallet/transaction adapter, not a deployed QPC contract. PQC is a separate cryptographic subsystem, not a chain or token.
 
 ## Security principles
 
@@ -27,11 +29,22 @@ The Ethereum and BSC adapters share only the reviewed EVM policy core in `contra
 
 ## Post-quantum standards
 
-The intended standards track is NIST FIPS 204 (ML-DSA) and FIPS 205 (SLH-DSA) for digital signatures. FIPS 203 (ML-KEM) is for key establishment, not transaction signing. No algorithm is considered active until a maintained implementation, test vectors, key formats, domain separation, replay protection and chain-specific verification costs have been independently reviewed.
+NIST FIPS 204 (ML-DSA) and FIPS 205 (SLH-DSA) are digital-signature standards. FIPS 203 (ML-KEM) is for key establishment, not transaction signing. No QPC-owned PQ signature verifier is implemented in this repository.
+
+NEAR's protocol supports ML-DSA-65 access keys for signing transactions, as documented in [NEAR Access Keys](https://docs.near.org/protocol/accounts-contracts/access-keys). This protects only the relevant account-transaction signing path. It does not mean the QPC NEAR contract verifies ML-DSA itself, nor that NEAR consensus, cross-chain threshold signing, Ethereum settlement, or every wallet/tooling path is post-quantum. See the [NEAR experiment plan](near/POST_QUANTUM_EXPERIMENTS.md) and [official NEAR roadmap](https://www.near.org/blog/near-quantum-safe-roadmap).
+
+## Agentic payments, privacy, and x402
+
+The repository contains a NEAR-to-Ethereum router prototype using NEAR Intents 1Click and a separate NEAR-to-Zcash helper that prepares a local shielded-request payload. Local tests do not prove live provider settlement. The Zcash adapter does not yet construct, sign, or broadcast shielded transactions, so this is not an end-to-end private payment feature.
+
+There is no x402 adapter in QPC today. x402 is a payment negotiation and payload standard with scheme- and network-specific implementations; the official SDK documents an `exact` NEAR implementation in TypeScript. That NEAR scheme is x402 v2 and specifies `ed25519`/`secp256k1` signatures, not ML-DSA-65. x402 itself does not provide shielded-payment privacy or a post-quantum guarantee. See the [x402 SDK support matrix](https://docs.x402.org/sdk-features) and [NEAR exact scheme specification](https://github.com/x402-foundation/x402/blob/main/specs/schemes/exact/scheme_exact_near.md).
 
 ## Repository layout
 
 ```
+near/             # NEAR-native policy and same-chain escrow prototypes
+zcash/            # Rust wallet-adapter prototype; no shielded transaction send path
+agent-router/     # NEAR-to-Ethereum 1Click prototype and local-only NEAR-to-Zcash request builder
 contracts/
   shared/       # EVM policy core shared by ETH and BSC adapters
   ethereum/     # Ethereum-only adapter and deployment config
@@ -55,7 +68,7 @@ forge build
 forge test
 ```
 
-Solana workspace and PQC integrations are not production-ready and are not included in the EVM test command. Each must gain its own reproducible build, unit tests, integration tests and security review before being advertised as implemented.
+NEAR, Solana, Zcash and PQC components have separate build/test requirements and are not covered by the EVM test command. Passing one component's tests does not establish another component's integration or production readiness.
 
 ## Audit and deployment policy
 
@@ -64,10 +77,10 @@ This repository has not received an independent audit. Passing tests do not prov
 **Separate chains. Separate contracts. Separate cryptographic trust boundaries.**
 
 
-## Zcash privacy adapter (design only)
+## Zcash privacy adapter (prototype; no payment send path)
 
-QPC also defines a separate Zcash wallet/transaction adapter under `zcash/`. This is **not** a smart contract deployed on Zcash. Its design prioritizes shielded payments through Unified Addresses, disables silent transparent-address fallback, keeps viewing keys and recipient addresses out of public cross-chain messages, and documents metadata leakage from bridges, solvers, relayers, and wallet providers.
+QPC has a separate Rust Zcash wallet-adapter prototype under `zcash/`; it is **not** a smart contract deployed on Zcash. Current code covers Unified Address parsing, shielded-receiver policy, SQLite wallet/cache scaffolding, and payment-ID/nonce state. It does not import keys, construct/sign/broadcast shielded transactions, prove a live recipient receipt, or settle through a bridge/provider. The privacy design rejects transparent-only receivers and documents metadata leakage from routes and wallet infrastructure.
 
-The Zcash adapter is currently a **design specification only**. No Zcash wallet, shielded transaction builder, light-client verifier, bridge, or production settlement path is claimed to be implemented. See [the Zcash privacy architecture and threat model](zcash/QPC_ZCASH_PRIVACY_ARCHITECTURE.md) and [the adapter README](zcash/README.md).
+See [the Zcash privacy architecture and threat model](zcash/QPC_ZCASH_PRIVACY_ARCHITECTURE.md) and [the adapter README](zcash/README.md) for the exact implementation boundary.
 
 A shielded Zcash destination does not make a cross-chain payment fully anonymous: source-chain activity, amounts, timing, route providers, and network metadata may still permit correlation. QPC must disclose those limits and fail closed when the required privacy properties cannot be met.
