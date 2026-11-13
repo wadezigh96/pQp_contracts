@@ -90,14 +90,11 @@ pub async fn probe_testnet_lightwalletd(
             .map_err(|_| LightwalletdError::ConnectFailed)?
             .max_decoding_message_size(MAX_RESPONSE_BYTES);
 
-    let info = tokio::time::timeout(
-        RPC_TIMEOUT,
-        client.get_lightd_info(Empty {}),
-    )
-    .await
-    .map_err(|_| LightwalletdError::RpcTimeout)?
-    .map_err(|_| LightwalletdError::RpcFailed)?
-    .into_inner();
+    let info = tokio::time::timeout(RPC_TIMEOUT, client.get_lightd_info(Empty {}))
+        .await
+        .map_err(|_| LightwalletdError::RpcTimeout)?
+        .map_err(|_| LightwalletdError::RpcFailed)?
+        .into_inner();
 
     if info.chain_name != "test" {
         return Err(LightwalletdError::WrongNetwork);
