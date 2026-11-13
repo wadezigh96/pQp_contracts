@@ -9,7 +9,8 @@ This crate is a policy enforcement and audit-recording boundary. It does not cal
 ## Implemented
 
 - Owner-only agent policy configuration and revocation.
-- Bound router account, policy ID/version, expiry, per-payment limit, cumulative cap, and monotonic per-agent nonce.
+- Bound router account, owner-approved opaque-recipient allowlist, policy ID/version, expiry, per-payment limit, cumulative cap, and monotonic per-agent nonce.
+- Revocation keeps the nonce/version record; reactivation increments the policy version without resetting the replay counter.
 - Fixed action (pay_zcash_shielded), destination (zcash:testnet), and privacy mode (SHIELDED_ONLY).
 - Canonical payment-argument hash verification using the same domain and JSON field order as agent-router/src/index.mjs.
 - Payment-ID replay rejection and spending accounting.
