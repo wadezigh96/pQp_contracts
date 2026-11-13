@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   zcash-adapter:
-    name: Zcash address and policy adapter tests
+    name: Zcash address, wallet storage, and policy tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -32,8 +32,8 @@ jobs:
         with:
           workspaces: zcash/qpc-zcash-agent
       - name: Check Rust formatting
-        run: cargo fmt --all
-      - name: Run adapter tests
+        run: cargo fmt --all -- --check
+      - name: Run adapter and wallet storage tests
         run: cargo test
-      - name: Compile adapter
+      - name: Compile adapter and wallet backend
         run: cargo check

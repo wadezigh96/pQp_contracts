@@ -1,15 +1,16 @@
 //! QPC Zcash wallet-adapter boundary.
 //!
-//! This crate parses ZIP-316 Unified Addresses and enforces a shielded-first
-//! intent boundary. It does not hold keys, sign, broadcast, sync notes, or claim
-//! consensus/receipt verification. Those operations require a separately audited
-//! Zcash wallet backend. The default policy is shielded-only and fails closed.
+//! This crate parses ZIP-316 Unified Addresses, initializes an official SQLite
+//! light-wallet database, and enforces a shielded-first intent boundary. It does
+//! not create spending keys, sign, broadcast, or claim receipt verification.
 
 use std::collections::HashSet;
 use std::convert::Infallible;
 
 use zcash_address::{unified, ConversionError, TryFromAddress, ZcashAddress};
 use zcash_protocol::{consensus::NetworkType, PoolType, ShieldedPool};
+
+pub mod wallet;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ZcashNetwork {
