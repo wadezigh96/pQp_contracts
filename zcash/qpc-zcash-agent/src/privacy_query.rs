@@ -69,10 +69,7 @@ impl std::error::Error for PirError {}
 /// Implementations must not log payloads, add query values to URLs, or downgrade
 /// to ordinary explorer endpoints. The server may still observe IP and timing.
 pub trait PirTransport {
-    fn exchange(
-        &self,
-        query: &EncryptedPirQuery,
-    ) -> Result<EncryptedPirResponse, PirError>;
+    fn exchange(&self, query: &EncryptedPirQuery) -> Result<EncryptedPirResponse, PirError>;
 }
 
 /// Read-only PIR client. There is intentionally no public-explorer fallback.
@@ -102,10 +99,7 @@ mod tests {
     struct EchoCiphertextTransport;
 
     impl PirTransport for EchoCiphertextTransport {
-        fn exchange(
-            &self,
-            query: &EncryptedPirQuery,
-        ) -> Result<EncryptedPirResponse, PirError> {
+        fn exchange(&self, query: &EncryptedPirQuery) -> Result<EncryptedPirResponse, PirError> {
             EncryptedPirResponse::from_ciphertext(query.as_bytes().to_vec())
         }
     }
@@ -113,10 +107,7 @@ mod tests {
     struct FailingTransport;
 
     impl PirTransport for FailingTransport {
-        fn exchange(
-            &self,
-            _query: &EncryptedPirQuery,
-        ) -> Result<EncryptedPirResponse, PirError> {
+        fn exchange(&self, _query: &EncryptedPirQuery) -> Result<EncryptedPirResponse, PirError> {
             Err(PirError::PlaintextFallbackForbidden)
         }
     }
@@ -157,9 +148,6 @@ mod tests {
     fn failed_pir_never_falls_back_to_plaintext_transport() {
         let client = PrivateExplorerClient::new(FailingTransport);
         let query = EncryptedPirQuery::from_ciphertext(vec![0x10, 0x20]).unwrap();
-        assert_eq!(
-            client.query(&query),
-            Err(PirError::TransportUnavailable)
-        );
+        assert_eq!(client.query(&query), Err(PirError::TransportUnavailable));
     }
 }

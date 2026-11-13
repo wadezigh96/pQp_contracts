@@ -15,8 +15,8 @@ use sha2::{Digest, Sha256};
 use zcash_address::{unified, ConversionError, TryFromAddress, ZcashAddress};
 use zcash_protocol::{consensus::NetworkType, PoolType, ShieldedPool};
 
-pub mod wallet;
 pub mod privacy_query;
+pub mod wallet;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ZcashNetwork {
@@ -319,8 +319,8 @@ impl ReplayGuard {
 
         #[cfg(unix)]
         {
-            let directory = File::open(&self.directory)
-                .map_err(|_| AdapterError::ReplayStoreUnavailable)?;
+            let directory =
+                File::open(&self.directory).map_err(|_| AdapterError::ReplayStoreUnavailable)?;
             directory
                 .sync_all()
                 .map_err(|_| AdapterError::ReplayStoreUnavailable)?;
@@ -344,8 +344,7 @@ fn create_private_replay_directory(path: &Path) -> std::io::Result<()> {
 }
 
 fn validate_private_directory(path: &Path) -> Result<(), AdapterError> {
-    let metadata =
-        fs::symlink_metadata(path).map_err(|_| AdapterError::ReplayStoreUnavailable)?;
+    let metadata = fs::symlink_metadata(path).map_err(|_| AdapterError::ReplayStoreUnavailable)?;
     if metadata.file_type().is_symlink() || !metadata.is_dir() {
         return Err(AdapterError::ReplayStoreUnavailable);
     }
@@ -381,9 +380,7 @@ pub fn validate_intent(
     now_unix: u64,
 ) -> Result<(), AdapterError> {
     let valid_identifier = |value: &str| {
-        !value.is_empty()
-            && value.len() <= 128
-            && value.bytes().all(|byte| byte.is_ascii_graphic())
+        !value.is_empty() && value.len() <= 128 && value.bytes().all(|byte| byte.is_ascii_graphic())
     };
     if !valid_identifier(&intent.payment_id)
         || !valid_identifier(&intent.source_chain)
@@ -447,10 +444,7 @@ pub fn select_shielded_receiver(
     Err(AdapterError::NoPermittedShieldedReceiver)
 }
 
-pub fn transition(
-    current: PaymentState,
-    next: PaymentState,
-) -> Result<PaymentState, AdapterError> {
+pub fn transition(current: PaymentState, next: PaymentState) -> Result<PaymentState, AdapterError> {
     use PaymentState::*;
     let allowed = matches!(
         (current, next),
@@ -468,7 +462,11 @@ pub fn transition(
             | (BroadcastPending, Failed)
             | (PendingReconciliation, Confirming)
     );
-    if allowed { Ok(next) } else { Err(AdapterError::InvalidTransition) }
+    if allowed {
+        Ok(next)
+    } else {
+        Err(AdapterError::InvalidTransition)
+    }
 }
 
 #[cfg(test)]
@@ -515,10 +513,8 @@ mod tests {
     #[test]
     fn official_parser_rejects_wrong_network() {
         assert_eq!(
-            LibrustZcashAddressValidator.validate_unified_address(
-                VALID_TESTNET_UA,
-                ZcashNetwork::Mainnet,
-            ),
+            LibrustZcashAddressValidator
+                .validate_unified_address(VALID_TESTNET_UA, ZcashNetwork::Mainnet,),
             Err(AdapterError::WrongNetwork)
         );
     }
@@ -526,10 +522,8 @@ mod tests {
     #[test]
     fn official_parser_rejects_malformed_address() {
         assert_eq!(
-            LibrustZcashAddressValidator.validate_unified_address(
-                "utest1-not-a-valid-address",
-                ZcashNetwork::Testnet,
-            ),
+            LibrustZcashAddressValidator
+                .validate_unified_address("utest1-not-a-valid-address", ZcashNetwork::Testnet,),
             Err(AdapterError::InvalidUnifiedAddress)
         );
     }
@@ -572,7 +566,11 @@ mod tests {
     #[test]
     fn rejects_transparent_only_recipient() {
         assert_eq!(
-            validate_intent(&intent(), &recipient(vec![ReceiverKind::Transparent]), 1_000),
+            validate_intent(
+                &intent(),
+                &recipient(vec![ReceiverKind::Transparent]),
+                1_000
+            ),
             Err(AdapterError::TransparentReceiverForbidden)
         );
     }
@@ -645,7 +643,10 @@ mod tests {
         drop(guard);
 
         let reopened = ReplayGuard::open(&store).expect("reopen replay store");
-        assert_eq!(reopened.register("near:mainnet", 7), Err(AdapterError::Replay));
+        assert_eq!(
+            reopened.register("near:mainnet", 7),
+            Err(AdapterError::Replay)
+        );
         assert_eq!(reopened.register("near:mainnet", 8), Ok(()));
     }
 
@@ -691,18 +692,27 @@ mod tests {
 
     #[test]
     fn lifecycle_requires_receipt_verification_before_completion() {
-        assert_eq!(transition(PaymentState::Created, PaymentState::Completed),
-            Err(AdapterError::InvalidTransition));
-        assert_eq!(transition(PaymentState::Created, PaymentState::RecipientValidated),
-            Ok(PaymentState::RecipientValidated));
-        assert_eq!(transition(PaymentState::ReceiptVerified, PaymentState::Completed),
-            Ok(PaymentState::Completed));
+        assert_eq!(
+            transition(PaymentState::Created, PaymentState::Completed),
+            Err(AdapterError::InvalidTransition)
+        );
+        assert_eq!(
+            transition(PaymentState::Created, PaymentState::RecipientValidated),
+            Ok(PaymentState::RecipientValidated)
+        );
+        assert_eq!(
+            transition(PaymentState::ReceiptVerified, PaymentState::Completed),
+            Ok(PaymentState::Completed)
+        );
     }
 
     #[test]
     fn pending_reconciliation_can_resume_confirmation() {
         assert_eq!(
-            transition(PaymentState::PendingReconciliation, PaymentState::Confirming),
+            transition(
+                PaymentState::PendingReconciliation,
+                PaymentState::Confirming
+            ),
             Ok(PaymentState::Confirming)
         );
     }

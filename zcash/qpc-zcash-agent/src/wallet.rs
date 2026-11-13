@@ -7,11 +7,7 @@ use std::fs::{self, OpenOptions};
 use std::path::Path;
 
 use rand_core::OsRng;
-use zcash_client_sqlite::{
-    util::SystemClock,
-    wallet::init::WalletMigrator,
-    WalletDb,
-};
+use zcash_client_sqlite::{util::SystemClock, wallet::init::WalletMigrator, WalletDb};
 use zcash_protocol::consensus::Network;
 
 #[cfg(unix)]
@@ -42,8 +38,8 @@ fn validate_private_directory(path: &Path) -> Result<(), String> {
 }
 
 fn restrict_regular_file(path: &Path) -> Result<(), String> {
-    let metadata = fs::symlink_metadata(path)
-        .map_err(|_| "wallet database file is unavailable".to_owned())?;
+    let metadata =
+        fs::symlink_metadata(path).map_err(|_| "wallet database file is unavailable".to_owned())?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
         return Err("wallet database path must be a regular non-symlink file".into());
     }
@@ -114,13 +110,8 @@ pub fn initialize_testnet_wallet_database(path: impl AsRef<Path>) -> Result<(), 
     let path = path.as_ref();
     prepare_database_file(path)?;
 
-    let mut wallet_db = WalletDb::for_path(
-        path,
-        Network::TestNetwork,
-        SystemClock,
-        OsRng,
-    )
-    .map_err(|_| "wallet database open failed".to_owned())?;
+    let mut wallet_db = WalletDb::for_path(path, Network::TestNetwork, SystemClock, OsRng)
+        .map_err(|_| "wallet database open failed".to_owned())?;
 
     WalletMigrator::new()
         .init_or_migrate(&mut wallet_db)
