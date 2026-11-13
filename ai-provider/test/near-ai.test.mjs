@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createNearAIProvider } from '../src/near-ai.mjs';
+import { AIProvider } from '../src/provider.mjs';
 
 const env = {
   NEARAI_API_KEY: 'test-secret-not-real',
@@ -106,6 +107,7 @@ test('adapter has no wallet or transaction signing surface', () => {
   const { factory } = fakeFactory();
   const provider = createNearAIProvider({ env, clientFactory: factory });
   assert.deepEqual(Object.keys(provider).sort(), ['generate', 'getCapabilities', 'verifyDeployment']);
+  assert.equal(provider instanceof AIProvider, true);
 });
 
 test('configures SDK for E2EE, fresh attestation checks, and no OHTTP assumption', async () => {
