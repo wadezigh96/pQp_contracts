@@ -25,7 +25,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24.22.1"
-      - name: Install pinned dependencies
+      - name: Install package dependencies
         run: npm install --ignore-scripts --no-audit --no-fund
       - name: Run offline contract tests
         run: npm test
