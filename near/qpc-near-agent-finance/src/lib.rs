@@ -304,6 +304,7 @@ mod tests {
 
     #[test]
     fn rust_hash_matches_agent_router_fixture() {
+        context("owner.testnet", NOW);
         assert_eq!(
             compute_policy_args_hash(
                 "pay-2026-0001",
