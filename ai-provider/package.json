@@ -1,0 +1,12 @@
+{
+  "name": "@qpc/ai-provider",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "QPC provider-neutral AI inference boundary with fail-closed NEAR AI Cloud adapter",
+  "engines": { "node": ">=24.22.1" },
+  "main": "./src/index.mjs",
+  "exports": { ".": "./src/index.mjs" },
+  "scripts": { "test": "node --test" },
+  "dependencies": { "@nearai/inference-sdk": "0.3.0" }
+}
