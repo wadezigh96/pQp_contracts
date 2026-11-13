@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {QPCAgentFinance} from "../contracts/QPCAgentFinance.sol";
+import {POAAgentFinance} from "../contracts/POAAgentFinance.sol";
 
 interface Vm {
     function prank(address) external;
@@ -23,16 +23,16 @@ contract MockToken {
 }
 
 contract ReentrantTarget {
-    QPCAgentFinance internal immutable qpc;
+    POAAgentFinance internal immutable poa;
     bool public attempted;
 
-    constructor(address payable _qpc) { qpc = QPCAgentFinance(_qpc); }
+    constructor(address payable _poa) { poa = POAAgentFinance(_poa); }
 
     function attack() external payable {
         attempted = true;
-        (bool ok,) = address(qpc).call(
+        (bool ok,) = address(poa).call(
             abi.encodeWithSelector(
-                qpc.execute.selector,
+                poa.execute.selector,
                 address(this),
                 0,
                 abi.encodeWithSelector(this.attack.selector)
@@ -42,9 +42,9 @@ contract ReentrantTarget {
     }
 }
 
-contract QPCAgentFinanceSecurityTest {
+contract POAAgentFinanceSecurityTest {
     Vm internal constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
-    QPCAgentFinance internal qpc;
+    POAAgentFinance internal poa;
     ReentrantTarget internal target;
 
     address internal constant OWNER = address(0x1001);
@@ -55,31 +55,31 @@ contract QPCAgentFinanceSecurityTest {
     MockToken internal token;
 
     function setUp() public {
-        qpc = new QPCAgentFinance(OWNER);
-        target = new ReentrantTarget(payable(address(qpc)));
+        poa = new POAAgentFinance(OWNER);
+        target = new ReentrantTarget(payable(address(poa)));
         token = new MockToken();
     }
 
     function configure(uint256 cap, uint256 txLimit, uint256 duration) internal {
         vm.prank(OWNER);
-        qpc.configureAgent(AGENT, uint64(block.timestamp + duration), cap, txLimit);
+        poa.configureAgent(AGENT, uint64(block.timestamp + duration), cap, txLimit);
     }
 
     function allowTarget() internal {
         vm.prank(OWNER);
-        qpc.setCallPermission(AGENT, address(target), ReentrantTarget.attack.selector, true);
+        poa.setCallPermission(AGENT, address(target), ReentrantTarget.attack.selector, true);
     }
 
     function fund(uint256 amount) internal {
-        (bool ok,) = address(qpc).call{value: amount}("");
+        (bool ok,) = address(poa).call{value: amount}("");
         require(ok, "funding failed");
     }
 
     function callAsAgent(uint256 value) internal returns (bool ok) {
         vm.prank(AGENT);
-        (ok,) = address(qpc).call(
+        (ok,) = address(poa).call(
             abi.encodeWithSelector(
-                qpc.execute.selector,
+                poa.execute.selector,
                 address(target),
                 value,
                 abi.encodeWithSelector(target.attack.selector)
@@ -87,7 +87,7 @@ contract QPCAgentFinanceSecurityTest {
         );
     }
 
-    function testOwner() public view { require(qpc.owner() == OWNER, "owner"); }
+    function testOwner() public view { require(poa.owner() == OWNER, "owner"); }
 
     function testTxLimit() public {
         configure(10 ether, 1 ether, 1 days);
@@ -110,7 +110,7 @@ contract QPCAgentFinanceSecurityTest {
         fund(1 ether);
         vm.warp(block.timestamp + 1 days);
         require(!callAsAgent(1 ether), "expired execution allowed");
-        require(qpc.agentRemainingNative(AGENT) == 0, "expired allowance");
+        require(poa.agentRemainingNative(AGENT) == 0, "expired allowance");
     }
 
     function testRevoke() public {
@@ -118,7 +118,7 @@ contract QPCAgentFinanceSecurityTest {
         allowTarget();
         fund(1 ether);
         vm.prank(OWNER);
-        qpc.revokeAgent(AGENT);
+        poa.revokeAgent(AGENT);
         require(!callAsAgent(1 ether), "revoked execution allowed");
     }
 
@@ -127,7 +127,7 @@ contract QPCAgentFinanceSecurityTest {
         allowTarget();
         fund(1 ether);
         vm.prank(OWNER);
-        qpc.setPaused(true);
+        poa.setPaused(true);
         require(!callAsAgent(1 ether), "pause bypass");
     }
 
@@ -144,7 +144,7 @@ contract QPCAgentFinanceSecurityTest {
         fund(1 ether);
 
         vm.prank(OWNER);
-        qpc.setCallPermission(AGENT, address(target), ReentrantTarget.attack.selector, false);
+        poa.setCallPermission(AGENT, address(target), ReentrantTarget.attack.selector, false);
 
         require(!callAsAgent(1 ether), "revoked call permission still works");
     }
@@ -155,19 +155,19 @@ contract QPCAgentFinanceSecurityTest {
         vm.warp(block.timestamp + 1 days);
 
         vm.prank(OWNER);
-        qpc.configureAgent(AGENT, uint64(block.timestamp + 2 days), 20 ether, 5 ether);
+        poa.configureAgent(AGENT, uint64(block.timestamp + 2 days), 20 ether, 5 ether);
 
-        (bool active,,uint256 cap,,uint256 txLimit) = qpc.agents(AGENT);
+        (bool active,,uint256 cap,,uint256 txLimit) = poa.agents(AGENT);
         require(active && cap == 20 ether && txLimit == 5 ether, "expired reconfigure failed");
     }
 
     function testOwnershipHandshake() public {
         vm.prank(OWNER);
-        qpc.transferOwnership(NEW_OWNER);
-        require(qpc.owner() == OWNER, "early ownership change");
+        poa.transferOwnership(NEW_OWNER);
+        require(poa.owner() == OWNER, "early ownership change");
         vm.prank(NEW_OWNER);
-        qpc.acceptOwnership();
-        require(qpc.owner() == NEW_OWNER, "ownership not accepted");
+        poa.acceptOwnership();
+        require(poa.owner() == NEW_OWNER, "ownership not accepted");
     }
 
     function testReentrancy() public {
@@ -180,9 +180,9 @@ contract QPCAgentFinanceSecurityTest {
 
     function testRejectZeroNativePolicy() public {
         vm.prank(OWNER);
-        (bool ok,) = address(qpc).call(
+        (bool ok,) = address(poa).call(
             abi.encodeWithSelector(
-                qpc.configureAgent.selector,
+                poa.configureAgent.selector,
                 AGENT,
                 uint64(block.timestamp + 1 days),
                 0,
@@ -194,9 +194,9 @@ contract QPCAgentFinanceSecurityTest {
 
     function testRejectTxLimitAboveNativeCap() public {
         vm.prank(OWNER);
-        (bool ok,) = address(qpc).call(
+        (bool ok,) = address(poa).call(
             abi.encodeWithSelector(
-                qpc.configureAgent.selector,
+                poa.configureAgent.selector,
                 AGENT,
                 uint64(block.timestamp + 1 days),
                 1 ether,
@@ -208,9 +208,9 @@ contract QPCAgentFinanceSecurityTest {
 
     function testRejectZeroSelector() public {
         vm.prank(OWNER);
-        (bool ok,) = address(qpc).call(
+        (bool ok,) = address(poa).call(
             abi.encodeWithSelector(
-                qpc.setCallPermission.selector,
+                poa.setCallPermission.selector,
                 AGENT,
                 address(target),
                 bytes4(0),
@@ -222,9 +222,9 @@ contract QPCAgentFinanceSecurityTest {
 
     function testRejectOwnerAsTarget() public {
         vm.prank(OWNER);
-        (bool ok,) = address(qpc).call(
+        (bool ok,) = address(poa).call(
             abi.encodeWithSelector(
-                qpc.setCallPermission.selector,
+                poa.setCallPermission.selector,
                 AGENT,
                 OWNER,
                 ReentrantTarget.attack.selector,
@@ -236,9 +236,9 @@ contract QPCAgentFinanceSecurityTest {
 
     function testRejectZeroTokenPolicy() public {
         vm.prank(OWNER);
-        (bool ok,) = address(qpc).call(
+        (bool ok,) = address(poa).call(
             abi.encodeWithSelector(
-                qpc.setTokenPolicy.selector,
+                poa.setTokenPolicy.selector,
                 AGENT,
                 TOKEN,
                 0,
@@ -251,14 +251,14 @@ contract QPCAgentFinanceSecurityTest {
     function testRejectZeroTokenTransfer() public {
         configure(10 ether, 1 ether, 1 days);
         vm.prank(OWNER);
-        qpc.setTokenPolicy(AGENT, TOKEN, 100, 100);
+        poa.setTokenPolicy(AGENT, TOKEN, 100, 100);
         vm.prank(OWNER);
-        qpc.setRecipientPermission(AGENT, RECIPIENT, true);
+        poa.setRecipientPermission(AGENT, RECIPIENT, true);
 
         vm.prank(AGENT);
-        (bool ok,) = address(qpc).call(
+        (bool ok,) = address(poa).call(
             abi.encodeWithSelector(
-                qpc.transferToken.selector,
+                poa.transferToken.selector,
                 TOKEN,
                 RECIPIENT,
                 0
@@ -271,9 +271,9 @@ contract QPCAgentFinanceSecurityTest {
 }
 
 
-contract QPCAgentFinanceTokenSecurityTest {
+contract POAAgentFinanceTokenSecurityTest {
     Vm internal constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
-    QPCAgentFinance internal qpc;
+    POAAgentFinance internal poa;
     MockToken internal token;
 
     address internal constant OWNER = address(0x5001);
@@ -281,42 +281,42 @@ contract QPCAgentFinanceTokenSecurityTest {
     address internal constant RECIPIENT = address(0x5003);
 
     function setUp() public {
-        qpc = new QPCAgentFinance(OWNER);
+        poa = new POAAgentFinance(OWNER);
         token = new MockToken();
     }
 
     function configureToken(uint256 cap, uint256 txLimit) internal {
         vm.prank(OWNER);
-        qpc.setTokenPolicy(AGENT, address(token), cap, txLimit);
+        poa.setTokenPolicy(AGENT, address(token), cap, txLimit);
         vm.prank(OWNER);
-        qpc.setRecipientPermission(AGENT, RECIPIENT, true);
+        poa.setRecipientPermission(AGENT, RECIPIENT, true);
     }
 
     function activateAgent() internal {
         vm.prank(OWNER);
-        qpc.configureAgent(AGENT, uint64(block.timestamp + 1 days), 10 ether, 10 ether);
+        poa.configureAgent(AGENT, uint64(block.timestamp + 1 days), 10 ether, 10 ether);
     }
 
     function testTokenTransferWithinLimit() public {
         configureToken(100, 40);
         activateAgent();
-        token.mint(address(qpc), 100);
+        token.mint(address(poa), 100);
 
         vm.prank(AGENT);
-        qpc.transferToken(address(token), RECIPIENT, 40);
+        poa.transferToken(address(token), RECIPIENT, 40);
 
         require(token.balanceOf(RECIPIENT) == 40, "token not transferred");
-        require(qpc.tokenRemaining(AGENT, address(token)) == 60, "remaining token cap wrong");
+        require(poa.tokenRemaining(AGENT, address(token)) == 60, "remaining token cap wrong");
     }
 
     function testTokenTxLimitEnforced() public {
         configureToken(100, 40);
         activateAgent();
-        token.mint(address(qpc), 100);
+        token.mint(address(poa), 100);
 
         vm.prank(AGENT);
-        (bool ok,) = address(qpc).call(abi.encodeWithSelector(
-            qpc.transferToken.selector, address(token), RECIPIENT, 41
+        (bool ok,) = address(poa).call(abi.encodeWithSelector(
+            poa.transferToken.selector, address(token), RECIPIENT, 41
         ));
         require(!ok, "token tx limit bypass");
     }
@@ -324,27 +324,27 @@ contract QPCAgentFinanceTokenSecurityTest {
     function testTokenCumulativeCapEnforced() public {
         configureToken(50, 50);
         activateAgent();
-        token.mint(address(qpc), 100);
+        token.mint(address(poa), 100);
 
         vm.prank(AGENT);
-        qpc.transferToken(address(token), RECIPIENT, 30);
+        poa.transferToken(address(token), RECIPIENT, 30);
 
         vm.prank(AGENT);
-        (bool ok,) = address(qpc).call(abi.encodeWithSelector(
-            qpc.transferToken.selector, address(token), RECIPIENT, 21
+        (bool ok,) = address(poa).call(abi.encodeWithSelector(
+            poa.transferToken.selector, address(token), RECIPIENT, 21
         ));
         require(!ok, "token cumulative cap bypass");
-        require(qpc.tokenRemaining(AGENT, address(token)) == 20, "token accounting changed");
+        require(poa.tokenRemaining(AGENT, address(token)) == 20, "token accounting changed");
     }
 
     function testRecipientAllowlistEnforced() public {
         configureToken(100, 100);
         activateAgent();
-        token.mint(address(qpc), 100);
+        token.mint(address(poa), 100);
 
         vm.prank(AGENT);
-        (bool ok,) = address(qpc).call(abi.encodeWithSelector(
-            qpc.transferToken.selector, address(token), address(0x9999), 1
+        (bool ok,) = address(poa).call(abi.encodeWithSelector(
+            poa.transferToken.selector, address(token), address(0x9999), 1
         ));
         require(!ok, "recipient allowlist bypass");
     }
@@ -352,23 +352,23 @@ contract QPCAgentFinanceTokenSecurityTest {
     function testFailedTokenTransferDoesNotConsumeCap() public {
         configureToken(100, 100);
         activateAgent();
-        token.mint(address(qpc), 100);
+        token.mint(address(poa), 100);
         token.setReturnFalse(true);
 
         vm.prank(AGENT);
-        (bool ok,) = address(qpc).call(abi.encodeWithSelector(
-            qpc.transferToken.selector, address(token), RECIPIENT, 25
+        (bool ok,) = address(poa).call(abi.encodeWithSelector(
+            poa.transferToken.selector, address(token), RECIPIENT, 25
         ));
         require(!ok, "failed transfer accepted");
-        require(qpc.tokenRemaining(AGENT, address(token)) == 100, "failed transfer consumed cap");
+        require(poa.tokenRemaining(AGENT, address(token)) == 100, "failed transfer consumed cap");
     }
 
     function testActiveAgentCannotResetNativeSpent() public {
         activateAgent();
 
         vm.prank(OWNER);
-        (bool ok,) = address(qpc).call(abi.encodeWithSelector(
-            qpc.configureAgent.selector,
+        (bool ok,) = address(poa).call(abi.encodeWithSelector(
+            poa.configureAgent.selector,
             AGENT,
             uint64(block.timestamp + 2 days),
             100 ether,
@@ -380,29 +380,29 @@ contract QPCAgentFinanceTokenSecurityTest {
     function testActiveAgentCannotResetTokenSpent() public {
         configureToken(100, 100);
         activateAgent();
-        token.mint(address(qpc), 100);
+        token.mint(address(poa), 100);
 
         vm.prank(AGENT);
-        qpc.transferToken(address(token), RECIPIENT, 25);
+        poa.transferToken(address(token), RECIPIENT, 25);
 
         vm.prank(OWNER);
-        (bool ok,) = address(qpc).call(abi.encodeWithSelector(
-            qpc.setTokenPolicy.selector, AGENT, address(token), 1000, 1000
+        (bool ok,) = address(poa).call(abi.encodeWithSelector(
+            poa.setTokenPolicy.selector, AGENT, address(token), 1000, 1000
         ));
         require(!ok, "active token policy reset allowed");
-        require(qpc.tokenRemaining(AGENT, address(token)) == 75, "token spent reset");
+        require(poa.tokenRemaining(AGENT, address(token)) == 75, "token spent reset");
     }
 
     function testRevokeThenReconfigureIsAllowed() public {
         activateAgent();
 
         vm.prank(OWNER);
-        qpc.revokeAgent(AGENT);
+        poa.revokeAgent(AGENT);
 
         vm.prank(OWNER);
-        qpc.configureAgent(AGENT, uint64(block.timestamp + 2 days), 20 ether, 5 ether);
+        poa.configureAgent(AGENT, uint64(block.timestamp + 2 days), 20 ether, 5 ether);
 
-        (bool active,,uint256 cap,,uint256 txLimit) = qpc.agents(AGENT);
+        (bool active,,uint256 cap,,uint256 txLimit) = poa.agents(AGENT);
         require(active && cap == 20 ether && txLimit == 5 ether, "reconfigure failed");
     }
 }

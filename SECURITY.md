@@ -2,7 +2,7 @@
 
 ## Scope
 
-QPC Agent Finance is a policy-control layer for agentic finance. It does not attempt to make an agent trustworthy. Instead, it limits what an agent key can do on-chain.
+POA Agent Finance is a policy-control layer for agentic finance. It does not attempt to make an agent trustworthy. Instead, it limits what an agent key can do on-chain.
 
 ## Security boundary
 

@@ -1,350 +1,270 @@
-# QPC — Quantum Persistence Contract: Architecture
+# POA Agent Finance — Architecture
 
-## 1. QPC vision and implementation boundary
+## 1. Design goal
 
-QPC (Quantum Persistence Contract) is the long-term vision for a privacy-oriented, security-focused on-chain framework for agentic finance. The first intended ecosystem target is NEAR. The architecture is intended to expand to additional Layer 1 networks through chain-specific implementations and adapters rather than assuming one contract is portable to every chain.
+POA is a policy enforcement layer for agentic finance.
 
-The intended separation is:
+It is designed around one separation:
 
-- **Human owner:** defines and controls authority.
-- **Agent:** submits requests within the granted policy.
-- **QPC enforcement layer:** validates authorization and policy before execution.
-- **Chain/payment adapter:** connects the policy decision to a specific network and payment rail.
+- **Human = authority**
+- **Agent = constrained executor**
+- **Contract = deterministic enforcement**
 
-The agent must not receive the owner's root key or be able to expand its own authority.
+The AI does not receive the owner's private key and does not get unrestricted contract access.
 
-**Current implementation boundary:** this repository contains an EVM/Solidity prototype and a first NEAR-native Rust policy-gate source prototype. The NEAR source includes policy authorization and reservation accounting with `Pending` → `Settled` / `Released` lifecycle. It does not transfer assets; the configured settlement adapter is a trusted attester, not an on-chain payment verifier. CI for the exact source commit must be checked before claiming build/test success. Neither implementation is a private/shielded payment system, end-to-end x402 adapter, universal multi-L1 deployment, or post-quantum cryptographic implementation. Those remain roadmap objectives.
-
-## 2. Current implementation status
-
-| Capability | Status | On-chain implementation |
-|---|---|---|
-| Owner-controlled agent configuration | Implemented | `configureAgent` |
-| Agent expiry (maximum policy duration 30 days) | Implemented | `MAX_POLICY_DURATION`, `onlyActiveAgent` |
-| Agent revocation | Implemented | `revokeAgent` |
-| Native-asset per-transaction and cumulative limits | Implemented | `execute`, `AgentPolicy` |
-| Contract target + function-selector allowlist | Implemented | `setCallPermission`, `allowedCalls` |
-| ERC-20 per-transaction and cumulative limits | Implemented | `setTokenPolicy`, `transferToken` |
-| ERC-20 recipient allowlist | Implemented | `setRecipientPermission`, `allowedRecipients` |
-| Global execution pause | Implemented | `setPaused`, `onlyActiveAgent` |
-| Owner native-asset withdrawal | Implemented | `withdrawNative` |
-| Two-step ownership transfer | Implemented | `transferOwnership`, `acceptOwnership` |
-| Reentrancy protection | Implemented | `nonReentrant` |
-| Global execution nonce and execution events | Implemented | `nonce`, `AgentCall`, `AgentTokenTransfer` |
-| DEX, lending, and payment adapters | Not implemented | Future integration work |
-| Frontend, API, and visual policy builder | Not implemented | Future application work |
-| Separate settlement engine | Not implemented | No standalone settlement module exists |
-| NEAR-native policy gate | Source prototype implemented | `near/qpc-policy/`; no asset transfer |
-| NEAR reservation/settlement accounting | Source prototype implemented | `authorize_payment`, `settle_payment`, `release_payment`; adapter is trusted |
-| NEAR settlement adapter proof verification | Not implemented | Adapter attestation is not cryptographic proof verification |
-| Private/shielded payment rail | Not implemented | Requires chain- and wallet-specific privacy design |
-| x402 payment adapter | Not implemented | x402 does not itself provide payment privacy |
-| Additional L1 implementations | Not implemented | Requires a separate adapter and security review per chain |
-| Post-quantum signatures/key verification | Not implemented | No ML-DSA, SLH-DSA, or other PQ signature verification in this code |
-| Cross-chain bridge or cross-chain agent payments | Not implemented | Requires separately designed and audited interoperability protocol |
-
-The repository currently contains a core contract, Foundry tests, and a deployment script. It does not contain the future frontend/API/adapters shown later in this document.
-
-## 3. High-level architecture — implemented core
+## 2. High-level architecture
 
 ```
-Owner
-  |
-  | configure / pause / revoke
-  v
-QPCAgentFinance
-  |
-  | agent request
-  v
-Policy checks
-  |-- agent active and not expired
-  |-- contract not paused
-  |-- target + selector allowed (native call)
-  |-- recipient allowed (token transfer)
-  |-- per-transaction limit
-  |-- cumulative spending cap
-  |
-  +--> reject (revert)
-  |
-  +--> account spending + increment nonce
-          |
-          +--> target contract call with native value
-          |
-          +--> ERC-20 transfer
-          |
-          +--> execution event
+                    HUMAN
+                      │
+                      ▼
+              ┌───────────────┐
+              │ Policy Builder│
+              └───────┬───────┘
+                      │
+          ┌───────────┴───────────┐
+          ▼           ▼           ▼
+       Limits      Allowlist    Expiry
+          │           │           │
+          └───────────┬───────────┘
+                      ▼
+              ┌───────────────┐
+              │ POA CONTRACT  │
+              │ Enforcement   │
+              └───────┬───────┘
+                      │
+              ┌───────┴───────┐
+              ▼               ▼
+        Agent Execution    Rejection
+              │
+              ▼
+          Settlement
+              │
+              ▼
+       Events + Nonce
 ```
 
-The native-call and ERC-20-transfer paths are distinct entry points: `execute` and `transferToken`.
+## 3. Component responsibilities
 
-## 4. Contract responsibilities
+### POAAgentFinance.sol
 
-### `QPCAgentFinance.sol`
+The contract is the security boundary.
 
-The contract stores and enforces:
+It owns:
 
-- owner and pending-owner state
-- agent activation flag and expiry
-- native spending cap, spent amount, and per-transaction limit
-- per-agent/per-token cap, spent amount, and per-transaction limit
-- agent/target/function-selector permissions
-- agent/recipient permissions
-- global pause state
-- global execution nonce
-- execution and administration events
+- agent activation state
+- expiry
+- native spending accounting
+- ERC-20 spending accounting
+- call permissions
+- recipient permissions
+- pause state
+- ownership lifecycle
+- execution nonce
+- execution events
 
-The contract does not generate an investment strategy, select a DEX, calculate lending yield, or decide which protocol an agent should use.
+It does not decide investment strategy.
 
 ### Agent
 
-An agent can:
+The agent may:
 
-- call `execute` for a permitted target and selector, subject to native-asset limits
-- call `transferToken` for a configured token and permitted recipient, subject to token limits
+- request an allowed contract call
+- request an allowed token transfer
 
-An agent cannot:
+The agent may not:
 
-- configure or increase its own policy
-- grant itself permissions
-- revoke or unpause itself
-- change the owner
-- bypass expiry, pause, allowlists, or spending limits
+- change its own policy
+- activate itself
+- increase its limits
+- bypass expiry
+- bypass pause
+- change recipients
+- change call permissions
 
 ### Owner
 
-The owner can:
+The owner may:
 
-- configure an inactive agent
-- revoke an agent
-- set target/selector permissions
-- set recipient permissions
-- set token policies
-- pause or unpause agent execution
-- withdraw native assets
-- start and accept ownership transfer through the two-step ownership process
+- configure agents
+- revoke agents
+- configure call permissions
+- configure recipients
+- configure token policies
+- pause/unpause execution
+- withdraw native funds
+- transfer ownership
 
-Policy changes that reset spending accounting are restricted while the agent is active. An expired policy remains marked active in storage until it is revoked; revoke it before configuring that agent again.
+## 4. Guardrail pipeline
 
-## 5. Guardrail pipeline
-
-### Native-asset contract call
+Every agent execution follows:
 
 ```
-Agent calls execute(target, value, data)
-  |
-  v
-Agent active and not expired?
-  | no -> revert
-  v
-Contract paused?
-  | yes -> revert
-  v
-Target and selector permitted?
-  | no -> revert
-  v
-Per-transaction limit satisfied?
-  | no -> revert
-  v
-Cumulative native cap and balance satisfied?
-  | no -> revert
-  v
-Update spending accounting and nonce
-  |
-  v
+REQUEST
+  │
+  ▼
+Agent active?
+  │
+  ├── NO → REVERT
+  │
+  ▼
+Expired?
+  │
+  ├── YES → REVERT
+  │
+  ▼
+Paused?
+  │
+  ├── YES → REVERT
+  │
+  ▼
+Permission check
+  │
+  ├── FAIL → REVERT
+  │
+  ▼
+Spending check
+  │
+  ├── FAIL → REVERT
+  │
+  ▼
+Accounting
+  │
+  ▼
 External call
-  | failure -> revert entire transaction
-  v
-Emit AgentCall
+  │
+  ▼
+Event + nonce
 ```
 
-Accounting occurs before the external call. If the external call reverts, EVM transaction atomicity also reverts the accounting and nonce changes.
+## 5. Native execution
 
-### ERC-20 transfer
+Native execution requires:
 
-```
-Agent calls transferToken(token, recipient, amount)
-  |
-  v
-Agent active, unexpired, and contract unpaused?
-  | no -> revert
-  v
-Recipient permitted?
-  | no -> revert
-  v
-Token per-transaction and cumulative limits satisfied?
-  | no -> revert
-  v
-Update token accounting and nonce
-  |
-  v
-Call token transfer
-  | failed / explicit false -> revert
-  v
-Emit AgentTokenTransfer
-```
+- active agent
+- valid expiry
+- unpaused contract
+- target allowlist
+- selector allowlist
+- amount <= per-transaction limit
+- cumulative amount <= policy cap
+- sufficient contract balance
 
-The transfer handler accepts standard boolean-returning ERC-20 tokens and tokens that return no data. A failed low-level call or an explicit false return is rejected. Token compatibility still depends on the behavior of the token contract.
+Accounting is updated before the external call. If the call reverts, the entire transaction reverts, including the accounting update.
 
-## 6. Spending policies and lifecycle details
+## 6. Token execution
 
-- Native policy duration is capped at 30 days.
-- Native and token policies each have a cumulative cap and per-transaction limit.
-- A token policy is configured per agent and token address.
-- Token transfers additionally require a recipient allowlist entry.
-- Contract calls require an exact agent + target + four-byte selector permission.
-- An agent's expiry blocks execution when `block.timestamp >= expiresAt`.
-- Expiry does not itself write `active = false`; the owner must revoke the agent before reconfiguring it.
-- The nonce is global to the contract and increments for successful native calls and token transfers.
+Token execution requires:
 
-## 7. Emergency and deposit behavior
+- active agent
+- valid expiry
+- unpaused contract
+- recipient allowlist
+- configured token policy
+- amount <= per-transaction limit
+- cumulative amount <= token cap
 
-The owner can pause agent execution globally. While paused, `execute` and `transferToken` are blocked.
+The low-level ERC-20 call accepts both standard boolean-returning tokens and tokens that return no data, while rejecting failed calls and explicit false returns.
 
-There are two native-asset deposit paths in the current contract:
+## 7. Emergency model
 
-- `deposit()` checks the pause state and reverts while paused.
-- The payable `receive()` function accepts direct native transfers and is **not** pause-gated.
+The owner can pause execution globally.
 
-Therefore, pausing currently stops the guarded deposit function and agent execution, but does not stop direct transfers to the contract address. This is intentional documentation of the current code behavior, not a claim that all deposits are blocked.
+When paused:
 
-Owner withdrawal through `withdrawNative` remains available while paused, so the owner can recover native assets during an emergency. ERC-20 assets are not covered by this native withdrawal function.
+- agent execution stops
+- token transfers through the agent stop
+- deposits through the guarded deposit function stop
 
-## 8. Settlement and audit trail
+Owner withdrawal remains available so funds can be recovered during an emergency.
 
-QPC does not implement a separate settlement engine.
-
-For native execution, the contract forwards the requested native value as part of the permitted target call. For token execution, it calls the configured token's `transfer` function. Successful operations emit execution events and increment the global nonce.
-
-Events and the nonce provide on-chain traceability, but they are not by themselves a complete off-chain audit product, transaction indexer, accounting service, or proof that an external protocol performed the intended economic action.
-
-## 8A. Confidential AI inference integration — optional
-
-NEAR AI Cloud may provide confidential inference for QPC's agent reasoning or private policy-assistance workload. This is an **off-chain compute service**, not a smart-contract runtime or payment rail.
-
-- Use a model explicitly classified as Private TEE when the policy requires confidential inference.
-- Verify fresh gateway/model attestation and response signatures with the supported NEAR AI SDK/verifier. Bind evidence to a fresh nonce, expected model, and request.
-- Treat LLM output as an untrusted proposal. The deterministic QPC policy evaluator and on-chain authorization remain the sole authority for payment/action permission.
-- Never provide wallet seed phrases, signing keys, or raw secrets to the model.
-- Do not treat Incognito/external-provider models as equivalent to Private TEE models.
-- Attestation validates evidence about a specific measured environment; it does not prove model correctness, bug absence, or application safety.
-- TEE inference does not make on-chain NEAR transfers private and does not replace a shielded payment rail.
-
-The NEAR AI Gateway desktop app is a developer tool for routing supported local coding-agent sessions through NEAR AI Cloud. A deployed QPC product should call the Cloud API/SDK directly; it does not need the macOS app as a runtime dependency.
-
-
-## 8B. NEAR-native policy gate and reservation accounting
-
-A NEAR Rust contract prototype lives at `near/qpc-policy/`, using NEAR SDK 5.30.1.
-
-Implemented in source: owner-only policy configuration, bounded expiry and recipient allowlist, per-payment and cumulative caps, pause/guardian, revocation, policy versions, sequential nonces, contract-derived SHA-256 intent digest, and public audit events.
-
-The payment-accounting lifecycle is `authorize_payment` → `settle_payment` or `release_payment`. Pending reservations consume policy capacity; settled amounts remain consumed; released amounts restore capacity. A pending reservation blocks policy reconfiguration. Settlement requires the configured adapter account and a unique settlement reference.
-
-**Critical limitation:** this is accounting state, not asset settlement. The contract does not transfer NEAR or FT assets. The adapter is trusted to verify the external settlement and is not itself an on-chain proof verifier. No x402 facilitator, private rail, or cross-chain execution is implemented. Do not use with real funds.
-
-The workflow tests Rust behavior and checks the WASM target. Report results only from CI for the exact commit being evaluated.
-
-
-## 8C. Cybersecurity defense-in-depth
-
-The NEAR source prototype includes owner-only administration, two-step ownership transfer, a pause-only emergency guardian, bounded policy duration and recipient list, a lifetime cap of 256 unique agent policies, sequential nonces, checked arithmetic, and a contract-derived SHA-256 intent digest. The digest currently binds deployment domain, contract account, agent, policy version, nonce, recipient, and amount; it does not yet bind asset, service, network, or settlement expiry.
-
-The owner account is a critical trust root. Production ownership should use a properly configured NEAR multisig. The guardian can pause but cannot unpause or alter policies. These controls reduce risk but do not make the contract immune to attacks.
-
-Detailed threat model and release gate: [QPC NEAR Policy Gate Security Model](docs/QPC_NEAR_POLICY_SECURITY.md).
-
-
-## 9. QPC roadmap — planned, not implemented
-
-The following describes the intended product direction. None of these items should be presented as an active feature until implementation and verification are available.
-
-### 9.1 NEAR-first private-contract direction
-
-NEAR is the first intended ecosystem target. The current EVM/Solidity contract cannot simply be copied to NEAR: a NEAR-native contract and its authorization, storage, execution, and privacy model must be designed and tested for that environment.
-
-Privacy must be specified precisely. The design must identify which transaction fields, balances, identities, metadata, and application state are hidden; which remain public; who can decrypt or prove information; and how recovery and compliance requirements are handled. Do not describe ordinary public on-chain state as private.
-
-### 9.2 Multi-L1 architecture
-
-QPC aims to support multiple L1 networks through chain-specific contract implementations and adapters. Each network has different execution models, account/key systems, finality, fee handling, privacy properties, and verification capabilities. There is no assumption that one Solidity contract can run unchanged on every L1.
-
-### 9.3 Private agent payments and x402
-
-The planned payment layer includes agent-to-agent and agent-to-service payments, potentially using x402 for HTTP payment negotiation and payment requirements.
-
-x402 is a payment protocol/interface, not a privacy guarantee. A private x402 flow would require a supported private settlement rail and an adapter that binds the x402 request to the correct chain, asset, recipient, amount, expiry, and replay-protection context. The adapter must reject unsupported privacy modes rather than silently falling back to transparent settlement. The exact privacy guarantees and metadata exposure must be documented for each supported rail.
-
-### 9.4 Security engineering
-
-QPC's security objective is defense in depth against known attack classes and implementation vulnerabilities. Planned work includes threat modelling, authorization and key-management review, replay protection, safe external-call patterns, fuzzing, invariant/property testing, static analysis, dependency review, incident response, and independent audits.
-
-No smart contract can honestly be described as immune to hackers or bugs. Security claims must be scoped to specific controls, tests, audits, and known limitations.
-
-### 9.5 Post-quantum readiness
-
-Quantum resilience is a research and implementation objective only. It requires selecting standardized post-quantum cryptographic algorithms, evaluating chain-native verification support and gas/cost constraints, defining key rotation and migration, and considering hybrid transition paths. The current Solidity contract does not implement ML-DSA, SLH-DSA, or any other post-quantum signature verification. QPC must not be marketed as quantum-resistant until the relevant implementation has been independently reviewed and tested.
-
-### 9.6 Conceptual future architecture
+## 8. Lifecycle
 
 ```
-Human / Agent
-      |
-      v
-Policy + Authorization Layer
-      |
-      v
-QPC chain-specific implementation
-      |
-      +--> NEAR contract and privacy design       [PLANNED FIRST]
-      +--> EVM-compatible L1 adapter               [CURRENT PROTOTYPE ONLY]
-      +--> Other L1 adapters                       [PLANNED]
-      |
-      v
-Private payment integration                       [PLANNED]
-      |
-      +--> Agent-to-agent payments
-      +--> Agent-to-service payments
-      +--> x402 negotiation/payment adapter
-      |
-      v
-Events, proofs, and audit tooling                  [PLANNED EXTENSIONS]
+CONFIGURE
+    │
+    ▼
+ACTIVE
+    │
+    ├── EXECUTE ──► ACCOUNT ──► SETTLE
+    │
+    ├── PAUSE ────► STOP
+    │
+    ├── REVOKE ───► INACTIVE
+    │
+    └── EXPIRY ───► EXPIRED
 ```
 
-Each chain, privacy rail, x402 integration, and cryptographic component needs its own threat model, tests, and review. Support on one network does not imply support or equivalent privacy/security on another.
+## 9. Application architecture
 
-## 10. Test architecture
+POA should remain protocol-agnostic.
 
-The repository separates security, invariant, and stateful testing concerns. The presence of test files or test scaffolding does not prove that every property has been exhaustively verified.
+A future application can provide:
 
-Expected validation sequence:
+```
+Frontend
+   │
+   ▼
+Agent / API
+   │
+   ▼
+Policy Builder
+   │
+   ▼
+POAAgentFinance
+   │
+   ├── DEX adapter
+   ├── Lending adapter
+   ├── Payment adapter
+   └── Other protocol adapters
+```
 
-1. Build with the configured Solidity compiler.
-2. Run unit and security regression tests.
-3. Run invariant tests.
-4. Run stateful handler tests.
-5. Run static analysis and review findings.
-6. Obtain independent security review before production use.
+The application chooses **what the agent wants to do**.
 
-A passing test suite is not equivalent to an independent security audit. Test results must be reported from the actual CI/local run for the commit being evaluated.
+POA decides **whether the agent is allowed to do it**.
 
-## 11. Security principles
+## 10. Testing architecture
 
-1. Least-privilege agent authority.
-2. Human-controlled policy ownership.
-3. Deterministic on-chain enforcement.
-4. Fail-closed permission and spending checks.
+The test layers should remain separate:
+
+```
+Unit / Security
+      │
+      ▼
+Regression tests
+      │
+      ▼
+Invariant tests
+      │
+      ▼
+Stateful handler tests
+      │
+      ▼
+Static analysis
+      │
+      ▼
+External audit
+```
+
+A passing test suite is not equivalent to an independent security audit.
+
+## 11. Design principles
+
+1. Least privilege.
+2. Human-controlled authority.
+3. Deterministic enforcement.
+4. Fail closed.
 5. Short-lived agent authority.
-6. Explicit target, selector, and recipient allowlists.
-7. Bounded cumulative and per-transaction spending.
-8. Emergency pause for agent execution.
-9. No AI custody of the owner's private key.
+6. Explicit allowlists.
+7. Bounded spending.
+8. Emergency stop.
+9. No AI custody of owner keys.
 10. Keep the core contract small and protocol-agnostic.
-11. Label planned integrations as planned until implemented and tested.
 
-## 12. Intended user flow
+## 12. Flitzr-style application flow
 
-The future application experience may be:
+The intended user-facing flow can later be presented as:
 
-**Intent → Policy draft → Human review/approval → Agent request → QPC enforcement → On-chain call/transfer → Event-based audit**
+**Intent → Policy → Preview → Approval → Agent Request → POA Guardrails → Settlement → Audit**
 
-Only the QPC enforcement and on-chain call/transfer portions are implemented by the current contract. The UI, policy drafting workflow, agent orchestration, and off-chain audit interface remain application-layer work.
+Unlike an application-specific agent, POA does not need to know how the strategy was generated. Its job is to enforce the final security policy on-chain.

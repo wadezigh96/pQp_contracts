@@ -365,14 +365,18 @@ impl QpcPolicyContract {
         env::log_str(&format!("QPC_PAYMENT_SETTLED|request_hash={}|reference={}", request_hash, settlement_reference));
     }
 
-    /// Release a pending reservation after a verified failed/cancelled settlement.
-    /// Owner is a recovery authority; adapter is the normal settlement authority.
-    pub fn release_payment(&mut self, request_hash: String) {
+    /// Release only when the trusted settlement adapter has verified cancellation/failure.
+    /// The reference is an audit/idempotency key, not cryptographic proof by itself.
+    pub fn release_payment(&mut self, request_hash: String, failure_reference: String) {
         let caller = env::predecessor_account_id();
+        assert_eq!(self.settlement_adapter_id.as_ref(), Some(&caller), "only settlement adapter can release");
         assert!(
-            caller == self.owner_id || self.settlement_adapter_id.as_ref() == Some(&caller),
-            "only owner or settlement adapter can release"
+            !failure_reference.is_empty() && failure_reference.len() <= 128
+                && failure_reference.bytes().all(|b| b.is_ascii_graphic()),
+            "invalid failure reference"
         );
+        assert!(self.settlement_references.get(&failure_reference).is_none(),
+            "finalization reference already used");
         let mut reservation = self.reservations.get(&request_hash).cloned()
             .unwrap_or_else(|| env::panic_str("reservation not found"));
         assert_eq!(reservation.status, PaymentStatus::Pending, "reservation is not pending");
@@ -384,7 +388,8 @@ impl QpcPolicyContract {
         reservation.status = PaymentStatus::Released;
         self.policies.insert(reservation.agent_id.clone(), policy);
         self.reservations.insert(request_hash.clone(), reservation);
-        env::log_str(&format!("QPC_PAYMENT_RELEASED|request_hash={}", request_hash));
+        self.settlement_references.insert(failure_reference.clone(), true);
+        env::log_str(&format!("QPC_PAYMENT_RELEASED|request_hash={}|failure_reference={}", request_hash, failure_reference));
     }
 }
 
@@ -626,10 +631,12 @@ mod tests {
     #[test]
     fn release_returns_reserved_capacity_without_marking_settled() {
         let mut contract = configured_contract();
-        context("agent.near", NOW_NS + 1);
+        context("owner.near", NOW_NS + 1);
+        contract.set_settlement_adapter(Some(account("adapter.near")));
+        context("agent.near", NOW_NS + 2);
         let receipt = contract.authorize_payment(account("merchant.near"), U128(3), U64(0));
-        context("owner.near", NOW_NS + 2);
-        contract.release_payment(receipt.request_hash.clone());
+        context("adapter.near", NOW_NS + 3);
+        contract.release_payment(receipt.request_hash.clone(), "failure-001".to_string());
         let policy = contract.get_policy(account("agent.near")).unwrap();
         assert_eq!(policy.reserved_total, 0);
         assert_eq!(policy.settled_total, 0);
@@ -664,6 +671,32 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "only settlement adapter can release")]
+    fn owner_cannot_release_reservation_without_adapter_confirmation() {
+        let mut contract = configured_contract();
+        context("owner.near", NOW_NS + 1);
+        contract.set_settlement_adapter(Some(account("adapter.near")));
+        context("agent.near", NOW_NS + 2);
+        let receipt = contract.authorize_payment(account("merchant.near"), U128(3), U64(0));
+        context("owner.near", NOW_NS + 3);
+        contract.release_payment(receipt.request_hash, "failure-owner".to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "finalization reference already used")]
+    fn failure_reference_cannot_be_reused() {
+        let mut contract = configured_contract();
+        context("owner.near", NOW_NS + 1);
+        contract.set_settlement_adapter(Some(account("adapter.near")));
+        context("agent.near", NOW_NS + 2);
+        let first = contract.authorize_payment(account("merchant.near"), U128(2), U64(0));
+        let second = contract.authorize_payment(account("merchant.near"), U128(2), U64(1));
+        context("adapter.near", NOW_NS + 3);
+        contract.release_payment(first.request_hash, "failure-shared".to_string());
+        contract.release_payment(second.request_hash, "failure-shared".to_string());
+    }
+
+    #[test]
     #[should_panic(expected = "only settlement adapter")]
     fn non_adapter_cannot_settle() {
         let mut contract = configured_contract();
@@ -676,10 +709,12 @@ mod tests {
     #[test]
     fn released_reservation_allows_later_authorization_with_new_nonce() {
         let mut contract = configured_contract();
-        context("agent.near", NOW_NS + 1);
+        context("owner.near", NOW_NS + 1);
+        contract.set_settlement_adapter(Some(account("adapter.near")));
+        context("agent.near", NOW_NS + 2);
         let receipt = contract.authorize_payment(account("merchant.near"), U128(10), U64(0));
-        context("owner.near", NOW_NS + 2);
-        contract.release_payment(receipt.request_hash);
+        context("adapter.near", NOW_NS + 3);
+        contract.release_payment(receipt.request_hash, "failure-002".to_string());
         context("agent.near", NOW_NS + 3);
         let second = contract.authorize_payment(account("merchant.near"), U128(10), U64(1));
         assert_ne!(second.request_hash, "");
