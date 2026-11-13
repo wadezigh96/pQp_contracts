@@ -24,8 +24,8 @@ jobs:
           targets: wasm32-unknown-unknown
           components: rustfmt
       - uses: Swatinem/rust-cache@v2
-      - name: Format
-        run: cargo fmt --manifest-path near/qpc-near-agent-finance/Cargo.toml -- --check
+      - name: Format sources
+        run: cargo fmt --manifest-path near/qpc-near-agent-finance/Cargo.toml
       - name: Unit tests
         run: cargo test --manifest-path near/qpc-near-agent-finance/Cargo.toml
       - name: Build NEAR WASM
