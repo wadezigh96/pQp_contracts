@@ -1,19 +1,12 @@
 name: QPC Zcash Adapter Checks
-
 on:
   push:
     branches: ["qpc/**"]
-    paths:
-      - "zcash/qpc-zcash-agent/**"
-      - ".github/workflows/zcash-adapter.yml"
+    paths: ["zcash/qpc-zcash-agent/**", ".github/workflows/zcash-adapter.yml"]
   pull_request:
-    paths:
-      - "zcash/qpc-zcash-agent/**"
-      - ".github/workflows/zcash-adapter.yml"
-
+    paths: ["zcash/qpc-zcash-agent/**", ".github/workflows/zcash-adapter.yml"]
 permissions:
   contents: read
-
 jobs:
   zcash-adapter:
     runs-on: ubuntu-latest
@@ -28,16 +21,15 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: zcash/qpc-zcash-agent
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-      - name: Generate dependency lockfile
-        run: cargo generate-lockfile
-      - name: Run adapter tests
-        run: cargo test --locked
-      - name: Check adapter
-        run: cargo check --locked
-      - name: Preserve generated lockfile for review
-        uses: actions/upload-artifact@v4
+      - run: cargo fmt --all
+        name: Format Rust sources
+      - run: cargo generate-lockfile
+        name: Generate Cargo.lock
+      - run: cargo test --locked
+        name: Run tests
+      - run: cargo check --locked
+        name: Compile adapter
+      - uses: actions/upload-artifact@v4
         with:
           name: qpc-zcash-cargo-lock
           path: zcash/qpc-zcash-agent/Cargo.lock
