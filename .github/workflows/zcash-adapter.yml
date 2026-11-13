@@ -7,10 +7,12 @@ on:
       - "manus/continue-near-zcash"
     paths:
       - "zcash/qpc-zcash-agent/**"
+      - "agent-router/**"
       - ".github/workflows/zcash-adapter.yml"
   pull_request:
     paths:
       - "zcash/qpc-zcash-agent/**"
+      - "agent-router/**"
       - ".github/workflows/zcash-adapter.yml"
 
 permissions:
@@ -37,3 +39,17 @@ jobs:
         run: cargo test
       - name: Compile adapter and wallet backend
         run: cargo check
+
+  agent-router:
+    name: NEAR-to-Zcash agent-router tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agent-router
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run agent-router tests
+        run: node --test test/*.test.mjs
