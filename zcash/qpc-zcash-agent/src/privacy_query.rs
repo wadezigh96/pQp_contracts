@@ -135,6 +135,14 @@ mod tests {
     }
 
     #[test]
+    fn accepts_zecblock_announced_transaction_query_size() {
+        // ZecBlock described transaction-query uploads of about 1.2 MB.
+        // This regression test protects against a 1 MiB cap rejecting that size.
+        let payload = vec![0xA5; 1_200_000];
+        assert!(EncryptedPirQuery::from_ciphertext(payload).is_ok());
+    }
+
+    #[test]
     fn read_only_client_returns_opaque_encrypted_response() {
         let client = PrivateExplorerClient::new(EchoCiphertextTransport);
         let query = EncryptedPirQuery::from_ciphertext(vec![0xA5, 0x5A, 0x01]).unwrap();
