@@ -47,7 +47,7 @@ Mitigations:
 
 ### Malicious or non-standard ERC-20
 
-Token transfer handling accepts either no return data or an explicit true. Failed transfers revert.
+Token transfer handling first requires deployed code, then accepts either no return data or an explicit true. Failed transfers revert without consuming caps or execution nonce. A token contract may still lie, charge fees or rebase: successful low-level transfer is not a universal guarantee of recipient balance delta; owner allowlisting and token-specific review remain necessary.
 
 A malformed return payload fails closed rather than being accepted as a successful transfer.
 
@@ -129,7 +129,7 @@ The NEAR Rust crate under near/qpc-near-agent-finance is an authorization-and-au
 
 ## Cross-L1 authorization threat model
 
-The current EVM contract nonce protects its own execution sequence; it is not a cross-chain replay defense. The NEAR MVP separately checks a per-agent nonce, policy ID/version, fixed action and destination, router, recipient allowlist, amount caps, and a limited payment-argument hash. Neither implementation currently authenticates and enforces the complete cross-L1 authorization envelope.
+The EVM contract nonce records its execution sequence; it is not a cross-chain replay defense. The NEAR full-envelope entrypoint authenticates the native predecessor and enforces an owner-pinned profile and persistent replay state. The legacy limited dispatch is disabled. See [canonical profile](docs/CANONICAL_SPEC.md) and [engineering evidence](docs/ENGINEERING_EVIDENCE.md). No production destination verifier, cross-chain execution protocol or distributed coordinator is present.
 
 Before cross-chain activation, every adapter must bind and validate the agent identity, source and destination network/account, action, source/destination asset identifiers and decimals, amount, fee bounds, recipient or privacy commitment, nonce and replay domain, policy ID/version, issue/expiry times, cancellation state, and settlement-evidence requirements. One-field mutation, cross-chain replay, cross-direction replay, stale policy, key revocation, and downgrade tests are mandatory. The proposed protocol fields and acceptance tests are in [QPC Cross-L1 Authorization Envelope](docs/QPC_CROSS_L1_AUTHORIZATION.md).
 

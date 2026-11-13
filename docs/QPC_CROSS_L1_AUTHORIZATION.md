@@ -1,6 +1,6 @@
 # QPC Cross-L1 Authorization Envelope — Design Specification
 
-**Status: proposed protocol specification; not implemented as a complete cross-L1 envelope.**
+**Status: protocol requirements plus local MVP.** The exact implemented v1 encoding, fields and JS/Rust fixture are normative in [CANONICAL_SPEC.md](CANONICAL_SPEC.md). Native execution and production destination verification remain incomplete; see [evidence and limitations](ENGINEERING_EVIDENCE.md).
 
 This document defines the target authorization boundary for QPC. It is deliberately separate from any one chain's smart contract. Chain adapters must enforce the envelope using their own native authorization, transaction, finality, and proof rules.
 
@@ -102,7 +102,7 @@ A common envelope does not make the adapters interchangeable. Each adapter owns 
 
 The cross-chain state machine must be idempotent and explicit:
 
-`CREATED -> AUTHORIZED -> ROUTE_ACCEPTED -> SOURCE_CONFIRMED -> DESTINATION_SUBMITTED -> DESTINATION_CONFIRMED -> EVIDENCE_VERIFIED -> COMPLETED`
+Implemented local lifecycle: `CREATED -> AUTHORIZED -> SUBMITTED -> CONFIRMED -> SETTLED`. The more detailed route protocol remains a future integration; these labels record orchestration decisions and are not proofs of native execution.
 
 Uncertain states enter `PENDING_RECONCILIATION`. Cancellation, expiry, reorg, partial completion, duplicate delivery, timeout, and refund/compensation must be explicit transitions with adapter-specific rules. Do not claim atomicity unless the protocol actually provides it.
 
@@ -116,7 +116,7 @@ The agent-router now contains an initial, versioned QPC v1 envelope implementati
 - an authorization boundary that requires caller-supplied identity authentication and durable atomic replay-consumption callbacks;
 - a separate settlement-evidence boundary that checks the authorization commitment and expected destination fields before invoking a chain-specific evidence verifier.
 
-The new module is not yet wired into the existing NEAR dispatch path or a production chain adapter. The verifier callbacks are dependency boundaries, not built-in signature verification or consensus proofs. The replay callback must be backed by durable atomic storage supplied by an adapter; the library itself does not persist replay state. The current NEAR contract still uses its narrower NEAR-to-Zcash policy-argument hash and records policy authorization only. It does not execute a transfer or independently verify Zcash settlement.
+The full-envelope module is now wired into a NEAR native-identity authorization entrypoint; the weaker legacy dispatch is disabled. Verifier callbacks remain dependency boundaries, not signature verification or consensus proofs. The local filesystem intent store offers atomic replay/lifecycle persistence under its documented single-host assumptions; it is not a distributed database or production coordinator. NEAR records authorization only. It does not execute a transfer or independently verify Zcash settlement. Local native preparation adapters never mark production settlement complete.
 
 No production authentication profile, post-quantum signature, hybrid key scheme, ZK proof, or live cross-L1 settlement is activated by this module. The v1 schema is an initial protocol baseline and must receive independent review, adapter-specific integration, and CI/security testing before production use.
 

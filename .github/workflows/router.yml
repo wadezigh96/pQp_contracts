@@ -1,0 +1,19 @@
+name: Router boundaries
+on:
+  push:
+    branches: ['**']
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  router:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Parse every module and test
+        run: for f in agent-router/src/*.mjs agent-router/test/*.mjs; do node --check "$f" || exit; done
+      - name: Public API and mocked integration tests
+        run: node --test agent-router/test/*.test.mjs

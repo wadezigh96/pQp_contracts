@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 const DOMAIN = "QPC-CROSS-L1-AUTHORIZATION-V1\0";
-const EVIDENCE_DOMAIN = "QPC-CROSS-L1-SETTLEMENT-EVIDENCE-V1\0";
+const MAX_U128 = 340282366920938463463374607431768211455n;
 const HEX_32 = /^[0-9a-f]{64}$/;
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$/;
 const DECIMAL = /^(0|[1-9][0-9]*)$/;
@@ -12,40 +12,75 @@ function assert(condition, message) {
 
 function exactObject(value, keys, label) {
   assert(value !== null && typeof value === "object" && !Array.isArray(value),
-    \`\${label} must be an object\`);
+    `${label} must be an object`);
+  assert(Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null,
+    `${label} must be a plain object`);
+  assert(Reflect.ownKeys(value).length === Object.keys(value).length &&
+    Object.values(Object.getOwnPropertyDescriptors(value)).every(d => "value" in d && d.enumerable),
+  `${label} must contain only enumerable data fields`);
   const actual = Object.keys(value).sort();
   const expected = [...keys].sort();
   assert(actual.length === expected.length &&
     actual.every((key, index) => key === expected[index]),
-  \`\${label} has missing or unexpected field\`);
+  `${label} has missing or unexpected field`);
 }
 
 function identifier(value, label) {
-  assert(typeof value === "string" && IDENTIFIER.test(value), \`\${label} is invalid\`);
+  assert(typeof value === "string" && IDENTIFIER.test(value), `${label} is invalid`);
   return value;
 }
 
 function decimal(value, label, { positive = false } = {}) {
-  assert(typeof value === "string" && DECIMAL.test(value), \`\${label} must be a canonical unsigned decimal string\`);
-  if (positive) assert(BigInt(value) > 0n, \`\${label} must be greater than zero\`);
+  assert(typeof value === "string" && value.length <= 39 && DECIMAL.test(value), `${label} must be a canonical unsigned decimal string (u128)`);
+  assert(BigInt(value) <= MAX_U128, `${label} exceeds u128`);
+  if (positive) assert(BigInt(value) > 0n, `${label} must be greater than zero`);
   return value;
 }
 
 function safeInteger(value, label, { min = 0 } = {}) {
-  assert(Number.isSafeInteger(value) && value >= min, \`\${label} must be a safe integer >= \${min}\`);
+  assert(Number.isSafeInteger(value) && !Object.is(value, -0) && value >= min, `${label} must be a safe integer >= ${min}`);
   return value;
 }
 
 function commitment(value, label) {
-  assert(typeof value === "string" && HEX_32.test(value), \`\${label} must be a 32-byte lowercase hex commitment\`);
+  assert(typeof value === "string" && HEX_32.test(value), `${label} must be a 32-byte lowercase hex commitment`);
   return value;
 }
 
 function canonicalStringify(value) {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return \`[\${value.map(canonicalStringify).join(",")}]\`;
-  return \`{\${Object.keys(value).sort().map(key =>
-    \`\${JSON.stringify(key)}:\${canonicalStringify(value[key])}\`).join(",")}}\`;
+  return `{${Object.keys(value).sort().map(key =>
+    `${JSON.stringify(key)}:${canonicalStringify(value[key])}`).join(",")}}`;
+}
+
+function deepFreeze(value) {
+  if (value && typeof value === "object") {
+    for (const child of Object.values(value)) deepFreeze(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+// Reject accessors before reading values; no await occurs until the complete
+// validated projection has been detached and recursively frozen.
+function snapshot(value, depth = 0) {
+  assert(depth <= 8, "object nesting exceeds bound");
+  if (value === null || typeof value !== "object") return value;
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  assert((Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null) &&
+    Reflect.ownKeys(value).length === Object.keys(descriptors).length &&
+    Object.values(descriptors).every(d => "value" in d && d.enumerable),
+  "input must contain only plain enumerable data fields");
+  return Object.fromEntries(Object.entries(descriptors).map(([key, descriptor]) =>
+    [key, snapshot(descriptor.value, depth + 1)]));
+}
+
+export function stringifyCrossL1AuthorizationEnvelope(input) {
+  return canonicalStringify(canonicalizeCrossL1AuthorizationEnvelope(input));
+}
+
+export function canonicalCrossL1AuthorizationBytes(input) {
+  return Buffer.from(stringifyCrossL1AuthorizationEnvelope(input), "utf8");
 }
 
 /**
@@ -53,6 +88,7 @@ function canonicalStringify(value) {
  * This is a commitment format, not an authentication or privacy primitive.
  */
 export function canonicalizeCrossL1AuthorizationEnvelope(input) {
+  input = snapshot(input);
   exactObject(input, [
     "schema", "version", "intentId", "agentIdentity", "source", "destination",
     "action", "asset", "amount", "fees", "nonce", "replayDomain", "policy",
@@ -63,8 +99,8 @@ export function canonicalizeCrossL1AuthorizationEnvelope(input) {
     "unsupported authorization schema or version");
 
   exactObject(input.agentIdentity, ["namespace", "id", "keyId"], "agentIdentity");
-  exactObject(input.source, ["networkId", "accountId", "adapterId"], "source");
-  exactObject(input.destination, ["networkId", "adapterId", "recipientCommitment"], "destination");
+  exactObject(input.source, ["networkId", "nativeChainId", "accountId", "adapterId"], "source");
+  exactObject(input.destination, ["networkId", "nativeChainId", "adapterId", "recipientCommitment"], "destination");
   exactObject(input.action, ["type", "operation"], "action");
   exactObject(input.asset, ["sourceAssetId", "destinationAssetId", "sourceDecimals", "destinationDecimals", "mappingId"], "asset");
   exactObject(input.amount, ["sourceAtomic", "destinationAtomic"], "amount");
@@ -86,11 +122,13 @@ export function canonicalizeCrossL1AuthorizationEnvelope(input) {
     },
     source: {
       networkId: identifier(input.source.networkId, "source.networkId"),
+      nativeChainId: identifier(input.source.nativeChainId, "source.nativeChainId"),
       accountId: identifier(input.source.accountId, "source.accountId"),
       adapterId: identifier(input.source.adapterId, "source.adapterId"),
     },
     destination: {
       networkId: identifier(input.destination.networkId, "destination.networkId"),
+      nativeChainId: identifier(input.destination.nativeChainId, "destination.nativeChainId"),
       adapterId: identifier(input.destination.adapterId, "destination.adapterId"),
       recipientCommitment: commitment(input.destination.recipientCommitment, "recipient commitment"),
     },
@@ -146,7 +184,7 @@ export function canonicalizeCrossL1AuthorizationEnvelope(input) {
   assert(result.fees.maxSlippageBps <= 10_000, "fees.maxSlippageBps exceeds 10000");
   assert(result.asset.sourceDecimals <= 255 && result.asset.destinationDecimals <= 255,
     "asset decimals exceed supported bound");
-  return Object.freeze(result);
+  return deepFreeze(result);
 }
 
 export function computeCrossL1AuthorizationCommitment(input) {
@@ -184,14 +222,7 @@ export async function authorizeCrossL1Envelope(input, {
   });
   assert(authenticated === true, "agent authorization verification failed");
 
-  const replayDomainKey = [
-    envelope.replayDomain.authorityId,
-    envelope.replayDomain.scope,
-    envelope.source.networkId,
-    envelope.source.accountId,
-    envelope.agentIdentity.namespace,
-    envelope.agentIdentity.id,
-  ].join("|");
+  const replayDomainKey = computeCrossL1ReplayDomainKey(envelope);
   const consumed = await consumeReplay({
     replayDomainKey,
     nonce: envelope.nonce,
@@ -208,12 +239,22 @@ export async function authorizeCrossL1Envelope(input, {
   });
 }
 
+export function computeCrossL1ReplayDomainKey(input) {
+  const e = canonicalizeCrossL1AuthorizationEnvelope(input);
+  // A structured tuple avoids delimiter collisions and binds native chain identity.
+  return createHash("sha256").update("QPC-CROSS-L1-REPLAY-V1\0").update(JSON.stringify([
+    e.replayDomain.authorityId, e.replayDomain.scope, e.source.networkId,
+    e.source.nativeChainId, e.source.accountId, e.agentIdentity.namespace, e.agentIdentity.id,
+  ])).digest("hex");
+}
+
 export async function verifyCrossL1SettlementEvidence({
   authorization,
   evidence,
   verifyDestinationEvidence,
 } = {}) {
   const envelope = canonicalizeCrossL1AuthorizationEnvelope(authorization);
+  evidence = deepFreeze(snapshot(evidence));
   const expectedCommitment = computeCrossL1AuthorizationCommitment(envelope);
 
   exactObject(evidence, [

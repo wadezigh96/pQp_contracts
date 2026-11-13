@@ -5,13 +5,18 @@ import {QPCAgentFinance} from "../contracts/QPCAgentFinance.sol";
 
 contract StatefulTarget {
     uint256 public calls;
-    function ping() external payable { calls += msg.value; }
+
+    function ping() external payable {
+        calls += msg.value;
+    }
 }
 
 contract StatefulAgentActor {
     QPCAgentFinance public immutable qpc;
 
-    constructor(address _qpc) { qpc = QPCAgentFinance(payable(_qpc)); }
+    constructor(address _qpc) {
+        qpc = QPCAgentFinance(payable(_qpc));
+    }
 
     function execute(address target, uint256 value, bytes calldata data) external {
         qpc.execute(target, value, data);
@@ -37,6 +42,9 @@ contract QPCAgentFinanceHandler {
         uint64 expiry = uint64(block.timestamp + 1 days);
         qpc.configureAgent(address(agent), expiry, cap, txLimit);
         qpc.setCallPermission(address(agent), address(target), StatefulTarget.ping.selector, true);
+        qpc.setCalldataPermission(
+            address(agent), address(target), keccak256(abi.encodeWithSelector(StatefulTarget.ping.selector)), true
+        );
         configuredCap = cap;
         configuredSpent = 0;
     }
@@ -54,18 +62,29 @@ contract QPCAgentFinanceHandler {
         (bool funded,) = address(qpc).call{value: amount}("");
         if (!funded) return;
 
-        (bool ok,) = address(agent).call(abi.encodeWithSelector(
-            StatefulAgentActor.execute.selector,
-            address(target),
-            amount,
-            abi.encodeWithSelector(StatefulTarget.ping.selector)
-        ));
+        (bool ok,) = address(agent)
+            .call(
+                abi.encodeWithSelector(
+                    StatefulAgentActor.execute.selector,
+                    address(target),
+                    amount,
+                    abi.encodeWithSelector(StatefulTarget.ping.selector)
+                )
+            );
         if (ok) configuredSpent += amount;
     }
 
-    function revoke() external { qpc.revokeAgent(address(agent)); }
-    function pause() external { qpc.setPaused(true); }
-    function unpause() external { qpc.setPaused(false); }
+    function revoke() external {
+        qpc.revokeAgent(address(agent));
+    }
+
+    function pause() external {
+        qpc.setPaused(true);
+    }
+
+    function unpause() external {
+        qpc.setPaused(false);
+    }
 
     function bound(uint256 x, uint256 min, uint256 max) internal pure returns (uint256) {
         if (max <= min) return min;
@@ -81,7 +100,35 @@ contract QPCAgentFinanceHandler {
     receive() external payable {}
 }
 
+interface StatefulVm {
+    function deal(address, uint256) external;
+}
+
 contract QPCAgentFinanceStatefulTest {
+    QPCAgentFinanceHandler internal campaign;
+
+    function setUp() public {
+        campaign = new QPCAgentFinanceHandler();
+        StatefulVm(address(uint160(uint256(keccak256("hevm cheat code"))))).deal(address(campaign), 1000 ether);
+    }
+
+    function targetContracts() external view returns (address[] memory targets) {
+        targets = new address[](1);
+        targets[0] = address(campaign);
+    }
+
+    function invariant_accountingTracksActualSpend() public view {
+        campaign.invariantAccounting();
+        (,,, uint256 spent,) = campaign.qpc().agents(address(campaign.agent()));
+        require(spent == campaign.configuredSpent(), "actual spend differs from model");
+    }
+
+    function testStatefulExecutionIsReachable() public {
+        campaign.configure(10 ether, 1 ether);
+        campaign.execute(1 ether);
+        require(campaign.configuredSpent() > 0, "campaign never executes approved calls");
+    }
+
     function testStatefulHandlerCanBeConstructed() public {
         QPCAgentFinanceHandler handler = new QPCAgentFinanceHandler();
         require(address(handler.qpc()) != address(0), "QPC not deployed");

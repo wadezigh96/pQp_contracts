@@ -52,6 +52,8 @@ function validNearAccountId(value) {
 }
 
 /**
+ * @deprecated Historical limited-hash builder: dispatch_action is disabled in
+ * the current contract. Use buildNearEnvelopeAuthorizationDispatch instead.
  * Prepare a local-only NEAR dispatch. This function does not sign, submit,
  * contact a solver, or create a Zcash transaction.
  */
@@ -118,6 +120,8 @@ export function buildNearToZcashShieldedDispatch(input) {
     }),
   });
 }
+
+export { buildNearEnvelopeAuthorizationDispatch } from './near-envelope-dispatch.mjs';
 
 export {
   submitNearToZcashDispatch,

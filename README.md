@@ -307,6 +307,10 @@ This keeps integrations replaceable while the security boundary remains centrali
 </div>
 
 
+## Verified engineering boundary
+
+This branch adds a strict [canonical envelope and shared JS/Rust vector](docs/CANONICAL_SPEC.md), NEAR native-identity authorization, [local native adapter boundaries](docs/NATIVE_ADAPTERS.md), and a durable local intent lifecycle. See [engineering evidence and requirement traceability](docs/ENGINEERING_EVIDENCE.md) for exact checks and gaps. These are local prototypes: no deployment, signing, broadcast, transfer, production settlement verifier, or PQ cryptography is included. Native transfer preparation is not execution; a persisted state is not chain evidence.
+
 ## QPC design principles and security requirements
 
 Detailed cross-network authorization fields, replay domains, settlement evidence, adapter-specific validation, and acceptance tests are defined in [QPC Cross-L1 Authorization Envelope](docs/QPC_CROSS_L1_AUTHORIZATION.md).
@@ -384,7 +388,7 @@ Adapters must validate the same intent commitment against their own chain-specif
 
 A transaction hash supplied by an agent or relayer is not proof of settlement by itself. The receiving side must independently verify the appropriate chain receipt/finality or shielded proof before marking an intent settled. Timeout, reorg, partial completion, and refund states must be explicit and idempotent.
 
-**Current status:** the existing NEAR MVP binds a limited Zcash Testnet payment intent and records authorization only. It does not yet implement the complete cross-L1 authorization envelope, cross-chain proof verification, atomic settlement, or refund protocol. Do not treat the full one-authorization model as active until those components are implemented and tested.
+**Current status:** the NEAR MVP now has a strict full-envelope authorization entrypoint with owner-pinned policy profile and native predecessor authentication; it records authorization only. The legacy limited dispatch is disabled to avoid a weaker authorization bypass. Cross-chain proof verification, atomic settlement, and refunds are not implemented. The full production one-authorization model is not active.
 
 ---
 
@@ -402,4 +406,4 @@ Do not describe QPC as quantum-resistant, private-on-chain, a live bridge, or pr
 
 ## NEAR contract status
 
-A NEAR Rust policy-contract MVP now lives in near/qpc-near-agent-finance. It checks agent authorization, router binding, policy version, nonce, expiry, payment-argument hash, and spending caps before recording an authorization event. It does not execute a Zcash payment, call a router, or prove settlement. It has not been deployed to NEAR Testnet or independently audited. See that crate's README and the NEAR contract CI workflow.
+A NEAR Rust policy-contract MVP lives in near/qpc-near-agent-finance. Its full-envelope entrypoint checks native agent identity, owner-pinned profile, router binding, policy version, replay, recipient, expiry, commitment, revocation state and spending caps before recording an authorization event. It does not execute a Zcash payment, call a router, or prove settlement. It has not been deployed to NEAR Testnet or independently audited. See that crate's README and the NEAR contract CI workflow.

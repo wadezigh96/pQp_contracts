@@ -1,7 +1,11 @@
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 import {
   canonicalizeCrossL1AuthorizationEnvelope,
+  stringifyCrossL1AuthorizationEnvelope,
+  canonicalCrossL1AuthorizationBytes,
+  computeCrossL1ReplayDomainKey,
   computeCrossL1AuthorizationCommitment,
   authorizeCrossL1Envelope,
   verifyCrossL1SettlementEvidence,
@@ -21,11 +25,13 @@ function envelope() {
     },
     source: {
       networkId: "near:mainnet",
+      nativeChainId: "mainnet",
       accountId: "agent.near",
       adapterId: "near-v1",
     },
     destination: {
       networkId: "zcash:testnet",
+      nativeChainId: "testnet",
       adapterId: "zcash-shielded-v1",
       recipientCommitment: "a".repeat(64),
     },
@@ -90,9 +96,11 @@ const mutations = [
   [["agentIdentity", "id"], "agent-18"],
   [["agentIdentity", "keyId"], "agent-key-2026-02"],
   [["source", "networkId"], "eip155:1"],
+  [["source", "nativeChainId"], "testnet"],
   [["source", "accountId"], "0x1111111111111111111111111111111111111111"],
   [["source", "adapterId"], "evm-v1"],
   [["destination", "networkId"], "solana:mainnet-beta"],
+  [["destination", "nativeChainId"], "mainnet"],
   [["destination", "adapterId"], "solana-v1"],
   [["destination", "recipientCommitment"], "c".repeat(64)],
   [["action", "type"], "contract-call"],
@@ -113,7 +121,7 @@ const mutations = [
   [["policy", "id"], "policy-2"],
   [["policy", "version"], 5],
   [["policy", "commitment"], "d".repeat(64)],
-  [["time", "issuedAtUnix"], BASE_TIME + 1],
+  [["time", "issuedAtUnix"], BASE_TIME - 1],
   [["time", "notBeforeUnix"], BASE_TIME + 1],
   [["time", "expiresAtUnix"], BASE_TIME + 301],
   [["settlement", "evidenceClass"], "evm-receipt-proof-v1"],
@@ -135,13 +143,81 @@ test("canonical envelope produces stable 32-byte commitment independent of input
 });
 
 for (const [path, value] of mutations) {
-  test(\`authorization commitment binds \${path.join(".")}\`, () => {
+  test(`authorization commitment binds ${path.join(".")}`, () => {
     assert.notEqual(
       computeCrossL1AuthorizationCommitment(envelope()),
       computeCrossL1AuthorizationCommitment(changedAt(path, value)),
     );
   });
 }
+
+test("shared literal canonical JSON and commitment match byte-for-byte", async () => {
+  const fixture = JSON.parse(await readFile(new URL("../../docs/fixtures/cross-l1-v1.json", import.meta.url)));
+  assert.equal(stringifyCrossL1AuthorizationEnvelope(fixture.envelope), fixture.canonicalJson);
+  assert.equal(canonicalCrossL1AuthorizationBytes(fixture.envelope).toString("utf8"), fixture.canonicalJson);
+  assert.equal(computeCrossL1AuthorizationCommitment(fixture.envelope), fixture.authorizationCommitment);
+});
+
+test("rejects invalid numeric bounds, non-data objects and nested unknown fields", () => {
+  for (const [path, value] of [
+    [["nonce"], "340282366920938463463374607431768211456"],
+    [["amount", "sourceAtomic"], "9".repeat(1000)],
+    [["time", "expiresAtUnix"], Number.MAX_SAFE_INTEGER + 1],
+    [["policy", "version"], -0],
+    [["asset", "sourceDecimals"], 256],
+    [["fees", "maxSlippageBps"], 10001],
+    [["source", "nativeChainId"], "é"],
+  ]) assert.throws(() => canonicalizeCrossL1AuthorizationEnvelope(changedAt(path, value)));
+  for (const field of Object.keys(envelope()).filter(k => typeof envelope()[k] === "object")) {
+    const e = envelope(); e[field].extra = true;
+    assert.throws(() => canonicalizeCrossL1AuthorizationEnvelope(e), /unexpected field/);
+  }
+  const e = envelope(); let reads = 0;
+  Object.defineProperty(e.source, "accountId", { enumerable: true, get() { reads++; return "attacker"; } });
+  assert.throws(() => canonicalizeCrossL1AuthorizationEnvelope(e), /data fields/);
+  assert.equal(reads, 0);
+  const hidden = envelope(); Object.defineProperty(hidden, "hidden", { value: true });
+  assert.throws(() => canonicalizeCrossL1AuthorizationEnvelope(hidden), /data fields/);
+  const symbol = envelope(); symbol[Symbol("extra")] = true;
+  assert.throws(() => canonicalizeCrossL1AuthorizationEnvelope(symbol), /data fields/);
+});
+
+test("authorization snapshot and every nested field remain immutable across async verifier", async () => {
+  const e = envelope();
+  const expected = computeCrossL1AuthorizationCommitment(e);
+  const result = await authorizeCrossL1Envelope(e, {
+    nowUnix: BASE_TIME + 1,
+    verifyAgentAuthorization: async ({ envelope: frozen }) => {
+      assert.throws(() => { frozen.destination.recipientCommitment = "f".repeat(64); }, TypeError);
+      e.destination.recipientCommitment = "f".repeat(64);
+      await Promise.resolve();
+      return true;
+    },
+    consumeReplay: async ({ authorizationCommitment }) => { assert.equal(authorizationCommitment, expected); return true; },
+  });
+  assert.equal(result.authorizationCommitment, expected);
+});
+
+test("replay domain tuple binds native chain and cannot reset on key rotation", () => {
+  const original = computeCrossL1ReplayDomainKey(envelope());
+  assert.notEqual(original, computeCrossL1ReplayDomainKey(changedAt(["source", "nativeChainId"], "testnet")));
+  assert.equal(original, computeCrossL1ReplayDomainKey(changedAt(["agentIdentity", "keyId"], "rotated-key")));
+  assert.equal(original, computeCrossL1ReplayDomainKey(changedAt(["policy", "version"], 9)));
+  assert.throws(() => computeCrossL1ReplayDomainKey(changedAt(["replayDomain", "scope"], "contains|delimiter")));
+});
+
+test("settlement evidence snapshot cannot change during asynchronous verification", async () => {
+  const mutable = settlementEvidence();
+  const result = await verifyCrossL1SettlementEvidence({ authorization: envelope(), evidence: mutable,
+    verifyDestinationEvidence: async ({ evidence: frozen }) => {
+      assert.throws(() => { frozen.transactionId = "forged"; }, TypeError);
+      mutable.transactionId = "forged";
+      await Promise.resolve();
+      return true;
+    },
+  });
+  assert.equal(result.transactionId, "zcash-tx-0001");
+});
 
 test("rejects unknown critical fields instead of silently omitting them", () => {
   const extraTopLevel = { ...envelope(), unknownSecurityMode: "skip-checks" };
@@ -185,8 +261,8 @@ test("authorization requires identity verification and a durable atomic replay c
     },
     consumeReplay: async ({ replayDomainKey, nonce, intentId }) => {
       calls.push(["consume", replayDomainKey, nonce, intentId]);
-      const nonceKey = \`\${replayDomainKey}:nonce:\${nonce}\`;
-      const intentKey = \`\${replayDomainKey}:intent:\${intentId}\`;
+      const nonceKey = `${replayDomainKey}:nonce:${nonce}`;
+      const intentKey = `${replayDomainKey}:intent:${intentId}`;
       if (consumedNonces.has(nonceKey) || consumedIntents.has(intentKey)) return false;
       consumedNonces.add(nonceKey);
       consumedIntents.add(intentKey);
@@ -285,7 +361,7 @@ for (const [field, value, message] of [
   ["evidenceClass", "public-tx-hash-only", /evidence class/],
   ["confirmations", 1, /confirmation threshold/],
 ]) {
-  test(\`rejects settlement evidence mismatch in \${field}\`, async () => {
+  test(`rejects settlement evidence mismatch in ${field}`, async () => {
     let verifierCalls = 0;
     await assert.rejects(
       verifyCrossL1SettlementEvidence({

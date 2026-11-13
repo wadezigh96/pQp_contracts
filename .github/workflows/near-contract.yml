@@ -5,10 +5,12 @@ on:
     branches: ["**"]
     paths:
       - "near/qpc-near-agent-finance/**"
+      - "docs/fixtures/**"
       - ".github/workflows/near-contract.yml"
   pull_request:
     paths:
       - "near/qpc-near-agent-finance/**"
+      - "docs/fixtures/**"
       - ".github/workflows/near-contract.yml"
 
 permissions:
@@ -25,7 +27,7 @@ jobs:
           components: rustfmt
       - uses: Swatinem/rust-cache@v2
       - name: Format sources
-        run: cargo fmt --manifest-path near/qpc-near-agent-finance/Cargo.toml
+        run: cargo fmt --manifest-path near/qpc-near-agent-finance/Cargo.toml -- --check
       - name: Unit tests
         run: cargo test --manifest-path near/qpc-near-agent-finance/Cargo.toml
       - name: Build NEAR WASM

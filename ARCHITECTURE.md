@@ -302,6 +302,8 @@ A shared envelope does not imply shared transaction semantics. Each adapter must
 
 ### Current implementation versus target
 
-The current NEAR MVP only authorizes a narrowly defined Zcash Testnet intent and records an event. Its hash currently binds payment ID, opaque recipient reference, amount in Zatoshi, and expiry; additional policy, caller, router, nonce, action, destination, privacy-mode, allowlist, and cap checks are performed separately. This is not yet the complete cross-L1 envelope and does not execute or verify settlement.
+The NEAR MVP now authorizes the strict canonical v1 envelope using native predecessor authentication and an owner-pinned profile; the legacy limited-hash dispatch is disabled. See [canonical encoding and shared vector](docs/CANONICAL_SPEC.md). Authorization updates persistent replay/cap accounting atomically in NEAR state and emits minimal commitment evidence, not a destination transfer. It does not execute or verify cross-chain settlement.
+
+The local JS intent store persists replay consumption and lifecycle records under a single-host lock and atomic snapshot. It is not a distributed transaction coordinator; uncertain external submissions must enter reconciliation rather than retry automatically. Native preparation handles are unsigned local data, with mock evidence validation explicitly separate from production settlement. See [native adapter boundaries](docs/NATIVE_ADAPTERS.md) and [test evidence](docs/ENGINEERING_EVIDENCE.md).
 
 Ethereum/BSC and Solana production adapters are not implemented. The Zcash wallet adapter is not a production shielded signer/broadcaster or independent receipt verifier. The EVM contract is not private by default. Post-quantum authentication is a design target only and is not implemented.
