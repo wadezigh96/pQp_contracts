@@ -12,6 +12,7 @@ The owner controls:
 - native spending caps and per-transaction limits
 - token spending policies
 - target/function-selector permissions
+- exact calldata-hash permissions
 - token recipient permissions
 - emergency pause
 - ownership transfer
@@ -42,7 +43,7 @@ Mitigations:
 - non-reentrant execution
 - accounting before external call
 - revert on failed external calls
-- explicit target + selector permissions
+- explicit target + selector + exact calldata-hash permissions
 
 ### Malicious or non-standard ERC-20
 
@@ -61,6 +62,12 @@ Operational protection of the owner key is therefore critical.
 ### Replay / duplicate execution
 
 Each successful execution consumes a monotonic contract nonce and emits an execution event. The contract itself does not accept off-chain signed intents; replay protection for future signed application layers must be implemented at that layer.
+
+## Exact call authorization
+
+`execute` requires both a target/selector permission and an owner-approved `keccak256(calldata)` hash. This binds all encoded arguments to the approved call. A changed recipient, amount, spender, or other argument produces a different hash and fails closed. Owners must explicitly approve each exact calldata payload they intend an agent to use.
+
+The `execute` path rejects common ERC-20 allowance-granting selectors (`approve`, `increaseAllowance`, and standard ERC-20/DAI `permit` signatures). This selector denylist is defense-in-depth, not a universal detector for arbitrary token or protocol-specific approval functions. The preferred token path remains `transferToken`, with its recipient allowlist and amount caps.
 
 ## Policy lifecycle
 
