@@ -111,3 +111,12 @@ The core contract does not provide:
 - UI security
 - cross-chain replay protection
 - automatic recovery from a compromised owner
+
+
+## Privacy and post-quantum claims
+
+The current EVM contract does not make public-chain activity private. Storage, calldata, logs/events, and transaction metadata remain publicly observable according to the underlying chain. A calldata hash is an authorization control, not encryption or a zero-knowledge proof.
+
+No post-quantum signature/KEM, hybrid classical-plus-PQ authentication, PQ identity format, or migration/recovery protocol is implemented here. The project name and roadmap must not be treated as evidence of quantum resistance. Any future PQC integration needs a reviewed scheme, parameter set, implementation, key lifecycle, chain compatibility analysis, and independent cryptographic review.
+
+The current repository also does not establish a production NEAR-to-Zcash bridge or universal L1 interoperability. The Zcash adapter does not yet create, sign, broadcast, or independently verify shielded payments.
