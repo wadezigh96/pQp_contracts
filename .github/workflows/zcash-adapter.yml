@@ -1,0 +1,55 @@
+name: QPC Zcash Adapter Checks
+
+on:
+  push:
+    branches:
+      - "qpc/**"
+      - "manus/continue-near-zcash"
+    paths:
+      - "zcash/qpc-zcash-agent/**"
+      - "agent-router/**"
+      - ".github/workflows/zcash-adapter.yml"
+  pull_request:
+    paths:
+      - "zcash/qpc-zcash-agent/**"
+      - "agent-router/**"
+      - ".github/workflows/zcash-adapter.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  zcash-adapter:
+    name: Zcash address, wallet storage, and policy tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: zcash/qpc-zcash-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.89.0
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: zcash/qpc-zcash-agent
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+      - name: Run adapter and wallet storage tests
+        run: cargo test
+      - name: Compile adapter and wallet backend
+        run: cargo check
+
+  agent-router:
+    name: NEAR-to-Zcash agent-router tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agent-router
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run agent-router tests
+        run: node --test test/*.test.mjs
