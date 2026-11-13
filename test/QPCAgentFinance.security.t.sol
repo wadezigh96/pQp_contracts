@@ -66,8 +66,18 @@ contract QPCAgentFinanceSecurityTest {
     }
 
     function allowTarget() internal {
+        bytes memory data = abi.encodeWithSelector(target.attack.selector);
         vm.prank(OWNER);
         qpc.setCallPermission(AGENT, address(target), ReentrantTarget.attack.selector, true);
+        vm.prank(OWNER);
+        qpc.setCalldataPermission(AGENT, address(target), keccak256(data), true);
+    }
+
+    function callAsAgentWithData(address callTarget, uint256 value, bytes memory data) internal returns (bool ok) {
+        vm.prank(AGENT);
+        (ok,) = address(qpc).call(
+            abi.encodeWithSelector(qpc.execute.selector, callTarget, value, data)
+        );
     }
 
     function fund(uint256 amount) internal {
@@ -84,6 +94,38 @@ contract QPCAgentFinanceSecurityTest {
                 value,
                 abi.encodeWithSelector(target.attack.selector)
             )
+        );
+    }
+
+
+    function testExecuteRejectsUnapprovedCalldataArguments() public {
+        configure(10 ether, 1 ether, 1 days);
+        allowTarget();
+        fund(1 ether);
+
+        bytes memory alteredData = abi.encodePacked(
+            abi.encodeWithSelector(target.attack.selector),
+            bytes32(uint256(1))
+        );
+        require(
+            !callAsAgentWithData(address(target), 0, alteredData),
+            "unapproved calldata accepted"
+        );
+    }
+
+    function testExecuteRejectsTokenApprovalSelector() public {
+        configure(10 ether, 1 ether, 1 days);
+        bytes4 approveSelector = bytes4(keccak256("approve(address,uint256)"));
+        bytes memory approvalData = abi.encodeWithSelector(approveSelector, RECIPIENT, 1);
+
+        vm.prank(OWNER);
+        qpc.setCallPermission(AGENT, TOKEN, approveSelector, true);
+        vm.prank(OWNER);
+        qpc.setCalldataPermission(AGENT, TOKEN, keccak256(approvalData), true);
+
+        require(
+            !callAsAgentWithData(TOKEN, 0, approvalData),
+            "token approval call accepted"
         );
     }
 
