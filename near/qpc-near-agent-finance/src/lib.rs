@@ -3,7 +3,8 @@ use near_sdk::{
     collections::LookupMap,
     env, near, AccountId, BorshStorageKey, PanicOnDefault,
 };
-use near_sdk::serde::{Deserialize, Serialize};
+use near_sdk::json_types::U128;
+use near_sdk::serde::Serialize;
 use near_sdk::serde_json::json;
 
 const HASH_DOMAIN: &str = "QPC-NEAR-ZCASH-POLICY-ARGS-V1\0";
@@ -79,13 +80,15 @@ impl QPCNear {
         policy_id: String,
         router: AccountId,
         expires_at_unix: u64,
-        max_per_payment: u128,
-        total_cap: u128,
+        max_per_payment: U128,
+        total_cap: U128,
     ) {
         self.assert_owner();
         assert!(agent != self.owner, "owner cannot be an agent");
         assert!(!policy_id.is_empty() && policy_id.len() <= 128, "invalid policy id");
         assert!(expires_at_unix > now_unix(), "policy already expired");
+        let max_per_payment = max_per_payment.0;
+        let total_cap = total_cap.0;
         assert!(max_per_payment > 0 && total_cap >= max_per_payment, "invalid spending limits");
 
         let next_version = self.agents.get(&agent)
@@ -260,8 +263,8 @@ mod tests {
             "policy-main".to_string(),
             account("router.testnet"),
             NOW + 10_000,
-            5_000,
-            10_000,
+            U128(5_000),
+            U128(10_000),
         );
         contract
     }
