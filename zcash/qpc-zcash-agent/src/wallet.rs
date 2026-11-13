@@ -37,7 +37,7 @@ fn validate_private_directory(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn restrict_regular_file(path: &Path) -> Result<(), String> {
+pub(crate) fn restrict_regular_file(path: &Path) -> Result<(), String> {
     let metadata =
         fs::symlink_metadata(path).map_err(|_| "wallet database file is unavailable".to_owned())?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
@@ -58,7 +58,7 @@ fn restrict_regular_file(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn prepare_database_file(path: &Path) -> Result<(), String> {
+pub(crate) fn prepare_database_file(path: &Path) -> Result<(), String> {
     let parent = path
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
@@ -92,7 +92,7 @@ fn restrict_existing_sidecar(path: &Path) -> Result<(), String> {
     }
 }
 
-fn harden_sqlite_sidecars(path: &Path) -> Result<(), String> {
+pub(crate) fn harden_sqlite_sidecars(path: &Path) -> Result<(), String> {
     for suffix in ["-wal", "-shm", "-journal"] {
         let mut sidecar = path.as_os_str().to_os_string();
         sidecar.push(suffix);
