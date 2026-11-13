@@ -30,6 +30,18 @@ function prepared() {
   });
 }
 
+test("canonical payment hash matches the NEAR contract fixture", () => {
+  assert.equal(
+    computeNearToZcashPolicyArgsHash({
+      paymentId: "pay-2026-0001",
+      opaqueRecipientRef: "ref-7f2a9c8405d1b6e3f48a2d0c",
+      amountZatoshis: "25000",
+      expiresAtUnix: 1_800_000_300,
+    }),
+    "afba8520c1b56d0635f02f6d02df0e0f3fa70dc87c170822be11230db55d04a5",
+  );
+});
+
 test("submits only through explicit NEAR signer and route provider", async () => {
   const calls = [];
   const result = await submitNearToZcashDispatch(prepared(), {
