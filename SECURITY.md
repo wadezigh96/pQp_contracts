@@ -125,3 +125,26 @@ The current repository also does not establish a production NEAR-to-Zcash bridge
 ## NEAR MVP boundary
 
 The NEAR Rust crate under near/qpc-near-agent-finance is an authorization-and-audit-recording MVP. It is not a deployed contract, escrow, bridge, wallet signer, or settlement verifier. Its policy hash and nonce checks do not make NEAR state private. It has not undergone independent audit or production gas/storage review.
+
+
+## Cross-L1 authorization threat model
+
+The current EVM contract nonce protects its own execution sequence; it is not a cross-chain replay defense. The NEAR MVP separately checks a per-agent nonce, policy ID/version, fixed action and destination, router, recipient allowlist, amount caps, and a limited payment-argument hash. Neither implementation currently authenticates and enforces the complete cross-L1 authorization envelope.
+
+Before cross-chain activation, every adapter must bind and validate the agent identity, source and destination network/account, action, source/destination asset identifiers and decimals, amount, fee bounds, recipient or privacy commitment, nonce and replay domain, policy ID/version, issue/expiry times, cancellation state, and settlement-evidence requirements. One-field mutation, cross-chain replay, cross-direction replay, stale policy, key revocation, and downgrade tests are mandatory. The proposed protocol fields and acceptance tests are in [QPC Cross-L1 Authorization Envelope](docs/QPC_CROSS_L1_AUTHORIZATION.md).
+
+### Adapter-specific threat boundaries
+
+- **NEAR:** validate predecessor/account identity, contract and method, policy state, nonce, attached deposit, receipts, and finality.
+- **Ethereum:** validate chain ID, signer/account nonce, target/value/calldata, token behavior, receipt, and finality.
+- **BSC:** validate BSC network identity and its own RPC/finality assumptions in addition to EVM controls.
+- **Solana:** validate cluster identity, program IDs, instruction/account metas, signer/PDA authority, blockhash/nonce, and slot commitment.
+- **Zcash:** validate network, shielded receiver policy, note/nullifier state, wallet scan trust, and shielded receipt evidence. Never expose spending or viewing keys to agents or logs.
+
+Provider callbacks and transaction identifiers are untrusted inputs until independently checked under the adapter's documented trust model. Reorgs, stale checkpoints, partial execution, timeouts, duplicate delivery, and refund/reconciliation are security states, not mere UI errors.
+
+### Privacy and quantum constraints
+
+Privacy controls must cover identity, authorization, agent communication, and settlement. A hash or opaque recipient reference is not encryption or proof of private execution. Each route must fail closed rather than silently downgrade its required privacy class.
+
+Post-quantum resistance remains a design objective only. Do not enable or advertise PQ security until the selected standardized algorithms, identity binding, key lifecycle, downgrade protections, chain integration, interoperability tests, and independent cryptographic review are complete.
