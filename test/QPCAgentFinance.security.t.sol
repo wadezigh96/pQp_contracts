@@ -203,18 +203,6 @@ contract QPCAgentFinanceSecurityTest {
         require(active && cap == 20 ether && txLimit == 5 ether, "expired reconfigure failed");
     }
 
-    function testExpiredAgentTokenPolicyCanBeReconfigured() public {
-        configureToken(100, 40);
-        activateAgent();
-
-        vm.warp(block.timestamp + 1 days);
-
-        vm.prank(OWNER);
-        qpc.setTokenPolicy(AGENT, address(token), 200, 50);
-
-        require(qpc.tokenRemaining(AGENT, address(token)) == 200, "expired token policy not renewed");
-    }
-
     function testOwnershipHandshake() public {
         vm.prank(OWNER);
         qpc.transferOwnership(NEW_OWNER);
@@ -349,6 +337,18 @@ contract QPCAgentFinanceTokenSecurityTest {
     function activateAgent() internal {
         vm.prank(OWNER);
         qpc.configureAgent(AGENT, uint64(block.timestamp + 1 days), 10 ether, 10 ether);
+    }
+
+    function testExpiredAgentTokenPolicyCanBeReconfigured() public {
+        configureToken(100, 40);
+        activateAgent();
+
+        vm.warp(block.timestamp + 1 days);
+
+        vm.prank(OWNER);
+        qpc.setTokenPolicy(AGENT, address(token), 200, 50);
+
+        require(qpc.tokenRemaining(AGENT, address(token)) == 200, "expired token policy not renewed");
     }
 
     function testTokenTransferWithinLimit() public {
