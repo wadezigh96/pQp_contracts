@@ -36,7 +36,7 @@ export async function submitNearToZcashDispatch(prepared, {
 
   const route = await submitRoute({
     protocol: prepared.zcashRequest.protocol,
-    request: prepared.zcashRequest,
+    request: prepared.zcashRequest.request,
     nearTxHash,
     policyArgsHash: prepared.policyArgsHash,
   });
