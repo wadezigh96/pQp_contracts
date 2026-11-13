@@ -41,8 +41,5 @@ pub enum WalletError {
 pub trait WalletBackend {
     fn capabilities(&self) -> Result<WalletCapabilities, WalletError>;
 
-    fn observe_payment(
-        &self,
-        payment_id: PaymentId,
-    ) -> Result<WalletObservation, WalletError>;
+    fn observe_payment(&self, payment_id: PaymentId) -> Result<WalletObservation, WalletError>;
 }

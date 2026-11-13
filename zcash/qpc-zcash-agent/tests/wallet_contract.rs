@@ -12,10 +12,7 @@ impl WalletBackend for ReadOnlyWallet {
         })
     }
 
-    fn observe_payment(
-        &self,
-        _payment_id: PaymentId,
-    ) -> Result<WalletObservation, WalletError> {
+    fn observe_payment(&self, _payment_id: PaymentId) -> Result<WalletObservation, WalletError> {
         Ok(WalletObservation::Unknown)
     }
 }

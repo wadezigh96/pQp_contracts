@@ -1,7 +1,7 @@
-use zcash_address::unified::Encoding;
 use qpc_zcash_agent::{
     validate_recipient, AddressPolicyError, ShieldedReceiver, ZcashNetwork,
 };
+use zcash_address::unified::Encoding;
 
 // Published mainnet Unified Address test vector.
 const MAINNET_UA: &str = "u1nztelxna9h7w0vtpd2xjhxt4lpu8s9cmdl8n8vcr7actf2ny45nd07cy8cyuhuvw3axcp545y0ktq9cezuzx84jyhex8dk4tdvwhu4dl";
