@@ -1,0 +1,23 @@
+[package]
+name = "qpc-near-agent-finance"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Policy-enforcing NEAR contract boundary for QPC agentic payments"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = { version = "=5.17.2", features = ["legacy"] }
+
+[dev-dependencies]
+near-sdk = { version = "=5.17.2", features = ["legacy", "unit-testing"] }
+
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true
