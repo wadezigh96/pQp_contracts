@@ -1,5 +1,7 @@
 # QPC Agentic Cross-Chain Payments
 
+**Normative authorization specification:** [QPC Cross-L1 Authorization Envelope](QPC_CROSS_L1_AUTHORIZATION.md) defines the target fields and adapter verification requirements. The current implementation is narrower, as detailed below.
+
 **Status: architecture and local test coverage; not a live bridge or production settlement network.**
 
 ## Purpose
