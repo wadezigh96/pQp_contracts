@@ -1,0 +1,22 @@
+# Rust / NEAR build outputs
+/target/
+**/target/
+
+# Foundry build, cache, and local broadcast artifacts
+out/
+cache/
+broadcast/
+
+# Solidity compiler outputs
+*.bin
+*.abi
+
+# Local secrets and environment files
+.env
+.env.*
+!.env.example
+
+# Local NEAR credentials / deployment metadata
+.near-credentials/
+.near-credentials*
+.near/

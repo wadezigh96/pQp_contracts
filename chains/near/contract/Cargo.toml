@@ -1,0 +1,19 @@
+[package]
+name = "qpc-near-policy"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = "=5.30.0"
+borsh = { version = "=1.8.1", features = ["derive"] }
+# near-sdk 5.30.0 was released against near-sys 0.4.0; 0.4.1 gates host bindings
+# used by this SDK release. Keep this exact compatibility pin until upstream resolves it.
+near-sys = "=0.4.0"
+
+[dev-dependencies]
+near-sdk = { version = "=5.30.0", features = ["unit-testing"] }
+near-crypto = "=0.38.1"

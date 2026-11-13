@@ -1,305 +1,58 @@
-# PQP --- POST QUANTUM PERSISTENCE
+# QPC — On-chain Guardrails for AI Agents
 
-<div align="center">
+**QPC** adalah prototipe kontrak NEAR yang membatasi aksi agent on-chain dengan policy, lalu mensyaratkan tanda tangan intent **ML-DSA-65 (FIPS 204)** sebelum transfer native NEAR dijalankan. AI boleh menyusun usulan aksi; kontrak memeriksa izin dan signature secara deterministik.
 
-**Policy-Controlled Agentic Finance Infrastructure**
+QPC bukan “anti-hacker” mutlak. ML-DSA melindungi autentikasi intent terhadap ancaman komputasi kuantum yang diketahui, tetapi tidak mencegah pencurian private key, kompromi owner, bug runtime, supply-chain attack, atau kesalahan manusia. Lihat [desain dan threat model QPC](QPC-NEAR-DESIGN.md).
 
-**Human intent → Policy → Agent execution → On-chain settlement → Audit**
+## Implementasi saat ini
 
-</div>
+- **NEAR — QPC** (`chains/near/contract/`): kontrak native Rust/NEAR SDK. Signed intent mengikat source/destination chain ID, derivation-path label, contract, agent, penerima, jumlah, nonce, expiry, dan versi policy; semua binding dicek sebelum Promise dibuat dan dicatat dalam execution-audit events. Saat ini destination wajib sama dengan chain NEAR aktif karena hanya transfer native NEAR yang diimplementasikan.
+- **Ethereum — legacy Solidity baseline** (`contracts/QPCAgentFinance.sol`, `chains/ethereum/`): policy guardrails EVM lama yang nama filenya kini konsisten dengan QPC, tetapi bukan adapter post-quantum QPC; belum memverifikasi ML-DSA dan tidak boleh dipasarkan sebagai quantum-resistant.
+- **BNB Chain** (`chains/bnb/`): rencana integrasi/deployment EVM terpisah; saat ini belum ada kontrak QPC BNB atau address deployment.
+- **Solana** (`chains/solana/`): spesifikasi native Solana tersendiri. Belum ada Solana program dalam repositori ini; QPC NEAR bytecode tidak dapat dijalankan di Solana.
 
----
+Tidak ada bridge, common cross-chain signer, atau klaim bahwa tanda tangan post-quantum NEAR otomatis melindungi deployment di chain lain.
 
-## About
+## Struktur repositori
 
-POA Agent Finance is a standalone smart-contract foundation for autonomous and AI-assisted finance.
-
-The core principle is simple:
-
-> **The agent may execute within a policy, but the agent never becomes the owner.**
-
-The contract separates **human authority** from **agent execution authority**. Policies define what an agent can do, how much it can spend, where it can send funds, which contract functions it can call, and when its authority expires.
-
-
-
-## Core workflow
-
-```mermaid
-flowchart TB
-    U[Human / Owner] --> P[Create Agent Policy]
-    P --> G[Guardrails]
-
-    G --> A[Agent Authority]
-    G --> C[Call Allowlist]
-    G --> R[Recipient Allowlist]
-    G --> T[Token Policy]
-    G --> E[Expiry]
-
-    A --> X[Agent Request]
-
-    X --> V{Policy Check}
-    V -->|blocked| B[Reject]
-    V -->|allowed| S[State Accounting]
-
-    S --> Q[On-chain Execution]
-    Q --> L[Nonce + Events]
-    L --> Z[Settlement]
-
-    U -->|Pause / Revoke| G
+```text
+contracts/QPCAgentFinance.sol       Baseline EVM lama; bukan implementasi post-quantum QPC NEAR
+chains/near/contract/               QPC contract native NEAR + Rust tests
+chains/near/README.md               Instruksi build/test serta status NEAR
+chains/ethereum/README.md           Batas deployment Ethereum
+chains/bnb/README.md                Batas deployment BNB Chain
+chains/solana/README.md             Desain native Solana dan status belum diimplementasikan
+QPC-NEAR-DESIGN.md                  Arsitektur, properti keamanan, threat model, dan sumber
 ```
 
-### Execution path
+## Build dan tes lokal NEAR
 
-**Configure → Activate → Request → Validate → Account → Execute → Emit event**
-
-1. Owner configures an agent.
-2. Agent receives limited authority.
-3. Agent submits an execution request.
-4. Contract checks expiry, pause state, target, selector, recipient and spending limits.
-5. Spending accounting is updated.
-6. The approved call or token transfer executes.
-7. Nonce and event data provide an on-chain execution trail.
-8. Owner can pause or revoke authority at any time.
-
----
-
-## Security architecture
-
-```mermaid
-flowchart LR
-    O[Owner] -->|policy control| PC[POA Policy Controller]
-
-    PC --> AP[Agent Policy]
-    PC --> CL[Call Allowlist]
-    PC --> RL[Recipient Allowlist]
-    PC --> TP[Token Policy]
-    PC --> EX[Expiry]
-    PC --> PP[Emergency Pause]
-
-    AG[Agent Key] -->|limited request| G{Guardrails}
-    AP --> G
-    CL --> G
-    RL --> G
-    TP --> G
-    EX --> G
-    PP --> G
-
-    G -->|pass| CE[Contract Execution]
-    G -->|fail| RE[Revert]
-
-    CE --> EV[Nonce + Events]
-    CE --> SET[Settlement]
-```
-
-### Security boundaries
-
-| Layer | Responsibility |
-|---|---|
-| Owner | Creates, changes, pauses and revokes policies |
-| Agent | Requests permitted execution only |
-| Policy | Defines limits and permissions |
-| Contract | Enforces policy deterministically |
-| Nonce | Provides monotonic execution sequencing |
-| Events | Provide an on-chain audit trail |
-| Pause | Emergency global execution stop |
-| Expiry | Automatic authority termination |
-| Reentrancy guard | Prevents nested execution |
-
-AI logic is **not trusted as a security boundary**. The smart contract remains the final enforcement layer.
-
----
-
-## Project structure
-
-```
-poa_contracts/
-├── contracts/
-│   └── POAAgentFinance.sol       # Core policy + execution contract
-│
-├── test/
-│   ├── POAAgentFinance.security.t.sol
-│   │                              # Security regression tests
-│   ├── POAAgentFinance.invariant.t.sol
-│   │                              # State/invariant checks
-│   └── POAAgentFinance.stateful.t.sol
-│                                  # Stateful handler scenarios
-│
-├── script/                        # Deployment scripts
-├── foundry.toml                   # Foundry compiler/test configuration
-├── README.md                      # Architecture + usage overview
-└── ARCHITECTURE.md                # Detailed system design
-```
-
-The repository keeps the **security-critical policy layer small and isolated**. Application-specific agents, APIs, wallets and protocol adapters can be built above it later without changing the core security model.
-
----
-
-## Policy model
-
-### Native assets
-
-Each agent receives:
-
-- maximum policy duration: **30 days**
-- total native spending cap
-- per-transaction native limit
-- active / revoked state
-
-### ERC-20 assets
-
-Each agent/token pair can define:
-
-- cumulative token cap
-- per-transaction token limit
-- cumulative spending accounting
-
-### Contract calls
-
-Calls require an explicit:
-
-**agent + target + function selector**
-
-allowlist entry.
-
-### Token recipients
-
-Token transfers require an explicit:
-
-**agent + recipient**
-
-allowlist entry.
-
----
-
-## Owner lifecycle
-
-```
-Create Policy
-     ↓
-Activate Agent
-     ↓
-Agent Executes
-     ↓
- ┌───────────────┐
- │ Active Policy │
- └───────────────┘
-     ↓
-  Pause / Revoke / Expire
-     ↓
-Authority Ends
-```
-
-The owner remains the root authority throughout the lifecycle.
-
----
-
-## Agent execution lifecycle
-
-```
-Agent
-  │
-  ▼
-Request
-  │
-  ▼
-Is active?
-  │ no ─────► Revert
-  │ yes
-  ▼
-Is paused?
-  │ yes ────► Revert
-  │ no
-  ▼
-Policy validation
-  │
-  ├── expiry
-  ├── target + selector
-  ├── recipient
-  ├── per-tx limit
-  └── cumulative cap
-  │
-  ▼
-Accounting
-  │
-  ▼
-On-chain call
-  │
-  ▼
-Nonce + event
-  │
-  ▼
-Settlement
-```
-
----
-
-## Security status
-
-Current defenses include:
-
-- two-step ownership transfer
-- agent expiry
-- native spending caps
-- native per-transaction limits
-- ERC-20 spending caps
-- ERC-20 per-transaction limits
-- target/function-selector allowlisting
-- recipient allowlisting
-- emergency pause
-- monotonic nonce
-- reentrancy protection
-- defensive ERC-20 transfer handling
-- policy validation
-- security regression tests
-- invariant/stateful test scaffolding
-
-This repository has **not been independently audited**. Passing local or CI tests does not constitute a security audit. Production funds should not be deployed until independent review, fuzzing, static analysis and deployment validation are complete.
-
----
-
-## Development
+Toolchain Rust dan dependency NEAR SDK dipin. Instal `wasm32-unknown-unknown` bila belum ada, lalu jalankan:
 
 ```bash
-forge build
-forge test
+source "$HOME/.cargo/env"
+rustup target add wasm32-unknown-unknown
+cd chains/near/contract
+cargo fmt --check
+cargo test --locked
+cargo build --locked --release --target wasm32-unknown-unknown
 ```
 
-The intended development loop is:
+WASM hasil build berada di `target/wasm32-unknown-unknown/release/qpc_near_policy.wasm`.
 
-**Change → Build → Security tests → Invariant/stateful tests → Review → Deploy**
+Dua belas unit test saat ini membuat keypair ML-DSA-65 dan memverifikasi signature menggunakan verifier runtime/mock NEAR. Test tersebut mencakup intent valid, perubahan payload/penerima, replay/expiry/policy version, batas kumulatif, settlement callback sukses/gagal, 64 langkah state-machine pseudo-random, mismatch chain/path, validasi input kosong/control-character, audit record, serta recovery stale transfer yang owner-attested. Ini bukan fuzz campaign penuh dan belum menggantikan tes sandbox lintas-receipt, audit independen, atau formal verification.
 
----
+## Status keamanan dan rilis
 
-## Future application layer
+**Eksperimental / belum diaudit / belum dideploy.** Tidak ada dana nyata yang boleh dikirim ke kontrak ini sebelum audit independen dan validasi sandbox/testnet.
 
-The core contract intentionally does not contain protocol-specific logic.
+- Otorisasi ML-DSA berlaku untuk signed intent QPC. Pengirim transaksi NEAR boleh menjadi relayer; private key ML-DSA tetap harus disimpan di signer terpisah yang aman, bukan di proses LLM.
+- Policy saat ini hanya mengotorisasi transfer native NEAR ke satu penerima per agent. Belum mengotorisasi arbitrary function calls, FT, NFT, bridge, atau cross-chain message.
+- `destination_chain_id` harus cocok dengan NEAR runtime; `derivation_path` adalah label terikat signature/policy, bukan bukti derivasi key.
+- Pause/revoke menghentikan permintaan baru, tetapi tidak membatalkan promise transfer yang sudah terkirim. Callback memakai 40 Tgas; bila callback receipt tidak settle, owner dapat merekonsiliasi setelah 10 menit dan wajib memeriksa outcome transfer on-chain terlebih dahulu. Ini jalur manual yang mempercayai owner; perilaku receipt dan kebutuhan gas tetap harus diuji di NEAR Sandbox.
+- Owner adalah root authority. Gunakan akun multisig/DAO untuk deployment serius; implementasi ini belum menyediakan timelock atau threshold governance sendiri.
+- Protokol ML-DSA tidak melindungi dari kompromi key, bug contract/runtime, serangan ekonomi di aplikasi penerima, atau chain outage.
 
-A future application can sit above it:
+## Riset lanjutan
 
-```
-User / AI Agent
-      │
-      ▼
-Application / API
-      │
-      ▼
-Policy Builder
-      │
-      ▼
-POAAgentFinance
-      │
-      ├── DEX
-      ├── Lending
-      ├── Payments
-      └── Other protocols
-```
-
-This keeps integrations replaceable while the security boundary remains centralized in the POA contract.
-
----
-
-<div align="center">
-
-**Policy first. Agent second. Settlement last.**
-
-</div>
+Jalankan fuzz/property testing dan invariant campaign; simulasi callback success/failure, recipient invalid, policy expiry/revoke/pause saat transfer pending, dan beban storage/gas; lakukan pemeriksaan formal atas invariant akuntansi; serta minta audit independen untuk setiap chain adapter sebelum deployment.

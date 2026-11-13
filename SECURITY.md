@@ -1,8 +1,8 @@
-# Security Model
+# QPC Legacy EVM Security Model
 
 ## Scope
 
-POA Agent Finance is a policy-control layer for agentic finance. It does not attempt to make an agent trustworthy. Instead, it limits what an agent key can do on-chain.
+This document covers only the legacy Solidity policy-control baseline in `contracts/QPCAgentFinance.sol`. It is separate from native NEAR QPC and does not verify ML-DSA or claim post-quantum resistance. It limits what an agent key can do on EVM under configured policy; it does not make an agent trustworthy.
 
 ## Security boundary
 

@@ -1,18 +1,48 @@
-name: Foundry
+name: QPC and EVM checks
 
 on:
   push:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  test:
+  evm:
+    name: Legacy EVM checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
+        uses: foundry-rs/foundry-toolchain@dba66c27052e63476d886f22216e119ba7e615bf # v1
+        with:
+          version: v1.9.0
       - name: Build
         run: forge build --sizes
       - name: Test
         run: forge test -vvv
+
+  near:
+    name: QPC NEAR checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+      - name: Format
+        working-directory: chains/near/contract
+        run: cargo fmt --check
+      - name: Unit and invariant tests
+        working-directory: chains/near/contract
+        run: cargo test --locked
+      - name: Clippy
+        working-directory: chains/near/contract
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Build NEAR WASM
+        working-directory: chains/near/contract
+        run: cargo build --locked --release --target wasm32-unknown-unknown
