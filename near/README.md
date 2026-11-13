@@ -35,7 +35,34 @@ cargo build --release --target wasm32-unknown-unknown -p qpc-near-escrow
 
 The `qpc-near` unit/integration suite includes `tests/cyber_security.rs` for fail-closed agent controls, policy-version safety, payload bounds, nonce replay protection, callback integrity, and preserved accounting. `tests/cross_chain_privacy.rs` verifies that the cross-chain fixture carries only an opaque recipient reference, binds the exact amount and privacy payload to the policy hash, rejects router redirection, and exposes no transparent action when only the shielded rule is configured.
 
-These tests validate the controls currently implemented by the contract. They do not claim that the contract already implements Chain Signatures, a private L1 transaction, a TEE, a solver, or a receipt verifier. Those are explicit integration boundaries and must be tested separately when implemented.
+These tests validate the controls currently implemented by the contract, including native destination chain ID and derivation-path binding. They do not claim that the contract already implements Chain Signatures, a private L1 transaction, a TEE, a solver, or a receipt verifier. Those are explicit integration boundaries and must be tested separately when implemented.
+
+Each `ActionRule` now commits to a `destination_chain_id` and `derivation_path`, and every `ActionRequest` must repeat the exact values. The contract rejects a mismatch before creating the target promise and stores both values in the execution record for auditability. Chain ID syntax is bounded and printable, while derivation paths are bounded and cannot contain control characters or backslashes. These fields bind the policy; they do not themselves perform cross-chain signing or validate a destination-chain receipt.
+
+## Testnet deployment script
+
+`script/near/deploy-testnet.sh` builds `qpc-near`, prints the WASM SHA-256 and initialization payload, and defaults to a dry run. It is restricted to `.testnet` accounts and never creates accounts, imports keys, changes CLI configuration, or targets mainnet. The deployment transaction is submitted only when `--execute` is supplied explicitly.
+
+Install and configure the official `near-cli-rs` separately, then use an existing testnet contract account and signer:
+
+```sh
+near --version
+CONTRACT_ID=qpc-demo.testnet \
+DEPLOYER_ID=deployer.testnet \
+OWNER_ID=owner.testnet \
+./script/near/deploy-testnet.sh
+```
+
+Review the printed account IDs and WASM hash. When they are correct, submit the deploy and `QpcNear::new({"owner_id":"owner.testnet"})` initialization transaction:
+
+```sh
+CONTRACT_ID=qpc-demo.testnet \
+DEPLOYER_ID=deployer.testnet \
+OWNER_ID=owner.testnet \
+./script/near/deploy-testnet.sh --execute
+```
+
+This script deploys the current experimental policy contract. The name “quantum-resistant” describes the repository's integration research; the deployed contract does not contain an in-contract ML-KEM, ML-DSA or SLH-DSA verifier and the script does not authorize production funds.
 
 ## Safety boundary
 

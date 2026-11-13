@@ -35,6 +35,8 @@ fn setup() -> QpcNear {
                 action_id: "pay_zcash_shielded".to_string(),
                 target: "zcash-router.near".parse().unwrap(),
                 method_name: "request_shielded_payment".to_string(),
+                destination_chain_id: "zcash:testnet".to_string(),
+                derivation_path: "qpc/zcash-testnet/shielded".to_string(),
                 args_hash,
                 max_per_call: 10,
                 cumulative_cap: 10,
@@ -54,6 +56,8 @@ fn request(target: &str) -> ActionRequest {
         action_id: "pay_zcash_shielded".to_string(),
         target: target.parse().unwrap(),
         method_name: "request_shielded_payment".to_string(),
+        destination_chain_id: "zcash:testnet".to_string(),
+        derivation_path: "qpc/zcash-testnet/shielded".to_string(),
         args: OPAQUE_ZCASH_REQUEST.to_vec(),
         attached_deposit: 5,
     }
@@ -73,6 +77,8 @@ fn near_policy_dispatches_only_the_approved_opaque_zcash_request() {
     assert_eq!(execution.target.as_str(), "zcash-router.near");
     assert_eq!(execution.nonce, 0);
     assert_eq!(execution.attached_deposit, 5);
+    assert_eq!(execution.destination_chain_id, "zcash:testnet");
+    assert_eq!(execution.derivation_path, "qpc/zcash-testnet/shielded");
     assert_eq!(
         contract.get_usage("near_to_zcash".to_string()).next_nonce,
         1

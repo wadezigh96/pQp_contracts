@@ -58,7 +58,7 @@ QPC treats an on-chain agent as an untrusted executor, not as a security authori
       Target L1 settlement
 ```
 
-The current NEAR contract already enforces policy versioning, exact argument hashes, nonce sequencing, request uniqueness, expiry, target/method allowlists, spending caps, bounded calls, pause/revoke behavior and idempotent callbacks. The repository also includes unit coverage for opaque cross-chain recipient references and fail-closed privacy payload changes. The planned Cyber Defense extension adds a security guardian, global circuit breaker, per-policy quarantine, incident IDs, chain-ID binding, derivation-path binding, payload limits and action cooldowns. These planned fields are specified but are not yet presented as implemented production controls.
+The current NEAR contract already enforces policy versioning, exact argument hashes, nonce sequencing, request uniqueness, expiry, target/method allowlists, destination-chain and derivation-path binding, spending caps, bounded calls, pause/revoke behavior and idempotent callbacks. The repository also includes unit coverage for opaque cross-chain recipient references and fail-closed privacy payload changes. The remaining planned Cyber Defense extension adds a security guardian, global circuit breaker, per-policy quarantine, incident IDs, payload limits and action cooldowns. Chain binding is an authorization commitment only; it does not implement Chain Signatures or destination-chain receipt verification.
 
 The security lifecycle is:
 

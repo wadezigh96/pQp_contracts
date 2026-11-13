@@ -17,6 +17,8 @@ const MAX_POLICY_DURATION_NS: u64 = 90 * 24 * 60 * 60 * 1_000_000_000;
 const MAX_RULES: usize = 16;
 const MAX_ID_LEN: usize = 64;
 const MAX_METHOD_LEN: usize = 64;
+const MAX_CHAIN_ID_LEN: usize = 64;
+const MAX_DERIVATION_PATH_LEN: usize = 128;
 const MAX_ARGS_LEN: usize = 4_096;
 const MAX_RESULT_LEN: usize = 256;
 const TARGET_GAS_TGAS: u64 = 20;
@@ -39,6 +41,10 @@ pub struct ActionRule {
     pub action_id: String,
     pub target: AccountId,
     pub method_name: String,
+    /// Explicit destination network identifier, e.g. `eip155:11155111`.
+    pub destination_chain_id: String,
+    /// Chain Signatures derivation path bound to this destination network.
+    pub derivation_path: String,
     /// SHA-256 of the exact argument bytes accepted by this rule.
     pub args_hash: Vec<u8>,
     pub max_per_call: u128,
@@ -89,6 +95,8 @@ pub struct ActionRequest {
     pub action_id: String,
     pub target: AccountId,
     pub method_name: String,
+    pub destination_chain_id: String,
+    pub derivation_path: String,
     /// Exact bytes sent to the target. The contract hashes these bytes itself.
     pub args: Vec<u8>,
     pub attached_deposit: u128,
@@ -105,6 +113,8 @@ pub struct AuthorizationReceipt {
     pub action_id: String,
     pub target: AccountId,
     pub method_name: String,
+    pub destination_chain_id: String,
+    pub derivation_path: String,
     pub args_hash: Vec<u8>,
     pub authorized_deposit: u128,
 }
@@ -131,6 +141,8 @@ pub struct ExecutionRecord {
     pub policy_version: u32,
     pub action_id: String,
     pub target: AccountId,
+    pub destination_chain_id: String,
+    pub derivation_path: String,
     pub attached_deposit: u128,
     pub status: ExecutionStatus,
     pub result_len: Option<u64>,
@@ -259,6 +271,8 @@ impl QpcNear {
             .expect("action is not permitted");
         assert_eq!(request.target, rule.target, "target mismatch");
         assert_eq!(request.method_name, rule.method_name, "method mismatch");
+        assert_eq!(request.destination_chain_id, rule.destination_chain_id, "destination chain mismatch");
+        assert_eq!(request.derivation_path, rule.derivation_path, "derivation path mismatch");
         let args_hash = env::sha256(&request.args);
         assert_eq!(args_hash, rule.args_hash, "arguments hash mismatch");
         assert!(request.attached_deposit <= rule.max_per_call, "per-call limit exceeded");
@@ -281,6 +295,8 @@ impl QpcNear {
             policy_id: request.policy_id.clone(), request_id: request.request_id.clone(),
             nonce: request.nonce, policy_version: policy.version,
             action_id: request.action_id.clone(), target: request.target.clone(),
+            destination_chain_id: request.destination_chain_id.clone(),
+            derivation_path: request.derivation_path.clone(),
             attached_deposit: request.attached_deposit, status: ExecutionStatus::Dispatched,
             result_len: None, result_hash: None,
         };
@@ -406,6 +422,8 @@ fn validate_input(input: &PolicyInput, now: u64) {
                 && rule.method_name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_'),
             "invalid method name"
         );
+        assert_valid_chain_id(&rule.destination_chain_id);
+        assert_valid_derivation_path(&rule.derivation_path);
         assert_eq!(rule.args_hash.len(), 32, "arguments hash must be 32 bytes");
         assert!(rule.max_per_call > 0, "per-call cap must be positive");
         assert!(rule.cumulative_cap >= rule.max_per_call, "cumulative cap below per-call cap");
@@ -418,6 +436,26 @@ fn assert_valid_id(value: &str, message: &str) {
         !value.is_empty() && value.len() <= MAX_ID_LEN
             && value.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'),
         "{}", message
+    );
+}
+
+fn assert_valid_chain_id(value: &str) {
+    assert!(
+        !value.is_empty()
+            && value.len() <= MAX_CHAIN_ID_LEN
+            && value.bytes().all(|b| {
+                b.is_ascii_alphanumeric() || matches!(b, b':' | b'.' | b'_' | b'-' | b'/')
+            }),
+        "invalid destination chain id"
+    );
+}
+
+fn assert_valid_derivation_path(value: &str) {
+    assert!(
+        !value.is_empty()
+            && value.len() <= MAX_DERIVATION_PATH_LEN
+            && value.bytes().all(|b| b.is_ascii_graphic() && b != b'\\'),
+        "invalid derivation path"
     );
 }
 
@@ -464,6 +502,8 @@ mod tests {
                 action_id: "vault_deposit".to_string(),
                 target: "vault.near".parse().unwrap(),
                 method_name: "deposit".to_string(),
+                destination_chain_id: "near:mainnet".to_string(),
+                derivation_path: "qpc/near-mainnet/vault".to_string(),
                 args_hash: env::sha256(ARGS),
                 max_per_call: 10,
                 cumulative_cap: 20,
@@ -484,6 +524,8 @@ mod tests {
             policy_id: "policy_1".to_string(), expected_version: 1,
             request_id: request_id.to_string(), nonce, action_id: "vault_deposit".to_string(),
             target: "vault.near".parse().unwrap(), method_name: "deposit".to_string(),
+            destination_chain_id: "near:mainnet".to_string(),
+            derivation_path: "qpc/near-mainnet/vault".to_string(),
             args: ARGS.to_vec(), attached_deposit: amount,
         }
     }

@@ -30,6 +30,8 @@ fn setup() -> QpcNear {
                 action_id: "pay_zcash_shielded".to_string(),
                 target: "zcash-router.near".parse().unwrap(),
                 method_name: "request_shielded_payment".to_string(),
+                destination_chain_id: "zcash:testnet".to_string(),
+                derivation_path: "qpc/zcash-testnet/shielded".to_string(),
                 args_hash: env::sha256(OPAQUE_ARGS),
                 max_per_call: 10,
                 cumulative_cap: 10,
@@ -49,6 +51,8 @@ fn request(target: &str) -> ActionRequest {
         action_id: "pay_zcash_shielded".to_string(),
         target: target.parse().unwrap(),
         method_name: "request_shielded_payment".to_string(),
+        destination_chain_id: "zcash:testnet".to_string(),
+        derivation_path: "qpc/zcash-testnet/shielded".to_string(),
         args: OPAQUE_ARGS.to_vec(),
         attached_deposit: 5,
     }
@@ -78,7 +82,29 @@ fn policy_hash_binds_exact_privacy_payload_and_amount() {
         .unwrap();
     assert_eq!(execution.status, ExecutionStatus::Dispatched);
     assert_eq!(execution.attached_deposit, 5);
+    assert_eq!(execution.destination_chain_id, "zcash:testnet");
+    assert_eq!(execution.derivation_path, "qpc/zcash-testnet/shielded");
     assert_eq!(contract.get_usage("near_to_zcash".to_string()).next_nonce, 1);
+}
+
+#[test]
+#[should_panic(expected = "destination chain mismatch")]
+fn changing_destination_chain_is_rejected_even_with_same_payload() {
+    let mut contract = setup();
+    context("agent.near", 5);
+    let mut changed = request("zcash-router.near");
+    changed.destination_chain_id = "eip155:11155111".to_string();
+    let _promise = contract.dispatch_action(changed);
+}
+
+#[test]
+#[should_panic(expected = "derivation path mismatch")]
+fn changing_derivation_path_is_rejected_even_with_same_payload() {
+    let mut contract = setup();
+    context("agent.near", 5);
+    let mut changed = request("zcash-router.near");
+    changed.derivation_path = "qpc/ethereum-sepolia/payment".to_string();
+    let _promise = contract.dispatch_action(changed);
 }
 
 #[test]

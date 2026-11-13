@@ -26,6 +26,8 @@ fn input() -> PolicyInput {
             action_id: "vault_deposit".to_string(),
             target: "vault.near".parse().unwrap(),
             method_name: "deposit".to_string(),
+            destination_chain_id: "near:mainnet".to_string(),
+            derivation_path: "qpc/near-mainnet/vault".to_string(),
             args_hash: env::sha256(ARGS),
             max_per_call: 10,
             cumulative_cap: 20,
@@ -41,6 +43,26 @@ fn setup() -> QpcNear {
     contract
 }
 
+#[test]
+#[should_panic(expected = "invalid destination chain id")]
+fn policy_rejects_empty_destination_chain_id() {
+    context("owner.near", NOW, 0);
+    let mut contract = QpcNear::new("owner.near".parse().unwrap());
+    let mut invalid = input();
+    invalid.rules[0].destination_chain_id.clear();
+    contract.create_policy("invalid_chain_policy".to_string(), invalid);
+}
+
+#[test]
+#[should_panic(expected = "invalid derivation path")]
+fn policy_rejects_control_character_in_derivation_path() {
+    context("owner.near", NOW, 0);
+    let mut contract = QpcNear::new("owner.near".parse().unwrap());
+    let mut invalid = input();
+    invalid.rules[0].derivation_path.push('\n');
+    contract.create_policy("invalid_path_policy".to_string(), invalid);
+}
+
 fn request(expected_version: u32, nonce: u64, request_id: &str, amount: u128) -> ActionRequest {
     ActionRequest {
         policy_id: "policy_1".to_string(),
@@ -50,6 +72,8 @@ fn request(expected_version: u32, nonce: u64, request_id: &str, amount: u128) ->
         action_id: "vault_deposit".to_string(),
         target: "vault.near".parse().unwrap(),
         method_name: "deposit".to_string(),
+        destination_chain_id: "near:mainnet".to_string(),
+        derivation_path: "qpc/near-mainnet/vault".to_string(),
         args: ARGS.to_vec(),
         attached_deposit: amount,
     }

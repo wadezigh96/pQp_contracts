@@ -62,6 +62,8 @@ fn input() -> PolicyInput {
             action_id: "vault_deposit".to_string(),
             target: "vault.near".parse().unwrap(),
             method_name: "deposit".to_string(),
+            destination_chain_id: "near:mainnet".to_string(),
+            derivation_path: "qpc/near-mainnet/vault".to_string(),
             args_hash: env::sha256(ARGS),
             max_per_call: 10,
             cumulative_cap: 20,
@@ -86,6 +88,8 @@ fn request(nonce: u64, request_id: &str, amount: u128) -> ActionRequest {
         action_id: "vault_deposit".to_string(),
         target: "vault.near".parse().unwrap(),
         method_name: "deposit".to_string(),
+        destination_chain_id: "near:mainnet".to_string(),
+        derivation_path: "qpc/near-mainnet/vault".to_string(),
         args: ARGS.to_vec(),
         attached_deposit: amount,
     }
@@ -106,6 +110,8 @@ fn dispatch_reserves_quota_and_records_pending_execution() {
     assert_eq!(execution.status, ExecutionStatus::Dispatched);
     assert_eq!(execution.nonce, 0);
     assert_eq!(execution.attached_deposit, 7);
+    assert_eq!(execution.destination_chain_id, "near:mainnet");
+    assert_eq!(execution.derivation_path, "qpc/near-mainnet/vault");
     assert_eq!(contract.get_usage("policy_1".to_string()).next_nonce, 1);
     assert_eq!(
         contract.get_action_call_count("policy_1".to_string(), "vault_deposit".to_string()),
