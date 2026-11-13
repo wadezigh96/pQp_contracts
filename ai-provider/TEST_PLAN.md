@@ -33,6 +33,9 @@ The suite uses a deterministic fake SDK client. It does not call NEAR AI, requir
 | Wallet/signer capability supplied | Reject construction | Implemented; execution pending |
 | Provider exception | Redact details | Implemented; execution pending |
 | Malformed provider output | Reject | Implemented; execution pending |
+| Inference request timeout | Pass bounded per-request timeout to SDK | Implemented; execution pending |
+| Oversized returned text | Reject above configured character cap | Implemented; execution pending |
+| Invalid timeout/response cap configuration | Reject during construction | Implemented; execution pending |
 
 ## Additional executable Agent Runtime boundary coverage
 
@@ -42,7 +45,7 @@ Five tests in `test/runtime.test.mjs` verify that output is advisory-only, inval
 
 - Exact signed request/response byte mutation and cross-request replay regression fixtures. These are delegated to the pinned official SDK but have not been independently tested here.
 - Attestation expiry/revocation and model/signer mismatch fixtures.
-- Provider timeout/cancellation behavior and explicit retry guarantees.
+- Abort/cancellation behavior for provider timeouts and explicit retry guarantees (automatic retries remain disabled by the SDK).
 - Malformed/oversized response behavior beyond the configured completion-token limit.
 - Second-provider conformance and explicit fallback-policy tests.
 - Full QPC Policy Gate integration proving model output cannot authorize a payment.
