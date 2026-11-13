@@ -54,11 +54,10 @@ Do not promise cross-chain atomicity. Refunds and compensation are route-specifi
 `.github/workflows/zcash-adapter.yml` is expanded into a cross-chain CI gate that runs:
 
 - Agent-router Node tests for canonical intent hashes, policy argument binding, and route receipt verification.
-- NEAR contract Rust tests for destination-chain binding, action target/method, argument hash, nonce, and shielded-only policy.
 - Zcash Rust adapter tests for Unified Address validation, shielded receiver policy, redaction, payment state transitions, inbound/outbound direction, replay, and reconciliation.
 - A final acceptance job that fails unless all three layers pass.
 
-These are local tests. They do not broadcast testnet transactions, prove Zcash consensus independently, or establish a live bridge.
+The current workflow runs local Node agent-router tests and Rust Zcash adapter tests; it does **not** run a NEAR contract test suite because a production NEAR contract crate is not yet present in this repository. These local tests do not broadcast testnet transactions, prove Zcash consensus independently, or establish a live bridge.
 
 ## Security invariants
 
