@@ -47,6 +47,9 @@ test("submits only through explicit NEAR signer and route provider", async () =>
   assert.equal(result.nearTxHash, "near-tx-1");
   assert.equal(result.routeId, "route-1");
   assert.equal(calls[0][1].methodName, "dispatch_action");
+  assert.equal("amount_zatoshis" in calls[0][1].args, false);
+  assert.equal("opaque_recipient_ref" in calls[0][1].args, false);
+  assert.equal(calls[0][1].args.intent_commitment, prepared().policyArgsHash);
   assert.equal(calls[1][1].nearTxHash, "near-tx-1");
   assert.equal(calls[1][1].request.amount_zatoshis, "25000");
 });
