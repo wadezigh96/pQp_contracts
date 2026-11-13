@@ -118,3 +118,9 @@ export function buildNearToZcashShieldedDispatch(input) {
     }),
   });
 }
+
+export {
+  submitNearToZcashDispatch,
+  verifyNearToZcashRoute,
+  QPC_ZCASH_ROUTE_TERMINAL_STATES,
+} from "./zcash-route.mjs";
