@@ -36,3 +36,28 @@ The `privacy_query` module accepts only bounded opaque ciphertext payloads and e
 ZecBlock's public API reference documents normal `https://api.zecblock.com/v1` reads. The ZecBlock Private announcement describes browser-side PIR but does not publish a stable public machine-to-machine request schema in that reference. Therefore this repository does not claim a live ZecBlock PIR integration and does not invent its cryptographic wire format or endpoint. A reviewed vendor protocol/client is required before implementing the transport.
 
 PIR protects query contents from the service under its protocol assumptions; it does not hide client IP address, timing, request size, or the underlying public blockchain transaction. It is not a shielded-payment or settlement verifier.
+
+
+## Upstream ZecBlock PIR research (source audit)
+
+Audited the public upstream source at `Kenbak/zecblock`, commit `41ac8b2b2a9dff856486a9d229d748dcb8328068`, specifically `prototype/pir-browser`.
+
+Findings that matter for QPC:
+
+- This is explicitly a local feasibility prototype, not a public production PIR service/client API.
+- Its README says it does not implement the production wallet-PIR HTTP envelope, private address history, or mempool retrieval.
+- The browser client is Rust compiled to WASM and uses pinned upstream `zakura-pir-client` / `zakura-pir-protocol` sources; the bootstrap script verifies upstream source revisions and archive hashes.
+- The basic fixture mode covers a bounded 2,048-row transaction-directory fixture. The separate full-confirmed-snapshot mode has a fixed profile and a 1–64 chunk query schedule.
+- The host must create the complete fixed query plan before decoding any response; interleaving decode and later query creation is rejected by the upstream client. QPC must preserve this scheduling rule if it ever adopts the client.
+- The source itself warns that successful PIR decoding does not authenticate publisher chain data, prove block inclusion, or prove complete coverage. QPC must separately verify chain inclusion/finality.
+- The source says the host transport, publication freshness, generation retention, and no-fallback policy remain host-application responsibilities.
+
+This is an upstream source-code review, not a live integration. QPC does not vendor or execute this prototype. Before reuse, review each upstream component's license and transitive dependency licenses, pin exact source hashes, reproduce its build and test results, and threat-model the publication/evaluator/transport path. Do not assume the root repository license automatically governs every downloaded dependency.
+
+### QPC adoption gates
+
+1. Reproduce upstream's pinned build and tests in an isolated audit job.
+2. Establish an officially supported production publication/transport contract with ZecBlock; do not point the local prototype at an undocumented production endpoint.
+3. Implement the fixed-plan transport with request/response size checks, publication identity pinning, timeout limits, replay protection, and no plaintext fallback.
+4. Treat PIR output as an explorer observation only; independently verify transaction inclusion and confirmations using a trusted Zcash light client/node.
+5. Keep PIR query metadata separate from wallet keys, shielded note sync, and transaction signing.

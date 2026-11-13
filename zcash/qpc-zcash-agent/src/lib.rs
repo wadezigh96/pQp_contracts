@@ -165,6 +165,7 @@ pub trait ShieldedWalletBackend {
         &self,
         intent: &PaymentIntent,
         recipient: &ValidatedRecipient,
+        selected_receiver: ReceiverKind,
     ) -> Result<String, AdapterError>;
 
     /// Return a wallet/chain observation identifier, not an assertion of finality.
@@ -213,19 +214,28 @@ pub fn validate_intent(
         return Err(AdapterError::RecipientReferenceMismatch);
     }
 
-    let has_shielded = recipient.receivers.iter().any(|r| {
-        matches!(r, ReceiverKind::Orchard | ReceiverKind::Sapling)
-    });
-    if intent.privacy_policy == PrivacyPolicy::ShieldedOnly && !has_shielded {
-        return Err(AdapterError::NoPermittedShieldedReceiver);
-    }
-    if intent.privacy_policy == PrivacyPolicy::ShieldedOnly
-        && recipient.receivers.contains(&ReceiverKind::Transparent)
-        && !has_shielded
-    {
-        return Err(AdapterError::TransparentReceiverForbidden);
+    if intent.privacy_policy == PrivacyPolicy::ShieldedOnly {
+        select_shielded_receiver(recipient)?;
     }
     Ok(())
+}
+
+/// Select an actual shielded receiver, not merely a capability flag.
+/// Orchard is preferred; Sapling is accepted only when Orchard is unavailable.
+/// Transparent receivers are never selected by this shielded-only path.
+pub fn select_shielded_receiver(
+    recipient: &ValidatedRecipient,
+) -> Result<ReceiverKind, AdapterError> {
+    if recipient.receivers.contains(&ReceiverKind::Orchard) {
+        return Ok(ReceiverKind::Orchard);
+    }
+    if recipient.receivers.contains(&ReceiverKind::Sapling) {
+        return Ok(ReceiverKind::Sapling);
+    }
+    if recipient.receivers.contains(&ReceiverKind::Transparent) {
+        return Err(AdapterError::TransparentReceiverForbidden);
+    }
+    Err(AdapterError::NoPermittedShieldedReceiver)
 }
 
 pub fn transition(
@@ -335,6 +345,23 @@ mod tests {
             validate_intent(&intent(), &recipient(vec![ReceiverKind::Orchard]), 1_000),
             Ok(())
         );
+    }
+
+    #[test]
+    fn mixed_unified_address_selects_orchard_and_never_transparent() {
+        let r = recipient(vec![
+            ReceiverKind::Transparent,
+            ReceiverKind::Sapling,
+            ReceiverKind::Orchard,
+        ]);
+        assert_eq!(validate_intent(&intent(), &r, 1_000), Ok(()));
+        assert_eq!(select_shielded_receiver(&r), Ok(ReceiverKind::Orchard));
+    }
+
+    #[test]
+    fn sapling_is_selected_only_when_orchard_is_unavailable() {
+        let r = recipient(vec![ReceiverKind::Transparent, ReceiverKind::Sapling]);
+        assert_eq!(select_shielded_receiver(&r), Ok(ReceiverKind::Sapling));
     }
 
     #[test]
