@@ -90,7 +90,7 @@ The adapter pins `@nearai/inference-sdk` to `0.3.0` and uses its Node `Inference
 - `provider_tee`: signature binding inference bytes to the attested model/provider TEE signer.
 - `gateway`: signature binding bytes to the attested gateway signer.
 
-A gateway signature alone MUST NOT satisfy a policy that requires proof of model execution inside a provider TEE. Deployment evidence must be checked separately and bound to the selected model and signer. The adapter rejects empty model-attestation results, unverified deployment provenance, and every response receipt except `provider_tee`. The exact signed-byte verification is delegated to the pinned SDK; mock tests do not independently validate cryptography.
+A gateway signature alone MUST NOT satisfy a policy that requires proof of model execution inside a provider TEE. Deployment evidence must be checked separately and bound to the selected model and signer. The adapter rejects empty model-attestation results, unverified deployment provenance, and every response receipt except `provider_tee`. It applies a bounded per-request timeout and a returned-text size cap. The exact signed-byte verification is delegated to the pinned SDK; mock tests do not independently validate cryptography.
 
 Do not conflate NEAR AI Gateway desktop session tooling with the NEAR AI Cloud inference API. Gateway desktop tooling is not a QPC bridge, wallet, or payment rail.
 
@@ -101,7 +101,7 @@ Do not conflate NEAR AI Gateway desktop session tooling with the NEAR AI Cloud i
 - Minimize prompts and context; do not send wallet secrets, raw Zcash Unified Addresses, viewing keys, or unnecessary personal/payment metadata.
 - Explicitly document provider retention, training, region, and privacy mode for each configured model.
 - Do not infer privacy guarantees from labels such as "private" or "incognito"; require evidence matching the configured policy.
-- Bound request size, response size, timeout, and retry count.
+- Bound prompt size, returned response characters, request timeout, and retry count. The adapter sets a per-request timeout and the SDK disables automatic retries.
 - Treat model output, tool calls, citations, and structured JSON as untrusted data. Validate schema and authorization independently.
 
 ## 7. Versioning and acceptance
