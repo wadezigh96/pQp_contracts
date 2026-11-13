@@ -37,7 +37,7 @@ pub struct AuthorizationReceipt {
 }
 
 #[near(serializers = [borsh, json])]
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PaymentStatus {
     Pending,
     Settled,
@@ -709,12 +709,14 @@ mod tests {
         let mut contract = configured_contract();
         context("owner.near", NOW_NS + 1);
         contract.set_settlement_adapter(Some(account("adapter.near")));
-        context("agent.near", NOW_NS + 2);
-        let receipt = contract.authorize_payment(account("merchant.near"), U128(10), U64(0));
-        context("adapter.near", NOW_NS + 3);
-        contract.settle_payment(receipt.request_hash, "settled-cap-check".to_string());
-        context("agent.near", NOW_NS + 4);
-        contract.authorize_payment(account("merchant.near"), U128(1), U64(1));
+        for (nonce, amount) in [(0, 10), (1, 10), (2, 5)] {
+            context("agent.near", NOW_NS + 2 + nonce);
+            let receipt = contract.authorize_payment(account("merchant.near"), U128(amount), U64(nonce));
+            context("adapter.near", NOW_NS + 10 + nonce);
+            contract.settle_payment(receipt.request_hash, format!("settled-cap-check-{}", nonce));
+        }
+        context("agent.near", NOW_NS + 20);
+        contract.authorize_payment(account("merchant.near"), U128(1), U64(3));
     }
 
     #[test]
