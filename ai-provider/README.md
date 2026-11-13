@@ -46,6 +46,18 @@ console.log(result.text);
 
 The prompt must not contain wallet secrets, private keys, Zcash viewing keys, raw Unified Addresses, or unnecessary personal/payment metadata.
 
+## Agent Runtime integration
+
+The package exports `createAgentRuntimeAI({ provider })` as an advisory-only inference port. It returns `requestAdvice(request)` and labels every result `untrusted`; it exposes no wallet, signer, transaction, tool-execution, or payment-authorization method. The existing `agent-router` is a cross-chain payment adapter, not an AI runtime, so this port is deliberately separate and must be consumed by a future Agent Runtime. Any proposed payment remains subject to the independent QPC Policy Gate and explicit wallet approval.
+
+~~~js
+import { createNearAIProvider, createAgentRuntimeAI } from '@qpc/ai-provider';
+
+const ai = createAgentRuntimeAI({ provider: createNearAIProvider() });
+const advice = await ai.requestAdvice({ prompt: 'Summarize this public information.' });
+// advice.trust === 'untrusted'; advice.paymentAuthorization === 'none'
+~~~
+
 ## Tests
 
 ```sh
