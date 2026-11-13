@@ -13,7 +13,7 @@ The intended separation is:
 
 The agent must not receive the owner's root key or be able to expand its own authority.
 
-**Current implementation boundary:** this repository contains an EVM/Solidity prototype and a first NEAR-native Rust policy-gate source prototype. The NEAR source authorizes and accounts for payment intents but does not transfer assets; build and test verification are pending. Neither implementation is a private/shielded payment system, end-to-end x402 adapter, universal multi-L1 deployment, or post-quantum cryptographic implementation. Those remain roadmap objectives.
+**Current implementation boundary:** this repository contains an EVM/Solidity prototype and a first NEAR-native Rust policy-gate source prototype. The NEAR source includes policy authorization and reservation accounting with `Pending` → `Settled` / `Released` lifecycle. It does not transfer assets; the configured settlement adapter is a trusted attester, not an on-chain payment verifier. CI for the exact source commit must be checked before claiming build/test success. Neither implementation is a private/shielded payment system, end-to-end x402 adapter, universal multi-L1 deployment, or post-quantum cryptographic implementation. Those remain roadmap objectives.
 
 ## 2. Current implementation status
 
@@ -34,7 +34,9 @@ The agent must not receive the owner's root key or be able to expand its own aut
 | DEX, lending, and payment adapters | Not implemented | Future integration work |
 | Frontend, API, and visual policy builder | Not implemented | Future application work |
 | Separate settlement engine | Not implemented | No standalone settlement module exists |
-| NEAR-native contract implementation | Not implemented | First ecosystem target; requires a separate NEAR implementation |
+| NEAR-native policy gate | Source prototype implemented | `near/qpc-policy/`; no asset transfer |
+| NEAR reservation/settlement accounting | Source prototype implemented | `authorize_payment`, `settle_payment`, `release_payment`; adapter is trusted |
+| NEAR settlement adapter proof verification | Not implemented | Adapter attestation is not cryptographic proof verification |
 | Private/shielded payment rail | Not implemented | Requires chain- and wallet-specific privacy design |
 | x402 payment adapter | Not implemented | x402 does not itself provide payment privacy |
 | Additional L1 implementations | Not implemented | Requires a separate adapter and security review per chain |
@@ -230,15 +232,17 @@ NEAR AI Cloud may provide confidential inference for QPC's agent reasoning or pr
 The NEAR AI Gateway desktop app is a developer tool for routing supported local coding-agent sessions through NEAR AI Cloud. A deployed QPC product should call the Cloud API/SDK directly; it does not need the macOS app as a runtime dependency.
 
 
-## 8B. NEAR-native policy-gate source prototype
+## 8B. NEAR-native policy gate and reservation accounting
 
-A first Rust contract prototype now lives at `near/qpc-policy/`, using NEAR SDK 5.30.1.
+A NEAR Rust contract prototype lives at `near/qpc-policy/`, using NEAR SDK 5.30.1.
 
-Implemented in source: owner-only policy configuration, 30-day maximum expiry, per-payment and cumulative authorization caps, recipient allowlist (maximum 64 unique accounts), pause, revocation, policy versions, sequential per-agent nonces, request-hash format validation, and public audit logs.
+Implemented in source: owner-only policy configuration, bounded expiry and recipient allowlist, per-payment and cumulative caps, pause/guardian, revocation, policy versions, sequential nonces, contract-derived SHA-256 intent digest, and public audit events.
 
-**Critical limitation:** `authorize_payment` only records authorization and reserves the amount against the policy cap. It does not transfer NEAR or FT assets, call a merchant, verify x402 settlement, or make transaction data private. No settlement/cancel lifecycle exists yet. It must not be used for real funds.
+The payment-accounting lifecycle is `authorize_payment` → `settle_payment` or `release_payment`. Pending reservations consume policy capacity; settled amounts remain consumed; released amounts restore capacity. A pending reservation blocks policy reconfiguration. Settlement requires the configured adapter account and a unique settlement reference.
 
-Unit-test cases and a GitHub Actions workflow for Rust tests and WASM compile checking are included. Their success remains unverified until CI completes.
+**Critical limitation:** this is accounting state, not asset settlement. The contract does not transfer NEAR or FT assets. The adapter is trusted to verify the external settlement and is not itself an on-chain proof verifier. No x402 facilitator, private rail, or cross-chain execution is implemented. Do not use with real funds.
+
+The workflow tests Rust behavior and checks the WASM target. Report results only from CI for the exact commit being evaluated.
 
 
 ## 8C. Cybersecurity defense-in-depth

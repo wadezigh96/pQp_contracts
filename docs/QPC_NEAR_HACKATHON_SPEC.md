@@ -262,7 +262,7 @@ The hackathon prototype should demonstrate one narrow, working vertical slice ra
 
 The source prototype now includes a defense-in-depth baseline: owner-only administration, two-step owner rotation, a pause-only emergency guardian, bounded policy duration and recipient list, a lifetime cap on unique policy records, sequential nonces, checked arithmetic, and an on-chain SHA-256 digest derived from the deployment domain, contract account, agent, policy version, nonce, recipient, and amount.
 
-The current digest does not bind an asset, service, network, or settlement expiry because the prototype does not yet model those fields. The contract does not transfer assets or verify settlement. The owner account remains a critical trust root; production ownership should be assigned to a properly configured NEAR multisig.
+The current digest does not bind an asset, service, network, or settlement expiry. The contract now records reservation, settlement, and release states, but does not transfer assets or independently verify settlement. The configured adapter remains a trusted attester. The owner account remains a critical trust root; production ownership should be assigned to a properly configured NEAR multisig.
 
 See [QPC NEAR Policy Gate Security Model](QPC_NEAR_POLICY_SECURITY.md) for threats, residual risks, and release gates. These controls are not a security certification; compile, tests, fuzzing, and independent review remain required.
 
