@@ -1,11 +1,9 @@
 //! Payment intent and in-memory lifecycle tracking.
 //!
-//! Amounts are integer zatoshi (1 ZEC = 100,000,000 zatoshi). No floating
-//! point amounts, raw destination addresses, transaction IDs, or keys are
-//! included in public intent/receipt structures.
-//!
-//! PaymentTracker is an in-memory policy/test helper. Use PersistentPaymentStore
-//! for durable replay protection across restarts and concurrent processes.
+//! Amounts are integer zatoshi (1 ZEC = 100,000,000 zatoshi). Public intent
+//! structures contain no raw destination addresses, txids, or key material.
+//! PaymentTracker is a test/helper model; PersistentPaymentStore provides
+//! durable replay protection across restarts and concurrent writers.
 
 use std::collections::{HashMap, HashSet};
 
@@ -13,13 +11,8 @@ use std::collections::{HashMap, HashSet};
 pub struct PaymentId([u8; 32]);
 
 impl PaymentId {
-    pub const fn new(bytes: [u8; 32]) -> Self {
-        Self(bytes)
-    }
-
-    pub const fn as_bytes(&self) -> &[u8; 32] {
-        &self.0
-    }
+    pub const fn new(bytes: [u8; 32]) -> Self { Self(bytes) }
+    pub const fn as_bytes(&self) -> &[u8; 32] { &self.0 }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -28,6 +21,7 @@ pub enum SourceChain {
     Ethereum,
     BnbSmartChain,
     Solana,
+    Zcash,
 }
 
 impl SourceChain {
@@ -37,6 +31,7 @@ impl SourceChain {
             Self::Ethereum => "ethereum",
             Self::BnbSmartChain => "bnb_smart_chain",
             Self::Solana => "solana",
+            Self::Zcash => "zcash",
         }
     }
 }
@@ -45,7 +40,7 @@ impl SourceChain {
 pub struct PaymentIntent {
     pub id: PaymentId,
     pub source_chain: SourceChain,
-    /// Stable identifier for the paying agent on this source chain.
+    /// Stable identifier for the paying agent/wallet on this source chain.
     pub source_agent_id: [u8; 32],
     pub amount_zatoshis: u64,
     pub nonce: u64,
@@ -54,12 +49,8 @@ pub struct PaymentIntent {
 
 impl PaymentIntent {
     pub fn validate(&self, now_unix: u64) -> Result<(), IntentError> {
-        if self.amount_zatoshis == 0 {
-            return Err(IntentError::ZeroAmount);
-        }
-        if self.expires_at_unix <= now_unix {
-            return Err(IntentError::Expired);
-        }
+        if self.amount_zatoshis == 0 { return Err(IntentError::ZeroAmount); }
+        if self.expires_at_unix <= now_unix { return Err(IntentError::Expired); }
         Ok(())
     }
 }
@@ -80,7 +71,15 @@ pub enum PaymentState {
     PolicyApproved,
     RouteQuoted,
     DestinationValidated,
+    /// Source-side settlement finalized on NEAR/EVM/Solana.
     SourceSettled,
+    /// Zcash-originating route: shielded source transaction lifecycle.
+    SourceZcashBroadcast,
+    SourceZcashConfirmed,
+    /// Destination-side settlement on a non-Zcash chain.
+    DestinationBroadcast,
+    DestinationConfirmed,
+    /// Destination-side settlement and wallet receipt on Zcash.
     ZcashBroadcast,
     ZcashConfirmed,
     ReceiptVerified,
@@ -101,14 +100,50 @@ impl PaymentState {
             Created => matches!(next, PolicyApproved | Failed | Expired),
             PolicyApproved => matches!(next, RouteQuoted | Failed | Expired),
             RouteQuoted => matches!(next, DestinationValidated | Failed | Expired),
-            DestinationValidated => matches!(next, SourceSettled | Failed | Expired),
-            SourceSettled => matches!(next, ZcashBroadcast | PendingReconciliation | Failed),
-            ZcashBroadcast => matches!(next, ZcashConfirmed | PendingReconciliation | Failed),
-            ZcashConfirmed => matches!(next, ReceiptVerified | PendingReconciliation),
+            DestinationValidated => matches!(
+                next,
+                SourceSettled | SourceZcashBroadcast | Failed | Expired
+            ),
+            SourceSettled => matches!(
+                next,
+                ZcashBroadcast | DestinationBroadcast | PendingReconciliation | Failed
+            ),
+            SourceZcashBroadcast => matches!(
+                next,
+                SourceZcashConfirmed | PendingReconciliation | Failed
+            ),
+            SourceZcashConfirmed => matches!(
+                next,
+                DestinationBroadcast | PendingReconciliation | Failed
+            ),
+            DestinationBroadcast => matches!(
+                next,
+                DestinationConfirmed | PendingReconciliation | Failed
+            ),
+            DestinationConfirmed => matches!(
+                next,
+                ReceiptVerified | PendingReconciliation
+            ),
+            ZcashBroadcast => matches!(
+                next,
+                ZcashConfirmed | PendingReconciliation | Failed
+            ),
+            ZcashConfirmed => matches!(
+                next,
+                ReceiptVerified | PendingReconciliation
+            ),
             ReceiptVerified => matches!(next, Completed | PendingReconciliation),
-            PendingReconciliation => {
-                matches!(next, ZcashBroadcast | ZcashConfirmed | Failed | Expired)
-            }
+            PendingReconciliation => matches!(
+                next,
+                SourceZcashConfirmed
+                    | DestinationBroadcast
+                    | DestinationConfirmed
+                    | ZcashBroadcast
+                    | ZcashConfirmed
+                    | ReceiptVerified
+                    | Failed
+                    | Expired
+            ),
             Completed | Failed | Expired => false,
         }
     }
@@ -142,16 +177,9 @@ impl PaymentTracker {
         id: PaymentId,
         next: PaymentState,
     ) -> Result<PaymentState, IntentError> {
-        let current = self
-            .states
-            .get_mut(&id)
-            .ok_or(IntentError::UnknownPaymentId)?;
-        if *current == next {
-            return Ok(*current);
-        }
-        if !current.can_transition_to(next) {
-            return Err(IntentError::InvalidTransition);
-        }
+        let current = self.states.get_mut(&id).ok_or(IntentError::UnknownPaymentId)?;
+        if *current == next { return Ok(*current); }
+        if !current.can_transition_to(next) { return Err(IntentError::InvalidTransition); }
         *current = next;
         Ok(*current)
     }
