@@ -1,4 +1,4 @@
-import { validateAIRequest } from './provider.mjs';
+import { AIProvider, validateAIRequest } from './provider.mjs';
 
 const DEFAULT_BASE_URL = 'https://cloud-api.near.ai/v1/';
 const DEFAULT_MAX_COMPLETION_TOKENS = 2_048;
@@ -106,8 +106,10 @@ export function createNearAIProvider({
     });
   }
 
-  return Object.freeze({
-    async getCapabilities() {
+  return new class extends AIProvider {
+    constructor() {
+      super();
+      this.getCapabilities = async () => {
       return Object.freeze({
         providerId: 'near-ai-cloud',
         supportedModels: Object.freeze([...allowedModels]),
@@ -117,11 +119,9 @@ export function createNearAIProvider({
         responseSignatureTypes: Object.freeze(['provider_tee']),
         fallbackEnabled: false,
       });
-    },
-
-    verifyDeployment,
-
-    async generate(request) {
+      };
+      this.verifyDeployment = verifyDeployment;
+      this.generate = async (request) => {
       validateAIRequest(request, { maxPromptChars, maxCompletionTokens });
       if (request.model !== undefined && request.model !== model)
         throw safeFailure('model_not_allowlisted');
@@ -158,6 +158,8 @@ export function createNearAIProvider({
         signatureKind: 'provider_tee',
         verifiedAt: now(),
       });
-    },
-  });
+      };
+      Object.freeze(this);
+    }
+  }();
 }
