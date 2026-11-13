@@ -1,44 +1,48 @@
-# QPC AI Provider — Initial Contract Test Plan
+# QPC AI Provider — Contract Tests and Coverage
 
-**Status:** test design only. These are acceptance cases, not executable tests. No AI provider source module or test harness is added in this stage.
+**Status:** initial executable offline contract suite implemented. Live NEAR AI integration and full acceptance remain gated.
 
-Use deterministic fake providers, fixed clocks, fixed byte fixtures, and injected verifier functions. Tests must not call live inference endpoints or require API keys.
+Run from `ai-provider/` with Node.js `>=24.22.1`:
 
-| ID | Scenario | Expected result |
+```sh
+npm test
+```
+
+The suite uses a deterministic fake SDK client. It does not call NEAR AI, require a real credential, or prove real attestation correctness.
+
+## Executable coverage
+
+| Scenario | Expected result | Test status |
 |---|---|---|
-| T01 | Provider reports valid capabilities | Accept capability shape; do not treat it as attestation |
-| T02 | Requested model is not allowlisted/supported | Reject before network inference |
-| T03 | Required privacy class is unsupported | Reject; no downgrade |
-| T04 | Required deployment attestation is invalid | Fail closed; inference not called |
-| T05 | Deployment attestation is expired | Fail closed; inference not called |
-| T06 | Model identity or signer differs from attested deployment | Fail closed |
-| T07 | Policy requires provider TEE but only gateway signature exists | Reject |
-| T08 | Valid provider-TEE evidence matches model and signer | Continue to response verification |
-| T09 | Response signature is missing while required | Reject |
-| T10 | Response bytes are modified after signing | Reject |
-| T11 | Signature is valid for a different request | Reject due to request/response binding |
-| T12 | Provider times out or is unavailable | Return bounded error; no silent provider fallback |
-| T13 | Fallback is explicitly configured to a separately approved provider | Use only that exact provider after its own checks |
-| T14 | Model asks runtime to transfer funds | Output remains advisory; QPC Policy Gate still decides |
-| T15 | Adapter is inspected for wallet signer access | No signer/key capability exists in its interface |
-| T16 | Provider error includes API key or secret | Redact secret before logs and returned diagnostics |
-| T17 | Provider returns malformed/oversized output | Reject within configured bounds |
-| T18 | A second provider implements the interface | Core policy tests pass without provider-specific branches |
+| Missing API key | Fail closed | PASS |
+| Missing model allowlist | Fail closed | PASS |
+| Missing compose-hash allowlist | Fail closed | PASS |
+| Unsupported model | Reject before provider call | PASS |
+| Deployment compose hash outside operator allowlist | Reject before inference | PASS |
+| No model TEE evidence (Incognito/Gateway-only) | Reject before inference | PASS |
+| Gateway-only response receipt | Reject; do not return text | PASS |
+| Deployment preflight and receipt verification order | Verify -> inference -> verify response | PASS |
+| Provider error containing secret text | Return stable redacted error | PASS |
+| Empty and oversized prompt | Reject | PASS |
+| Wallet/signing surface | No signer or transaction methods | PASS |
 
-## Test seams required before implementation
+## Remaining acceptance work
 
-- Fake provider with configurable capabilities, responses, errors, and call counters.
-- Fixed clock for attestation freshness and expiry.
-- Injected deployment-attestation verifier and response-signature verifier.
-- Deterministic canonical request/response byte fixtures.
-- Spy asserting inference is not called when preflight verification fails.
-- Spy proving no fallback occurs by default.
-- Type/API boundary test proving the adapter receives no wallet signer.
+- Exact signed request/response byte mutation and cross-request replay regression fixtures. These are delegated to the pinned official SDK but have not been independently tested here.
+- Attestation expiry/revocation and model/signer mismatch fixtures.
+- Provider timeout/cancellation behavior and explicit retry guarantees.
+- Malformed/oversized response behavior beyond the configured completion-token limit.
+- Second-provider conformance and explicit fallback-policy tests.
+- Full QPC Policy Gate integration proving model output cannot authorize a payment.
+- Live end-to-end test using an approved TEE model and independently reviewed compose hash.
 
-## Test execution policy
+## Test seams
 
-When implementation begins, place executable tests in the repository's established Node.js test convention only after confirming the chosen runtime and module format. Keep AI provider tests isolated from `agent-router` payment tests. Do not add a dependency or claim tests pass until a real test command is run and its output is recorded.
+- Fake SDK client injected through `clientFactory`.
+- Fixed clock injected through `now`.
+- Deployment measurement allowlist supplied by test environment.
+- SDK verifier remains the cryptographic implementation; production integration must pin and review its trust roots and verification path.
 
 ## Release gate
 
-All cases T01–T18 must pass before enabling a provider adapter. Independent review must additionally inspect the official SDK verification path, trust roots, prompt/data leakage, error redaction, and the boundary between AI suggestions and payment authorization.
+Do not enable this adapter in a production agent until remaining acceptance work, live E2E verification with an approved model, dependency review, and independent security review are complete. A passing mock suite does not prove provider infrastructure is secure.
