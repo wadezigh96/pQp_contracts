@@ -124,7 +124,7 @@ qpc_contracts/
 │   └── QPCAgentFinance.stateful.t.sol
 │                                  # Stateful handler scenarios
 │
-├── script/                        # Deployment scripts
+├── near/\n│   └── qpc-near-agent-finance/    # NEAR Rust policy contract MVP\n├── agent-router/                  # Local-only cross-chain request preparation\n├── zcash/                         # Shielded wallet adapter boundary\n├── script/                        # Deployment scripts
 ├── foundry.toml                   # Foundry compiler/test configuration
 ├── README.md                      # Architecture + usage overview
 └── ARCHITECTURE.md                # Detailed system design
@@ -317,3 +317,8 @@ The name **Quantum Persistence Contract** describes the project's direction, not
 - The Zcash adapter currently provides address/policy validation, local wallet database initialization, replay protection, and a read-only lightwalletd probe. It does not yet scan shielded notes, construct/sign/broadcast payments, or independently prove shielded receipts.
 
 Do not describe QPC as quantum-resistant, private-on-chain, a live bridge, or production-ready until those capabilities are implemented and independently reviewed.
+
+
+## NEAR contract status
+
+A NEAR Rust policy-contract MVP now lives in near/qpc-near-agent-finance. It checks agent authorization, router binding, policy version, nonce, expiry, payment-argument hash, and spending caps before recording an authorization event. It does not execute a Zcash payment, call a router, or prove settlement. It has not been deployed to NEAR Testnet or independently audited. See that crate's README and the NEAR contract CI workflow.
