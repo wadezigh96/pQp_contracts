@@ -33,7 +33,7 @@ A Zcash endpoint is not an EVM contract address. Zcash is a UTXO-based Layer 1 w
 
 ## x402 support boundary
 
-x402 is a payment negotiation/payload standard for paid resource access. Its core message format is separate from scheme- and network-specific signing and settlement. QPC does not currently implement x402.
+x402 is a payment negotiation/payload standard for paid resource access. Its core message format is separate from scheme- and network-specific signing and settlement. QPC does not implement end-to-end x402. `agent-router` now has a local-only preflight helper for one x402 v2 exact-NEAR offer; it does not create or verify signed payloads, contact a facilitator, query on-chain QPC policy, or settle a payment.
 
 The official x402 documentation lists an `exact` NEAR implementation in the TypeScript SDK. The published NEAR scheme is x402 v2 and uses a client-signed NEP-366 `SignedDelegateAction` for one NEP-141 `ft_transfer`, followed by facilitator verification and relayer settlement. The scheme lists Ed25519 and secp256k1 signatures, not ML-DSA-65; it therefore must not be described as a post-quantum route. See the [x402 SDK matrix](https://docs.x402.org/sdk-features) and [NEAR exact scheme](https://github.com/x402-foundation/x402/blob/main/specs/schemes/exact/scheme_exact_near.md).
 
@@ -184,6 +184,6 @@ A truthful end-to-end demo must show a real supported provider quote, policy aut
 - **NEAR:** policy-constrained asynchronous dispatch and a same-chain NEP-141 escrow prototype exist. The separate NEAR-to-Ethereum 1Click router adapter has mocked tests; neither those tests nor provider status responses alone prove live destination settlement.
 - **Zcash:** the Rust adapter contains Unified Address parsing/shielded receiver policy, a wallet SQLite initialization boundary, compact-block SQLite cache, Testnet light-client sync entry point, payment state tracking, and durable SQLite nonce/replay storage. The current prototype does **not** construct, sign, or broadcast Zcash transactions; it does not import a seed or viewing key; and no live Testnet synchronization or cross-chain provider settlement is claimed by the local tests.
 - **Cross-chain:** the NEAR-to-Ethereum 1Click adapter is a local prototype with mocked tests; no live end-to-end provider route, production deployment, universal agent runtime, or trustless atomic settlement is established. Treat other cross-chain flows above as specifications until the stated acceptance evidence exists.
-- **x402:** no QPC client, server, facilitator, scheme adapter, or receipt-verification integration is present.
+- **x402:** a local exact-NEAR offer preflight exists; no QPC client, server, signed-payload verifier, facilitator, settlement adapter, or receipt-verification integration is present.
 
 No deployment, mainnet transaction, wallet key import, or real payment is authorized by this document.

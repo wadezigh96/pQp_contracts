@@ -65,9 +65,15 @@ NEAR Intents 1Click is an external settlement provider. QPC does not operate the
 
 The NEAR-to-Ethereum route path supports NEP-141 source tokens to Ethereum destination assets only. The NEAR-to-Zcash helper only prepares a local request and does not settle it. Native NEAR payments, BSC, Solana, reverse routes, cross-chain escrow, and automatic retries are not implemented here.
 
-## x402 status
+## x402 exact-NEAR policy preflight (local-only)
 
-There is no x402 client, server, facilitator, scheme adapter, or settlement verifier in this package. The external x402 SDK documents an `exact` NEAR scheme in TypeScript, but its published NEAR scheme uses Ed25519/secp256k1 signatures and is not a QPC integration or an ML-DSA post-quantum route. x402 itself does not provide Zcash shielded-payment privacy. See the [x402 SDK feature matrix](https://docs.x402.org/sdk-features) and [NEAR exact scheme specification](https://github.com/x402-foundation/x402/blob/main/specs/schemes/exact/scheme_exact_near.md).
+`authorizeX402NearExactOffer` evaluates one x402 v2 `exact` offer against explicit local bounds for the NEAR network, NEP-141 token contract, recipient account, HTTPS resource origin, exact atomic-unit amount, and maximum timeout. It also requires the caller's policy gate to return `true`. This is a local preflight demonstration, not an x402 client/server or scheme adapter.
+
+From this directory, run `node examples/x402-preflight.mjs` to see the fixture produce `POLICY_APPROVED_LOCAL_ONLY`. Run `npm test` to see the same helper reject unsupported schemes, networks, recipients, amounts, resource origins, timeouts, and denied policy decisions.
+
+The helper does not create or verify a signed delegate action, check its on-chain nonce or block-height expiry, contact a facilitator, submit a transaction, or claim settlement. Its timeout check only caps the offer's `maxTimeoutSeconds`; it does not establish the expiry of a later signed payment. The on-chain QPC policy is not queried by this helper.
+
+The published x402 NEAR `exact` scheme uses Ed25519 or secp256k1 signatures, not ML-DSA-65. It does not provide shielded-payment privacy, and an x402 offer must not be represented as proof of payment, a private route, or a post-quantum route. See the [x402 SDK feature matrix](https://docs.x402.org/sdk-features) and [NEAR exact scheme specification](https://github.com/x402-foundation/x402/blob/main/specs/schemes/exact/scheme_exact_near.md).
 
 ## Usage
 
@@ -99,7 +105,7 @@ const submitted = await submitNearDeposit(prepared, {
 
 ## Tests
 
-Run npm test. Tests use mocked API responses and wallet callbacks. They do not contact a live provider, sign transactions, or move funds.
+Run `npm test`. Tests use mocked API responses and wallet callbacks. They do not contact a live provider or x402 facilitator, sign transactions, verify settlement, or move funds.
 
 ## References
 

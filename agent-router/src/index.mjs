@@ -197,3 +197,5 @@ export {
   buildNearToZcashShieldedDispatch,
   computeNearToZcashPolicyArgsHash,
 } from "./near-zcash-intent.mjs";
+
+export { authorizeX402NearExactOffer } from "./x402-policy.mjs";

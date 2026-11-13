@@ -35,7 +35,7 @@ NEAR's protocol supports ML-DSA-65 access keys for signing transactions, as docu
 
 ## Agentic payments, privacy, and x402
 
-The repository contains a NEAR-to-Ethereum router prototype using NEAR Intents 1Click and a separate NEAR-to-Zcash helper that prepares a local shielded-request payload. Local tests do not prove live provider settlement. The Zcash adapter does not yet construct, sign, or broadcast shielded transactions, so this is not an end-to-end private payment feature.
+The repository contains a NEAR-to-Ethereum router prototype using NEAR Intents 1Click, a local-only x402 exact-NEAR policy preflight, and a separate NEAR-to-Zcash helper that prepares a local shielded-request payload. Local tests do not prove live provider settlement. The x402 helper does not sign, verify, or settle payment. The Zcash adapter does not yet construct, sign, or broadcast shielded transactions, so this is not an end-to-end private payment feature.
 
 There is no x402 adapter in QPC today. x402 is a payment negotiation and payload standard with scheme- and network-specific implementations; the official SDK documents an `exact` NEAR implementation in TypeScript. That NEAR scheme is x402 v2 and specifies `ed25519`/`secp256k1` signatures, not ML-DSA-65. x402 itself does not provide shielded-payment privacy or a post-quantum guarantee. See the [x402 SDK support matrix](https://docs.x402.org/sdk-features) and [NEAR exact scheme specification](https://github.com/x402-foundation/x402/blob/main/specs/schemes/exact/scheme_exact_near.md).
 
