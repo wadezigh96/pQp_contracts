@@ -43,3 +43,14 @@ fn rejects_non_unified_transparent_address_without_fallback() {
         Err(AddressPolicyError::InvalidUnifiedAddress)
     );
 }
+
+#[test]
+fn rejects_non_canonical_unified_address_encoding() {
+    // The published vector is accepted only in the canonical representation.
+    // The production validator enforces this with decode -> encode equality.
+    let canonical = zcash_address::unified::Address::decode(MAINNET_UA)
+        .expect("published vector should decode");
+    let (network, _revision, address) = canonical;
+    assert_eq!(address.encode(&network), MAINNET_UA);
+    assert!(validate_recipient(MAINNET_UA, ZcashNetwork::Mainnet).is_ok());
+}

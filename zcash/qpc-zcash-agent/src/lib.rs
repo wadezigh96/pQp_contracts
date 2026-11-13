@@ -60,7 +60,7 @@ pub enum AddressPolicyError {
 impl core::fmt::Display for AddressPolicyError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let message = match self {
-            Self::InvalidUnifiedAddress => "recipient is not a valid Zcash Unified Address",
+            Self::InvalidUnifiedAddress => "recipient is not a valid canonical Zcash Unified Address",
             Self::WrongNetwork => "recipient Unified Address is for a different network",
             Self::NoSupportedShieldedReceiver => {
                 "recipient Unified Address has no supported shielded receiver"
@@ -72,19 +72,24 @@ impl core::fmt::Display for AddressPolicyError {
 
 impl std::error::Error for AddressPolicyError {}
 
-/// Validate a Unified Address for the requested network.
+/// Validate a canonical Unified Address for the requested network.
 ///
-/// Orchard is selected before Sapling. Transparent-only addresses and
-/// non-Unified address formats are rejected; there is no transparent fallback.
+/// The decoded address is re-encoded and compared byte-for-byte with the
+/// supplied string. This rejects alternate textual encodings of the same
+/// decoded address. Orchard is preferred; there is no transparent fallback.
 pub fn validate_recipient(
     encoded: &str,
     expected_network: ZcashNetwork,
 ) -> Result<ValidatedRecipient, AddressPolicyError> {
-    let (network, address) = unified::Address::decode(encoded)
+    let (network, _revision, address) = unified::Address::decode(encoded)
         .map_err(|_| AddressPolicyError::InvalidUnifiedAddress)?;
 
     if network != expected_network.protocol_network() {
         return Err(AddressPolicyError::WrongNetwork);
+    }
+
+    if address.encode(&network) != encoded {
+        return Err(AddressPolicyError::InvalidUnifiedAddress);
     }
 
     let receiver = if address.has_receiver_of_type(PoolType::ORCHARD) {
