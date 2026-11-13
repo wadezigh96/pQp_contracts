@@ -106,3 +106,44 @@ test('adapter has no wallet or transaction signing surface', () => {
   const provider = createNearAIProvider({ env, clientFactory: factory });
   assert.deepEqual(Object.keys(provider).sort(), ['generate', 'getCapabilities', 'verifyDeployment']);
 });
+
+test('configures SDK for E2EE, fresh attestation checks, and no OHTTP assumption', async () => {
+  let captured;
+  const factory = async (options) => {
+    captured = options;
+    return {
+      async verify(model) {
+        options.deploymentPolicy({ model, deployment: { runtimeMeasurements: { composeHash: 'approved-compose-hash' } } });
+        return { models: [{ deploymentProvenance: 'verified' }] };
+      },
+      chat: { completions: { create: async () => ({ id: 'id', choices: [{ message: { content: 'ok' } }] }) } },
+      async verifyResponse() { return { signatureKind: 'provider_tee' }; },
+    };
+  };
+  const provider = createNearAIProvider({ env, clientFactory: factory });
+  await provider.generate({ prompt: 'hello' });
+  assert.equal(captured.e2ee, true);
+  assert.equal(captured.attestationCacheTimeToLiveMs, 0);
+  assert.equal(captured.signingAlgo, 'ed25519');
+  assert.equal(captured.deploymentPolicy instanceof Function, true);
+});
+
+test('rejects SDK model evidence without verified deployment provenance', async () => {
+  const { factory, calls } = fakeFactory({ models: [{ deploymentProvenance: 'not_checked' }] });
+  const provider = createNearAIProvider({ env, clientFactory: factory });
+  await assert.rejects(provider.generate({ prompt: 'hello' }), /deployment_provenance_unverified/);
+  assert.equal(calls.some(([kind]) => kind === 'generate'), false);
+});
+
+test('rejects invalid response signature without exposing response content', async () => {
+  const factory = async (options) => ({
+    async verify(model) {
+      options.deploymentPolicy({ model, deployment: { runtimeMeasurements: { composeHash: 'approved-compose-hash' } } });
+      return { models: [{ deploymentProvenance: 'verified' }] };
+    },
+    chat: { completions: { create: async () => ({ id: 'id', choices: [{ message: { content: 'must not escape' } }] }) } },
+    async verifyResponse() { throw new Error('bad signature'); },
+  });
+  const provider = createNearAIProvider({ env, clientFactory: factory });
+  await assert.rejects(provider.generate({ prompt: 'hello' }), /response_signature_invalid/);
+});
