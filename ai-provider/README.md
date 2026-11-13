@@ -10,6 +10,7 @@ Off-chain, provider-neutral inference boundary. The NEAR AI Cloud adapter is opt
 - Re-verifies deployment before every inference and verifies the response receipt before returning text.
 - Accepts only `provider_tee` response signatures. Gateway signatures alone are rejected.
 - No fallback, wallet signer, transaction builder, or payment API is exposed.
+- Inference request timeout defaults to 30 seconds (configurable up to 120 seconds); returned text is capped at 64,000 characters by default.
 - Provider errors are replaced with stable redacted error codes.
 
 This adapter does not authorize actions. Agent Runtime must treat returned text as untrusted advisory data and independently apply QPC Policy Gate before any action.
@@ -27,6 +28,8 @@ export NEARAI_API_KEY='...'
 export QPC_NEARAI_MODEL='your-provider-tee-model-id'
 export QPC_NEARAI_ALLOWED_MODELS='your-provider-tee-model-id'
 export QPC_NEARAI_ALLOWED_COMPOSE_HASHES='approved-compose-hash-1,approved-compose-hash-2'
+# Optional: timeout in ms (default 30000, max 120000)
+# Configure in createNearAIProvider({ timeoutMs: 30000 })
 # Optional; defaults to https://cloud-api.near.ai/v1/
 export NEARAI_BASE_URL='https://cloud-api.near.ai/v1/'
 ```
