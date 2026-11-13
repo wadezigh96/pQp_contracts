@@ -241,6 +241,15 @@ Implemented in source: owner-only policy configuration, 30-day maximum expiry, p
 Unit-test cases and a GitHub Actions workflow for Rust tests and WASM compile checking are included. Their success remains unverified until CI completes.
 
 
+## 8C. Cybersecurity defense-in-depth
+
+The NEAR source prototype includes owner-only administration, two-step ownership transfer, a pause-only emergency guardian, bounded policy duration and recipient list, a lifetime cap of 256 unique agent policies, sequential nonces, checked arithmetic, and a contract-derived SHA-256 intent digest. The digest currently binds deployment domain, contract account, agent, policy version, nonce, recipient, and amount; it does not yet bind asset, service, network, or settlement expiry.
+
+The owner account is a critical trust root. Production ownership should use a properly configured NEAR multisig. The guardian can pause but cannot unpause or alter policies. These controls reduce risk but do not make the contract immune to attacks.
+
+Detailed threat model and release gate: [QPC NEAR Policy Gate Security Model](docs/QPC_NEAR_POLICY_SECURITY.md).
+
+
 ## 9. QPC roadmap — planned, not implemented
 
 The following describes the intended product direction. None of these items should be presented as an active feature until implementation and verification are available.

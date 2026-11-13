@@ -7,7 +7,9 @@ use near_sdk::{
 
 const MAX_POLICY_DURATION_NS: u64 = 30 * 24 * 60 * 60 * 1_000_000_000;
 const MAX_ALLOWED_RECIPIENTS: usize = 64;
-const REQUEST_HASH_HEX_LENGTH: usize = 64;
+const MAX_AGENT_POLICIES: u64 = 256;
+const MIN_DOMAIN_ID_LENGTH: usize = 3;
+const MAX_DOMAIN_ID_LENGTH: usize = 64;
 
 /// Policy state is public on NEAR. This prototype is an authorization gate,
 /// not a confidential storage or shielded-payment implementation.
@@ -42,28 +44,68 @@ pub struct AuthorizationReceipt {
 #[derive(PanicOnDefault)]
 pub struct QpcPolicyContract {
     owner_id: AccountId,
+    pending_owner_id: Option<AccountId>,
+    guardian_id: Option<AccountId>,
+    domain_id: String,
     paused: bool,
+    policy_count: u64,
     policies: LookupMap<AccountId, AgentPolicy>,
 }
 
 #[near]
 impl QpcPolicyContract {
     #[init]
-    pub fn new(owner_id: AccountId) -> Self {
-        assert_eq!(
-            env::predecessor_account_id(),
-            owner_id,
-            "initializer must be the owner"
+    pub fn new(owner_id: AccountId, domain_id: String) -> Self {
+        assert_eq!(env::predecessor_account_id(), owner_id, "initializer must be the owner");
+        assert!(
+            (MIN_DOMAIN_ID_LENGTH..=MAX_DOMAIN_ID_LENGTH).contains(&domain_id.len())
+                && domain_id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'),
+            "invalid deployment domain"
         );
         Self {
-            owner_id,
-            paused: false,
+            owner_id, pending_owner_id: None, guardian_id: None, domain_id,
+            paused: false, policy_count: 0,
             policies: LookupMap::new(b"qpc:policies".to_vec()),
         }
     }
 
-    pub fn get_owner(&self) -> AccountId {
-        self.owner_id.clone()
+    pub fn get_owner(&self) -> AccountId { self.owner_id.clone() }
+
+    pub fn get_pending_owner(&self) -> Option<AccountId> { self.pending_owner_id.clone() }
+    pub fn get_guardian(&self) -> Option<AccountId> { self.guardian_id.clone() }
+    pub fn get_policy_count(&self) -> U64 { U64(self.policy_count) }
+
+    pub fn propose_owner(&mut self, new_owner_id: AccountId) {
+        self.assert_owner();
+        assert_ne!(new_owner_id, self.owner_id, "new owner must be different");
+        self.pending_owner_id = Some(new_owner_id.clone());
+        env::log_str(&format!("QPC_OWNER_TRANSFER_PROPOSED|new_owner={}", new_owner_id));
+    }
+
+    pub fn accept_owner(&mut self) {
+        let caller = env::predecessor_account_id();
+        assert_eq!(self.pending_owner_id.as_ref(), Some(&caller), "caller is not the pending owner");
+        let previous = self.owner_id.clone();
+        self.owner_id = caller.clone();
+        self.pending_owner_id = None;
+        env::log_str(&format!("QPC_OWNER_TRANSFER_ACCEPTED|previous_owner={}|new_owner={}", previous, caller));
+    }
+
+    pub fn set_guardian(&mut self, guardian_id: Option<AccountId>) {
+        self.assert_owner();
+        if let Some(ref guardian) = guardian_id {
+            assert_ne!(guardian, &self.owner_id, "guardian must differ from owner");
+        }
+        self.guardian_id = guardian_id.clone();
+        env::log_str(&format!("QPC_GUARDIAN_UPDATED|guardian={:?}", guardian_id));
+    }
+
+    /// Guardian can pause but cannot unpause or change policies.
+    pub fn emergency_pause(&mut self) {
+        let caller = env::predecessor_account_id();
+        assert_eq!(self.guardian_id.as_ref(), Some(&caller), "only guardian can emergency pause");
+        self.paused = true;
+        env::log_str("QPC_EMERGENCY_PAUSE|guardian");
     }
 
     pub fn is_paused(&self) -> bool {
@@ -111,9 +153,11 @@ impl QpcPolicyContract {
             "invalid spending limits"
         );
 
-        let previous_version = self
-            .policies
-            .get(&agent_id)
+        let existing_policy = self.policies.get(&agent_id);
+        if existing_policy.is_none() {
+            assert!(self.policy_count < MAX_AGENT_POLICIES, "maximum agent policy count reached");
+        }
+        let previous_version = existing_policy
             .map(|policy| {
                 assert!(!policy.active, "revoke agent before reconfiguration");
                 policy.version
@@ -133,11 +177,12 @@ impl QpcPolicyContract {
             version,
             allowed_recipients,
         };
+        if self.policies.get(&agent_id).is_none() {
+            self.policy_count = self.policy_count.checked_add(1)
+                .unwrap_or_else(|| env::panic_str("policy count overflow"));
+        }
         self.policies.insert(agent_id.clone(), policy);
-        env::log_str(&format!(
-            "QPC_POLICY_CONFIGURED|agent={}|version={}",
-            agent_id, version
-        ));
+        env::log_str(&format!("QPC_POLICY_CONFIGURED|agent={}|version={}", agent_id, version));
     }
 
     pub fn revoke_agent(&mut self, agent_id: AccountId) {
@@ -172,14 +217,8 @@ impl QpcPolicyContract {
         recipient: AccountId,
         amount: U128,
         nonce: U64,
-        request_hash: String,
     ) -> AuthorizationReceipt {
         assert!(!self.paused, "QPC execution is paused");
-        assert!(
-            Self::is_valid_request_hash(&request_hash),
-            "request_hash must be 64 hexadecimal characters"
-        );
-
         let agent_id = env::predecessor_account_id();
         let mut policy = self
             .policies
@@ -218,11 +257,16 @@ impl QpcPolicyContract {
 
         policy.authorized_total = new_total;
         policy.next_nonce = next_nonce;
+        // Derive the digest on-chain from canonical intent fields.
+        let payload = format!(
+            "QPC_PAYMENT_INTENT_V1|domain={}|contract={}|agent={}|policy_version={}|nonce={}|recipient={}|amount={}",
+            self.domain_id, env::current_account_id(), agent_id, policy.version,
+            nonce.0, recipient, amount.0
+        );
+        let request_hash = Self::to_hex(&env::sha256(payload.as_bytes()));
         let receipt = AuthorizationReceipt {
-            agent_id: agent_id.clone(),
-            policy_version: policy.version,
-            nonce: nonce.0,
-            request_hash: request_hash.clone(),
+            agent_id: agent_id.clone(), policy_version: policy.version,
+            nonce: nonce.0, request_hash: request_hash.clone(),
         };
         self.policies.insert(agent_id.clone(), policy);
 
@@ -245,11 +289,14 @@ impl QpcPolicyContract {
         );
     }
 
-    fn is_valid_request_hash(value: &str) -> bool {
-        value.len() == REQUEST_HASH_HEX_LENGTH
-            && value
-                .bytes()
-                .all(|byte| byte.is_ascii_hexdigit())
+    fn to_hex(bytes: &[u8]) -> String {
+        const HEX: &[u8; 16] = b"0123456789abcdef";
+        let mut out = Vec::with_capacity(bytes.len() * 2);
+        for byte in bytes {
+            out.push(HEX[(byte >> 4) as usize]);
+            out.push(HEX[(byte & 0x0f) as usize]);
+        }
+        String::from_utf8(out).expect("hex is valid UTF-8")
     }
 }
 
@@ -276,7 +323,7 @@ mod tests {
 
     fn configured_contract() -> QpcPolicyContract {
         context("owner.near", NOW_NS);
-        let mut contract = QpcPolicyContract::new(account("owner.near"));
+        let mut contract = QpcPolicyContract::new(account("owner.near"), "near-testnet".to_string());
         contract.configure_agent(
             account("agent.near"),
             U64(NOW_NS + 7 * DAY_NS),
@@ -293,7 +340,6 @@ mod tests {
             account("merchant.near"),
             U128(amount),
             U64(nonce),
-            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
         );
     }
 
@@ -316,7 +362,6 @@ mod tests {
             account("attacker.near"),
             U128(1),
             U64(0),
-            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
         );
     }
 
@@ -353,7 +398,6 @@ mod tests {
             account("merchant.near"),
             U128(1),
             U64(0),
-            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
         );
     }
 
@@ -368,7 +412,6 @@ mod tests {
             account("merchant.near"),
             U128(1),
             U64(0),
-            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
         );
     }
 
@@ -383,7 +426,6 @@ mod tests {
             account("merchant.near"),
             U128(1),
             U64(0),
-            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
         );
     }
 
@@ -391,7 +433,7 @@ mod tests {
     #[should_panic(expected = "only owner can call this method")]
     fn non_owner_cannot_configure_agent() {
         context("attacker.near", NOW_NS);
-        let mut contract = QpcPolicyContract::new(account("owner.near"));
+        let mut contract = QpcPolicyContract::new(account("owner.near"), "near-testnet".to_string());
         contract.configure_agent(
             account("agent.near"),
             U64(NOW_NS + DAY_NS),
@@ -405,7 +447,7 @@ mod tests {
     #[should_panic(expected = "duplicate recipient")]
     fn rejects_duplicate_recipients() {
         context("owner.near", NOW_NS);
-        let mut contract = QpcPolicyContract::new(account("owner.near"));
+        let mut contract = QpcPolicyContract::new(account("owner.near"), "near-testnet".to_string());
         contract.configure_agent(
             account("agent.near"),
             U64(NOW_NS + DAY_NS),
@@ -413,6 +455,47 @@ mod tests {
             U128(2),
             vec![account("merchant.near"), account("merchant.near")],
         );
+    }
+
+
+    #[test]
+    fn request_hash_is_derived_from_exact_intent_and_domain() {
+        let mut contract = configured_contract();
+        context("agent.near", NOW_NS + 1);
+        let receipt = contract.authorize_payment(account("merchant.near"), U128(3), U64(0));
+        assert_eq!(receipt.request_hash.len(), 64);
+        assert!(receipt.request_hash.bytes().all(|b| b.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn guardian_can_pause_during_incident() {
+        let mut contract = configured_contract();
+        context("owner.near", NOW_NS + 1);
+        contract.set_guardian(Some(account("guardian.near")));
+        context("guardian.near", NOW_NS + 2);
+        contract.emergency_pause();
+        assert!(contract.is_paused());
+    }
+
+    #[test]
+    #[should_panic(expected = "caller is not the pending owner")]
+    fn unrelated_account_cannot_accept_ownership() {
+        let mut contract = configured_contract();
+        context("owner.near", NOW_NS + 1);
+        contract.propose_owner(account("new-owner.near"));
+        context("attacker.near", NOW_NS + 2);
+        contract.accept_owner();
+    }
+
+    #[test]
+    fn pending_owner_can_accept_ownership() {
+        let mut contract = configured_contract();
+        context("owner.near", NOW_NS + 1);
+        contract.propose_owner(account("new-owner.near"));
+        context("new-owner.near", NOW_NS + 2);
+        contract.accept_owner();
+        assert_eq!(contract.get_owner(), account("new-owner.near"));
+        assert_eq!(contract.get_pending_owner(), None);
     }
 
     #[test]
