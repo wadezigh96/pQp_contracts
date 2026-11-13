@@ -18,6 +18,7 @@ contract QPCAgentFinance {
 
     mapping(address => AgentPolicy) public agents;
     mapping(address => mapping(address => mapping(bytes4 => bool))) public allowedCalls;
+    mapping(address => mapping(address => mapping(bytes32 => bool))) public allowedCalldataHashes;
     mapping(address => mapping(address => TokenPolicy)) public tokenPolicies;
     mapping(address => mapping(address => bool)) public allowedRecipients;
 
@@ -25,12 +26,19 @@ contract QPCAgentFinance {
     error InvalidExpiry(); error CapExceeded(); error TxLimitExceeded(); error TargetNotAllowed(); error RecipientNotAllowed();
     error InvalidCallData(); error CallFailed(bytes reason); error TransferFailed(); error InvalidOwner(); error Reentrancy();
     error InvalidPolicy(); error InvalidTarget(); error InvalidRecipient(); error AgentMustBeInactive();
+    error CalldataNotAllowed(); error ApprovalCallForbidden();
+
+    bytes4 private constant ERC20_APPROVE = 0x095ea7b3;
+    bytes4 private constant ERC20_INCREASE_ALLOWANCE = bytes4(keccak256("increaseAllowance(address,uint256)"));
+    bytes4 private constant ERC20_PERMIT = bytes4(keccak256("permit(address,address,uint256,uint256,uint8,bytes32,bytes32)"));
+    bytes4 private constant DAI_PERMIT = bytes4(keccak256("permit(address,address,uint256,uint256,bool,uint8,bytes32,bytes32)"));
 
     event OwnershipTransferStarted(address indexed previousOwner, address indexed pendingOwner);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event AgentConfigured(address indexed agent, uint64 expiresAt, uint256 nativeCap, uint256 nativeTxLimit);
     event AgentRevoked(address indexed agent);
     event CallPermissionSet(address indexed agent, address indexed target, bytes4 indexed selector, bool allowed);
+    event CalldataPermissionSet(address indexed agent, address indexed target, bytes32 indexed calldataHash, bool allowed);
     event RecipientPermissionSet(address indexed agent, address indexed recipient, bool allowed);
     event TokenPolicySet(address indexed agent, address indexed token, uint256 cap, uint256 txLimit);
     event NativeDeposited(address indexed from, uint256 amount);
@@ -65,6 +73,13 @@ contract QPCAgentFinance {
         if(agent==address(0)||agent==owner)revert InvalidAgent(); if(target==address(0)||target==owner)revert InvalidTarget();
         if(selector==bytes4(0))revert InvalidCallData(); allowedCalls[agent][target][selector]=allowed;emit CallPermissionSet(agent,target,selector,allowed);
     }
+    function setCalldataPermission(address agent,address target,bytes32 calldataHash,bool allowed)external onlyOwner{
+        if(agent==address(0)||agent==owner)revert InvalidAgent();
+        if(target==address(0)||target==owner)revert InvalidTarget();
+        if(calldataHash==bytes32(0))revert InvalidCallData();
+        allowedCalldataHashes[agent][target][calldataHash]=allowed;
+        emit CalldataPermissionSet(agent,target,calldataHash,allowed);
+    }
     function setRecipientPermission(address agent,address recipient,bool allowed)external onlyOwner{
         if(agent==address(0)||agent==owner)revert InvalidAgent();if(recipient==address(0))revert InvalidRecipient();
         allowedRecipients[agent][recipient]=allowed;emit RecipientPermissionSet(agent,recipient,allowed);
@@ -79,7 +94,10 @@ contract QPCAgentFinance {
 
     function execute(address target,uint256 value,bytes calldata data)external onlyActiveAgent nonReentrant returns(bytes memory result){
         if(target==address(0)||data.length<4)revert InvalidCallData();bytes4 selector;assembly{selector:=calldataload(data.offset)}
-        if(!allowedCalls[msg.sender][target][selector])revert TargetNotAllowed();AgentPolicy storage p=agents[msg.sender];
+        if(selector==ERC20_APPROVE||selector==ERC20_INCREASE_ALLOWANCE||selector==ERC20_PERMIT||selector==DAI_PERMIT)revert ApprovalCallForbidden();
+        if(!allowedCalls[msg.sender][target][selector])revert TargetNotAllowed();
+        if(!allowedCalldataHashes[msg.sender][target][keccak256(data)])revert CalldataNotAllowed();
+        AgentPolicy storage p=agents[msg.sender];
         if(value>p.nativeTxLimit)revert TxLimitExceeded();if(p.nativeSpent+value>p.nativeCap)revert CapExceeded();if(value>address(this).balance)revert CapExceeded();
         p.nativeSpent+=value;uint256 currentNonce=nonce++;(bool ok,bytes memory ret)=target.call{value:value}(data);if(!ok)revert CallFailed(ret);
         emit AgentCall(msg.sender,target,value,selector,currentNonce);return ret;
