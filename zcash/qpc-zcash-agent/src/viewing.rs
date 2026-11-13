@@ -4,19 +4,20 @@
 //! wallet database using AccountPurpose::ViewOnly. It never accepts a seed or
 //! spending key and does not construct, sign, or broadcast transactions.
 //!
-//! Import is intentionally separate from synchronization: a successful import
-//! does not mean the wallet has scanned any blocks or verified a payment.
+//! Import requires a TreeState capability that has matched an independently
+//! configured Testnet checkpoint. A successful import still does not mean the
+//! wallet has scanned blocks or verified a payment.
 
 use std::path::Path;
 
-use crate::wallet::{harden_sqlite_sidecars, prepare_database_file, restrict_regular_file};
+use crate::{
+    lightwalletd::VerifiedTestnetTreeState,
+    wallet::{harden_sqlite_sidecars, prepare_database_file, restrict_regular_file},
+};
 
 use rand_core::OsRng;
 use zcash_client_backend::keys::UnifiedFullViewingKey;
-use zcash_client_backend::{
-    data_api::{AccountBirthday, AccountPurpose, WalletWrite},
-    proto::service::TreeState,
-};
+use zcash_client_backend::data_api::{AccountBirthday, AccountPurpose, WalletWrite};
 use zcash_client_sqlite::{util::SystemClock, wallet::init::WalletMigrator, WalletDb};
 use zcash_protocol::consensus::Network;
 
@@ -24,9 +25,10 @@ const ACCOUNT_NAME_MAX_BYTES: usize = 64;
 
 /// Imports a Testnet UFVK as a view-only account.
 ///
-/// The TreeState must be fetched from the same trusted Testnet lightwalletd
-/// endpoint that was checked by the caller. The network marker is checked
-/// before it is used to construct the account birthday.
+/// The TreeState must have been obtained using
+/// `fetch_verified_testnet_tree_state` with a checkpoint provisioned from an
+/// independent trusted source. Never construct the checkpoint from the same
+/// lightwalletd response being checked.
 ///
 /// The UFVK is sensitive viewing material: callers must not log it, pass it to
 /// agents, or store it outside private application storage. The SQLite wallet
@@ -35,7 +37,7 @@ pub fn import_testnet_ufvk_view_only(
     database_path: impl AsRef<Path>,
     account_name: &str,
     encoded_ufvk: &str,
-    prior_tree_state: TreeState,
+    prior_tree_state: VerifiedTestnetTreeState,
 ) -> Result<(), String> {
     if account_name.is_empty()
         || account_name.len() > ACCOUNT_NAME_MAX_BYTES
@@ -48,14 +50,10 @@ pub fn import_testnet_ufvk_view_only(
         return Err("view-only account name is invalid".into());
     }
 
-    if prior_tree_state.network != "test" {
-        return Err("view-only import requires a Testnet TreeState".into());
-    }
-
     let ufvk = UnifiedFullViewingKey::decode(&Network::TestNetwork, encoded_ufvk)
         .map_err(|_| "UFVK is invalid or does not belong to Testnet".to_owned())?;
 
-    let birthday = AccountBirthday::from_treestate(prior_tree_state, None)
+    let birthday = AccountBirthday::from_treestate(prior_tree_state.into_tree_state(), None)
         .map_err(|_| "Testnet wallet birthday state is invalid".to_owned())?;
 
     let path = database_path.as_ref();
@@ -88,7 +86,9 @@ pub fn import_testnet_ufvk_view_only(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lightwalletd::{tree_state_digest, TrustedTestnetCheckpoint};
     use std::fs;
+    use zcash_client_backend::proto::service::TreeState;
 
     fn private_test_directory(temp: &tempfile::TempDir, name: &str) -> std::path::PathBuf {
         #[cfg(unix)]
@@ -107,16 +107,23 @@ mod tests {
         }
     }
 
-    fn testnet_tree_state() -> TreeState {
-        TreeState {
+    fn verified_testnet_tree_state() -> VerifiedTestnetTreeState {
+        let state = TreeState {
             network: "test".to_owned(),
             height: 1_000_000,
-            hash: "0".repeat(64),
+            hash: "ab".repeat(32),
             time: 1_700_000_000,
             sapling_tree: String::new(),
             orchard_tree: String::new(),
             ironwood_tree: String::new(),
-        }
+        };
+        let checkpoint = TrustedTestnetCheckpoint::new(
+            state.height,
+            state.hash.clone(),
+            tree_state_digest(&state),
+        )
+        .expect("fixture checkpoint");
+        VerifiedTestnetTreeState::verify(state, &checkpoint).expect("verified fixture")
     }
 
     fn testnet_ufvk() -> String {
@@ -132,34 +139,12 @@ mod tests {
     }
 
     #[test]
-    fn rejects_non_testnet_tree_state_before_wallet_database_access() {
-        let state = TreeState {
-            network: "main".to_owned(),
-            ..Default::default()
-        };
-
-        let result = import_testnet_ufvk_view_only(
-            "/path/that/must/not/be/touched/wallet.sqlite",
-            "qpc-view",
-            "not-a-ufvk",
-            state,
-        );
-
-        assert_eq!(
-            result,
-            Err("view-only import requires a Testnet TreeState".to_owned())
-        );
-    }
-
-    #[test]
     fn rejects_invalid_account_name_before_wallet_database_access() {
-        let state = testnet_tree_state();
-
         let result = import_testnet_ufvk_view_only(
             "/path/that/must/not/be/touched/wallet.sqlite",
             "../qpc",
             "not-a-ufvk",
-            state,
+            verified_testnet_tree_state(),
         );
 
         assert_eq!(result, Err("view-only account name is invalid".to_owned()));
@@ -171,7 +156,7 @@ mod tests {
             "/path/that/must/not/be/touched/wallet.sqlite",
             "qpc-view",
             "not-a-ufvk",
-            testnet_tree_state(),
+            verified_testnet_tree_state(),
         );
 
         assert_eq!(
@@ -197,7 +182,7 @@ mod tests {
             "/path/that/must/not/be/touched/wallet.sqlite",
             "qpc-view",
             &mainnet_ufvk,
-            testnet_tree_state(),
+            verified_testnet_tree_state(),
         );
 
         assert_eq!(
@@ -212,10 +197,14 @@ mod tests {
         let private = private_test_directory(&temp, "private-wallet");
         let db_path = private.join("qpc-view-only.sqlite");
         let ufvk = testnet_ufvk();
-        let state = testnet_tree_state();
 
-        import_testnet_ufvk_view_only(&db_path, "qpc-view", &ufvk, state.clone())
-            .expect("first view-only import");
+        import_testnet_ufvk_view_only(
+            &db_path,
+            "qpc-view",
+            &ufvk,
+            verified_testnet_tree_state(),
+        )
+        .expect("first view-only import");
 
         assert!(db_path.exists());
         #[cfg(unix)]
@@ -225,7 +214,12 @@ mod tests {
             assert_eq!(mode, 0o600);
         }
 
-        let second = import_testnet_ufvk_view_only(&db_path, "qpc-view-2", &ufvk, state);
+        let second = import_testnet_ufvk_view_only(
+            &db_path,
+            "qpc-view-2",
+            &ufvk,
+            verified_testnet_tree_state(),
+        );
         assert!(
             second.is_err(),
             "duplicate UFVK import must fail: {second:?}"
@@ -245,7 +239,7 @@ mod tests {
             public_dir.join("wallet.sqlite"),
             "qpc-view",
             &testnet_ufvk(),
-            testnet_tree_state(),
+            verified_testnet_tree_state(),
         );
 
         assert!(result.is_err(), "non-private parent must be rejected");
