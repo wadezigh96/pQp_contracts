@@ -268,3 +268,8 @@ The intended user-facing flow can later be presented as:
 **Intent → Policy → Preview → Approval → Agent Request → QPC Guardrails → Settlement → Audit**
 
 Unlike an application-specific agent, QPC does not need to know how the strategy was generated. Its job is to enforce the final security policy on-chain.
+
+
+## Exact calldata authorization
+
+Agent contract calls require two independent owner-configured permissions: target plus function selector, and the keccak256 hash of the complete calldata. This prevents an agent from changing encoded arguments (such as recipient, amount, or spender) while reusing a permitted selector. Common ERC-20 allowance-granting selectors are denied in the generic execution path; token transfers should use the dedicated constrained transfer path. This is an incremental defense and does not make arbitrary external protocols safe.
