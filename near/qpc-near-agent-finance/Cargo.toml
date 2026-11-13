@@ -9,6 +9,7 @@ description = "Policy-enforcing NEAR contract boundary for QPC agentic payments"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+borsh = { version = "=1.8.1", features = ["derive"] }
 near-sdk = { version = "=5.17.2", features = ["legacy"] }
 
 [dev-dependencies]
