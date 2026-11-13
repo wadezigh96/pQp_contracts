@@ -55,7 +55,7 @@ flowchart TB
 1. Owner configures an agent.
 2. Agent receives limited authority.
 3. Agent submits an execution request.
-4. Contract checks expiry, pause state, target, selector, recipient and spending limits.
+4. Contract checks expiry, pause state, target, selector, exact calldata hash, recipient and spending limits.
 5. Spending accounting is updated.
 6. The approved call or token transfer executes.
 7. Nonce and event data provide an on-chain execution trail.
@@ -157,7 +157,7 @@ Each agent/token pair can define:
 
 Calls require an explicit:
 
-**agent + target + function selector**
+**agent + target + function selector + exact calldata hash**
 
 allowlist entry.
 
@@ -244,6 +244,8 @@ Current defenses include:
 - ERC-20 spending caps
 - ERC-20 per-transaction limits
 - target/function-selector allowlisting
+- exact calldata-hash allowlisting for every agent call
+- rejection of common ERC-20 allowance-granting selectors (`approve`, `increaseAllowance`, `permit`)
 - recipient allowlisting
 - emergency pause
 - monotonic nonce
