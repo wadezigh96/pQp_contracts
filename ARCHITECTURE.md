@@ -1,270 +1,276 @@
 # QPC Agent Finance — Architecture
 
-## 1. Design goal
+## 1. Purpose and implementation boundary
 
-QPC is a policy enforcement layer for agentic finance.
+QPC Agent Finance is a smart-contract policy enforcement layer for agent-controlled execution.
 
-It is designed around one separation:
+Its core separation is:
 
-- **Human = authority**
-- **Agent = constrained executor**
-- **Contract = deterministic enforcement**
+- **Human owner:** defines and controls authority.
+- **Agent:** submits requests within the granted policy.
+- **QPC contract:** deterministically checks and enforces the on-chain policy.
 
-The AI does not receive the owner's private key and does not get unrestricted contract access.
+The agent does not receive the owner's private key and cannot change its own policy.
 
-## 2. High-level architecture
+This document distinguishes **implemented contract behavior** from **planned application-layer work**. A diagram or future integration listed here is not evidence that the feature is already implemented.
+
+## 2. Current implementation status
+
+| Capability | Status | On-chain implementation |
+|---|---|---|
+| Owner-controlled agent configuration | Implemented | `configureAgent` |
+| Agent expiry (maximum policy duration 30 days) | Implemented | `MAX_POLICY_DURATION`, `onlyActiveAgent` |
+| Agent revocation | Implemented | `revokeAgent` |
+| Native-asset per-transaction and cumulative limits | Implemented | `execute`, `AgentPolicy` |
+| Contract target + function-selector allowlist | Implemented | `setCallPermission`, `allowedCalls` |
+| ERC-20 per-transaction and cumulative limits | Implemented | `setTokenPolicy`, `transferToken` |
+| ERC-20 recipient allowlist | Implemented | `setRecipientPermission`, `allowedRecipients` |
+| Global execution pause | Implemented | `setPaused`, `onlyActiveAgent` |
+| Owner native-asset withdrawal | Implemented | `withdrawNative` |
+| Two-step ownership transfer | Implemented | `transferOwnership`, `acceptOwnership` |
+| Reentrancy protection | Implemented | `nonReentrant` |
+| Global execution nonce and execution events | Implemented | `nonce`, `AgentCall`, `AgentTokenTransfer` |
+| DEX, lending, and payment adapters | Not implemented | Future integration work |
+| Frontend, API, and visual policy builder | Not implemented | Future application work |
+| Separate settlement engine | Not implemented | No standalone settlement module exists |
+| Cross-chain bridge or cross-chain agent payments | Not implemented | Not part of this contract |
+
+The repository currently contains a core contract, Foundry tests, and a deployment script. It does not contain the future frontend/API/adapters shown later in this document.
+
+## 3. High-level architecture — implemented core
 
 ```
-                    HUMAN
-                      │
-                      ▼
-              ┌───────────────┐
-              │ Policy Builder│
-              └───────┬───────┘
-                      │
-          ┌───────────┴───────────┐
-          ▼           ▼           ▼
-       Limits      Allowlist    Expiry
-          │           │           │
-          └───────────┬───────────┘
-                      ▼
-              ┌───────────────┐
-              │ QPC CONTRACT  │
-              │ Enforcement   │
-              └───────┬───────┘
-                      │
-              ┌───────┴───────┐
-              ▼               ▼
-        Agent Execution    Rejection
-              │
-              ▼
-          Settlement
-              │
-              ▼
-       Events + Nonce
+Owner
+  |
+  | configure / pause / revoke
+  v
+QPCAgentFinance
+  |
+  | agent request
+  v
+Policy checks
+  |-- agent active and not expired
+  |-- contract not paused
+  |-- target + selector allowed (native call)
+  |-- recipient allowed (token transfer)
+  |-- per-transaction limit
+  |-- cumulative spending cap
+  |
+  +--> reject (revert)
+  |
+  +--> account spending + increment nonce
+          |
+          +--> target contract call with native value
+          |
+          +--> ERC-20 transfer
+          |
+          +--> execution event
 ```
 
-## 3. Component responsibilities
+The native-call and ERC-20-transfer paths are distinct entry points: `execute` and `transferToken`.
 
-### QPCAgentFinance.sol
+## 4. Contract responsibilities
 
-The contract is the security boundary.
+### `QPCAgentFinance.sol`
 
-It owns:
+The contract stores and enforces:
 
-- agent activation state
-- expiry
-- native spending accounting
-- ERC-20 spending accounting
-- call permissions
-- recipient permissions
-- pause state
-- ownership lifecycle
-- execution nonce
-- execution events
+- owner and pending-owner state
+- agent activation flag and expiry
+- native spending cap, spent amount, and per-transaction limit
+- per-agent/per-token cap, spent amount, and per-transaction limit
+- agent/target/function-selector permissions
+- agent/recipient permissions
+- global pause state
+- global execution nonce
+- execution and administration events
 
-It does not decide investment strategy.
+The contract does not generate an investment strategy, select a DEX, calculate lending yield, or decide which protocol an agent should use.
 
 ### Agent
 
-The agent may:
+An agent can:
 
-- request an allowed contract call
-- request an allowed token transfer
+- call `execute` for a permitted target and selector, subject to native-asset limits
+- call `transferToken` for a configured token and permitted recipient, subject to token limits
 
-The agent may not:
+An agent cannot:
 
-- change its own policy
-- activate itself
-- increase its limits
-- bypass expiry
-- bypass pause
-- change recipients
-- change call permissions
+- configure or increase its own policy
+- grant itself permissions
+- revoke or unpause itself
+- change the owner
+- bypass expiry, pause, allowlists, or spending limits
 
 ### Owner
 
-The owner may:
+The owner can:
 
-- configure agents
-- revoke agents
-- configure call permissions
-- configure recipients
-- configure token policies
-- pause/unpause execution
-- withdraw native funds
-- transfer ownership
+- configure an inactive agent
+- revoke an agent
+- set target/selector permissions
+- set recipient permissions
+- set token policies
+- pause or unpause agent execution
+- withdraw native assets
+- start and accept ownership transfer through the two-step ownership process
 
-## 4. Guardrail pipeline
+Policy changes that reset spending accounting are restricted while the agent is active. An expired policy remains marked active in storage until it is revoked; revoke it before configuring that agent again.
 
-Every agent execution follows:
+## 5. Guardrail pipeline
+
+### Native-asset contract call
 
 ```
-REQUEST
-  │
-  ▼
-Agent active?
-  │
-  ├── NO → REVERT
-  │
-  ▼
-Expired?
-  │
-  ├── YES → REVERT
-  │
-  ▼
-Paused?
-  │
-  ├── YES → REVERT
-  │
-  ▼
-Permission check
-  │
-  ├── FAIL → REVERT
-  │
-  ▼
-Spending check
-  │
-  ├── FAIL → REVERT
-  │
-  ▼
-Accounting
-  │
-  ▼
+Agent calls execute(target, value, data)
+  |
+  v
+Agent active and not expired?
+  | no -> revert
+  v
+Contract paused?
+  | yes -> revert
+  v
+Target and selector permitted?
+  | no -> revert
+  v
+Per-transaction limit satisfied?
+  | no -> revert
+  v
+Cumulative native cap and balance satisfied?
+  | no -> revert
+  v
+Update spending accounting and nonce
+  |
+  v
 External call
-  │
-  ▼
-Event + nonce
+  | failure -> revert entire transaction
+  v
+Emit AgentCall
 ```
 
-## 5. Native execution
+Accounting occurs before the external call. If the external call reverts, EVM transaction atomicity also reverts the accounting and nonce changes.
 
-Native execution requires:
-
-- active agent
-- valid expiry
-- unpaused contract
-- target allowlist
-- selector allowlist
-- amount <= per-transaction limit
-- cumulative amount <= policy cap
-- sufficient contract balance
-
-Accounting is updated before the external call. If the call reverts, the entire transaction reverts, including the accounting update.
-
-## 6. Token execution
-
-Token execution requires:
-
-- active agent
-- valid expiry
-- unpaused contract
-- recipient allowlist
-- configured token policy
-- amount <= per-transaction limit
-- cumulative amount <= token cap
-
-The low-level ERC-20 call accepts both standard boolean-returning tokens and tokens that return no data, while rejecting failed calls and explicit false returns.
-
-## 7. Emergency model
-
-The owner can pause execution globally.
-
-When paused:
-
-- agent execution stops
-- token transfers through the agent stop
-- deposits through the guarded deposit function stop
-
-Owner withdrawal remains available so funds can be recovered during an emergency.
-
-## 8. Lifecycle
+### ERC-20 transfer
 
 ```
-CONFIGURE
-    │
-    ▼
-ACTIVE
-    │
-    ├── EXECUTE ──► ACCOUNT ──► SETTLE
-    │
-    ├── PAUSE ────► STOP
-    │
-    ├── REVOKE ───► INACTIVE
-    │
-    └── EXPIRY ───► EXPIRED
+Agent calls transferToken(token, recipient, amount)
+  |
+  v
+Agent active, unexpired, and contract unpaused?
+  | no -> revert
+  v
+Recipient permitted?
+  | no -> revert
+  v
+Token per-transaction and cumulative limits satisfied?
+  | no -> revert
+  v
+Update token accounting and nonce
+  |
+  v
+Call token transfer
+  | failed / explicit false -> revert
+  v
+Emit AgentTokenTransfer
 ```
 
-## 9. Application architecture
+The transfer handler accepts standard boolean-returning ERC-20 tokens and tokens that return no data. A failed low-level call or an explicit false return is rejected. Token compatibility still depends on the behavior of the token contract.
 
-QPC should remain protocol-agnostic.
+## 6. Spending policies and lifecycle details
 
-A future application can provide:
+- Native policy duration is capped at 30 days.
+- Native and token policies each have a cumulative cap and per-transaction limit.
+- A token policy is configured per agent and token address.
+- Token transfers additionally require a recipient allowlist entry.
+- Contract calls require an exact agent + target + four-byte selector permission.
+- An agent's expiry blocks execution when `block.timestamp >= expiresAt`.
+- Expiry does not itself write `active = false`; the owner must revoke the agent before reconfiguring it.
+- The nonce is global to the contract and increments for successful native calls and token transfers.
+
+## 7. Emergency and deposit behavior
+
+The owner can pause agent execution globally. While paused, `execute` and `transferToken` are blocked.
+
+There are two native-asset deposit paths in the current contract:
+
+- `deposit()` checks the pause state and reverts while paused.
+- The payable `receive()` function accepts direct native transfers and is **not** pause-gated.
+
+Therefore, pausing currently stops the guarded deposit function and agent execution, but does not stop direct transfers to the contract address. This is intentional documentation of the current code behavior, not a claim that all deposits are blocked.
+
+Owner withdrawal through `withdrawNative` remains available while paused, so the owner can recover native assets during an emergency. ERC-20 assets are not covered by this native withdrawal function.
+
+## 8. Settlement and audit trail
+
+QPC does not implement a separate settlement engine.
+
+For native execution, the contract forwards the requested native value as part of the permitted target call. For token execution, it calls the configured token's `transfer` function. Successful operations emit execution events and increment the global nonce.
+
+Events and the nonce provide on-chain traceability, but they are not by themselves a complete off-chain audit product, transaction indexer, accounting service, or proof that an external protocol performed the intended economic action.
+
+## 9. Planned application layer — not implemented
+
+The following is a possible future architecture, not a current repository feature:
 
 ```
-Frontend
-   │
-   ▼
-Agent / API
-   │
-   ▼
-Policy Builder
-   │
-   ▼
-QPCAgentFinance
-   │
-   ├── DEX adapter
-   ├── Lending adapter
-   ├── Payment adapter
-   └── Other protocol adapters
+User
+ |
+ v
+Frontend / API                 [PLANNED]
+ |
+ v
+Policy Builder                 [PLANNED]
+ |
+ v
+Agent service                  [PLANNED]
+ |
+ v
+QPCAgentFinance                [IMPLEMENTED CORE]
+ |
+ +--> DEX adapter              [PLANNED]
+ +--> Lending adapter          [PLANNED]
+ +--> Payment adapter          [PLANNED]
+ +--> Other protocol adapters  [PLANNED]
 ```
 
-The application chooses **what the agent wants to do**.
+Adapters would translate an application's intent into specific target calls and selectors. They must not bypass QPC policy checks. Each adapter requires its own threat model, allowlist design, tests, and review before it can be described as supported.
 
-QPC decides **whether the agent is allowed to do it**.
+The current contract is protocol-agnostic: it does not natively integrate with a specific DEX, lending market, payment provider, chain bridge, or wallet service.
 
-## 10. Testing architecture
+## 10. Test architecture
 
-The test layers should remain separate:
+The repository separates security, invariant, and stateful testing concerns. The presence of test files or test scaffolding does not prove that every property has been exhaustively verified.
 
-```
-Unit / Security
-      │
-      ▼
-Regression tests
-      │
-      ▼
-Invariant tests
-      │
-      ▼
-Stateful handler tests
-      │
-      ▼
-Static analysis
-      │
-      ▼
-External audit
-```
+Expected validation sequence:
 
-A passing test suite is not equivalent to an independent security audit.
+1. Build with the configured Solidity compiler.
+2. Run unit and security regression tests.
+3. Run invariant tests.
+4. Run stateful handler tests.
+5. Run static analysis and review findings.
+6. Obtain independent security review before production use.
 
-## 11. Design principles
+A passing test suite is not equivalent to an independent security audit. Test results must be reported from the actual CI/local run for the commit being evaluated.
 
-1. Least privilege.
-2. Human-controlled authority.
-3. Deterministic enforcement.
-4. Fail closed.
+## 11. Security principles
+
+1. Least-privilege agent authority.
+2. Human-controlled policy ownership.
+3. Deterministic on-chain enforcement.
+4. Fail-closed permission and spending checks.
 5. Short-lived agent authority.
-6. Explicit allowlists.
-7. Bounded spending.
-8. Emergency stop.
-9. No AI custody of owner keys.
+6. Explicit target, selector, and recipient allowlists.
+7. Bounded cumulative and per-transaction spending.
+8. Emergency pause for agent execution.
+9. No AI custody of the owner's private key.
 10. Keep the core contract small and protocol-agnostic.
+11. Label planned integrations as planned until implemented and tested.
 
-## 12. Flitzr-style application flow
+## 12. Intended user flow
 
-The intended user-facing flow can later be presented as:
+The future application experience may be:
 
-**Intent → Policy → Preview → Approval → Agent Request → QPC Guardrails → Settlement → Audit**
+**Intent → Policy draft → Human review/approval → Agent request → QPC enforcement → On-chain call/transfer → Event-based audit**
 
-Unlike an application-specific agent, QPC does not need to know how the strategy was generated. Its job is to enforce the final security policy on-chain.
+Only the QPC enforcement and on-chain call/transfer portions are implemented by the current contract. The UI, policy drafting workflow, agent orchestration, and off-chain audit interface remain application-layer work.
