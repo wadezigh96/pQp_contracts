@@ -1,0 +1,32 @@
+name: NEAR contract
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "near/qpc-near-agent-finance/**"
+      - ".github/workflows/near-contract.yml"
+  pull_request:
+    paths:
+      - "near/qpc-near-agent-finance/**"
+      - ".github/workflows/near-contract.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  near-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Format
+        run: cargo fmt --manifest-path near/qpc-near-agent-finance/Cargo.toml -- --check
+      - name: Unit tests
+        run: cargo test --manifest-path near/qpc-near-agent-finance/Cargo.toml
+      - name: Build NEAR WASM
+        run: cargo build --manifest-path near/qpc-near-agent-finance/Cargo.toml --target wasm32-unknown-unknown --release
