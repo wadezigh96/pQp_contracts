@@ -11,7 +11,7 @@ contract StatefulTarget {
 contract StatefulAgentActor {
     QPCAgentFinance public immutable qpc;
 
-    constructor(address _qpc) { qpc = QPCAgentFinance(_qpc); }
+    constructor(address _qpc) { qpc = QPCAgentFinance(payable(_qpc)); }
 
     function execute(address target, uint256 value, bytes calldata data) external {
         qpc.execute(target, value, data);
