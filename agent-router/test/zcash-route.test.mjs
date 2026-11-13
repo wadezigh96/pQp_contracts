@@ -65,6 +65,11 @@ test("refuses route submission without explicit signer or provider", async () =>
 test("does not mark a pending route as settled", async () => {
   const result = await verifyNearToZcashRoute(
     { routeId: "route-1", state: "PENDING" },
+    {
+      paymentId: request.paymentId,
+      amountZatoshis: request.amountZatoshis,
+      opaqueRecipientRef: request.opaqueRecipientRef,
+    },
     async () => true,
   );
   assert.equal(result.state, "PENDING");
