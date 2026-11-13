@@ -661,6 +661,40 @@ mod tests {
     }
 
     #[test]
+    fn concurrent_replay_reservation_allows_exactly_one_winner() {
+        use std::sync::{Arc, Barrier};
+
+        let temp = tempfile::tempdir().expect("temporary directory");
+        let parent = private_test_directory(&temp, "concurrent-private");
+        let guard = Arc::new(ReplayGuard::open(parent.join("replay-store")).unwrap());
+        let barrier = Arc::new(Barrier::new(12));
+
+        let workers = (0..12)
+            .map(|_| {
+                let guard = Arc::clone(&guard);
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    guard.register("near:mainnet", 42)
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let results = workers
+            .into_iter()
+            .map(|worker| worker.join().expect("worker thread"))
+            .collect::<Vec<_>>();
+        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+        assert_eq!(
+            results
+                .iter()
+                .filter(|result| **result == Err(AdapterError::Replay))
+                .count(),
+            11
+        );
+    }
+
+    #[test]
     fn replay_guard_rejects_invalid_source_chain() {
         let temp = tempfile::tempdir().expect("temporary directory");
         let parent = private_test_directory(&temp, "private");
