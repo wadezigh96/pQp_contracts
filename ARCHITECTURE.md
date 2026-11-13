@@ -215,6 +215,21 @@ For native execution, the contract forwards the requested native value as part o
 
 Events and the nonce provide on-chain traceability, but they are not by themselves a complete off-chain audit product, transaction indexer, accounting service, or proof that an external protocol performed the intended economic action.
 
+## 8A. Confidential AI inference integration — optional
+
+NEAR AI Cloud may provide confidential inference for QPC's agent reasoning or private policy-assistance workload. This is an **off-chain compute service**, not a smart-contract runtime or payment rail.
+
+- Use a model explicitly classified as Private TEE when the policy requires confidential inference.
+- Verify fresh gateway/model attestation and response signatures with the supported NEAR AI SDK/verifier. Bind evidence to a fresh nonce, expected model, and request.
+- Treat LLM output as an untrusted proposal. The deterministic QPC policy evaluator and on-chain authorization remain the sole authority for payment/action permission.
+- Never provide wallet seed phrases, signing keys, or raw secrets to the model.
+- Do not treat Incognito/external-provider models as equivalent to Private TEE models.
+- Attestation validates evidence about a specific measured environment; it does not prove model correctness, bug absence, or application safety.
+- TEE inference does not make on-chain NEAR transfers private and does not replace a shielded payment rail.
+
+The NEAR AI Gateway desktop app is a developer tool for routing supported local coding-agent sessions through NEAR AI Cloud. A deployed QPC product should call the Cloud API/SDK directly; it does not need the macOS app as a runtime dependency.
+
+
 ## 9. QPC roadmap — planned, not implemented
 
 The following describes the intended product direction. None of these items should be presented as an active feature until implementation and verification are available.

@@ -34,6 +34,12 @@ Quantum resistance is a design objective, not a currently implemented property. 
 
 This repository currently contains an **EVM/Solidity policy-contract prototype** and Foundry tests. It is not yet a NEAR-native private contract, a universal multi-L1 deployment, a shielded payment system, an x402 payment adapter, or a post-quantum implementation. Those are planned engineering milestones and must be implemented and tested separately.
 
+### Optional confidential inference with NEAR AI Cloud
+
+QPC can optionally use NEAR AI Cloud for confidential off-chain agent reasoning. The integration must select a **Private TEE** model and verify fresh attestation plus response signatures using the supported SDK/verifier. Model output remains untrusted input: QPC's deterministic policy checks and chain authorization remain authoritative.
+
+This does not make NEAR payments private and does not replace a shielded settlement rail. External-provider/Incognito models are not equivalent to Private TEE inference. The macOS NEAR AI Gateway app is for developer sessions; a deployed QPC service would integrate with the Cloud API/SDK directly. See the detailed requirements in the [hackathon specification](docs/QPC_NEAR_HACKATHON_SPEC.md#7a-near-ai-cloud-integration--confidential-agent-inference).
+
 ## NEAR Hackathon — Open Innovation
 
 **Primary track:** Open Innovation (`open`)  

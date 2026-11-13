@@ -155,6 +155,60 @@ Required protections:
 
 The precise x402 version, facilitator, settlement network, and SDK must be selected and tested before claiming end-to-end compatibility.
 
+## 7A. NEAR AI Cloud integration — confidential agent inference
+
+NEAR AI Cloud is a potential confidential-computing component for QPC's agent reasoning and policy-assistance layer. It is separate from NEAR smart-contract execution and separate from payment settlement.
+
+### Appropriate role in QPC
+
+- Run an agent's sensitive reasoning or private policy-assistance workload using a model explicitly identified as **Private TEE**.
+- Where supported, use the NEAR AI inference SDK to verify fresh gateway/model attestation evidence and response signatures before treating the inference result as coming from the expected confidential environment.
+- Bind verification to a fresh nonce and the expected model/deployment identity; reject stale, malformed, mismatched, or unverifiable evidence.
+- Keep the deterministic QPC policy evaluator authoritative. An LLM may propose an action or explain a policy decision, but its text output is never authorization and never overrides on-chain policy.
+- Minimize prompt contents. Do not send signing keys, seed phrases, raw wallet secrets, or data unnecessary for the inference task.
+
+### Integration boundary
+
+```
+Agent / QPC application
+       |
+       +--> NEAR AI Cloud API (confidential inference) [OPTIONAL COMPONENT]
+       |       |
+       |       +--> Private TEE model
+       |       +--> Fresh attestation + signed response verification
+       |
+       v
+Deterministic QPC policy evaluator
+       |
+       v
+NEAR contract / chain adapter
+       |
+       v
+Payment rail and settlement
+```
+
+The macOS NEAR AI Gateway desktop application is a developer workflow tool for launching supported coding agents against NEAR AI Cloud and reviewing local traces. It is not a NEAR smart contract, payment rail, or requirement for a deployed QPC application. A QPC backend should integrate with the Cloud API/SDK directly where appropriate.
+
+### Privacy tiers and limitations
+
+- **Private TEE models:** model inference runs in a hardware-backed confidential environment and can provide attestation evidence. Verify the exact model and gateway evidence; do not infer this property from the provider name alone.
+- **Incognito / external-provider models:** account routing may be protected, but the external model provider processes the request. This is not equivalent to private TEE inference and must not satisfy a strict Private-TEE-only policy.
+- Attestation proves specific hardware/software measurements and signed evidence under stated trust assumptions. It does not prove the model is correct, the code is bug-free, or the overall agent is safe.
+- Gateway infrastructure may retain usage metadata. Temporary caches and timing behavior may also have privacy implications. Review the current retention, cache, and deployment manifests before sending sensitive production data.
+- TEE inference protects data during computation within the attested boundary; it does **not** make NEAR transactions, account balances, recipients, or payment amounts private.
+- It does not provide shielded settlement, x402 payment execution, cross-chain privacy, or post-quantum cryptography.
+
+### Hackathon acceptance criteria for this component
+
+1. Use a specifically listed Private TEE model, not an external-provider/Incognito model.
+2. Verify a fresh nonce-bound gateway and model attestation using the official verifier/SDK path.
+3. Verify the response signature and bind the verified result to the request/model identity.
+4. Demonstrate rejection of stale nonce, wrong model, invalid signature, and unavailable verification.
+5. Show that QPC's deterministic policy checks still reject over-limit, wrong-recipient, expired, and replayed payment intents regardless of what the model recommends.
+6. Document which prompt data is sent, what metadata remains visible, and what evidence is retained.
+
+This integration is optional for the first vertical slice. Do not make it a hard dependency for contract execution or payment settlement.
+
 ## 8. NEAR-first prototype scope
 
 The hackathon prototype should demonstrate one narrow, working vertical slice rather than claim a universal system.
