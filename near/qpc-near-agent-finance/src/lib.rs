@@ -16,6 +16,7 @@ const ALLOWED_PRIVACY: &str = "SHIELDED_ONLY";
 enum StorageKey {
     Agents,
     UsedPayments,
+    AllowedRecipients,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone)]
@@ -62,6 +63,7 @@ pub struct QPCNear {
     owner: AccountId,
     agents: LookupMap<AccountId, AgentPolicy>,
     used_payments: LookupMap<String, bool>,
+    allowed_recipients: LookupMap<(AccountId, String), bool>,
 }
 
 #[near]
@@ -73,6 +75,7 @@ impl QPCNear {
             owner,
             agents: LookupMap::new(StorageKey::Agents),
             used_payments: LookupMap::new(StorageKey::UsedPayments),
+            allowed_recipients: LookupMap::new(StorageKey::AllowedRecipients),
         }
     }
 
@@ -87,7 +90,7 @@ impl QPCNear {
     ) {
         self.assert_owner();
         assert!(agent != self.owner, "owner cannot be an agent");
-        assert!(!policy_id.is_empty() && policy_id.len() <= 128, "invalid policy id");
+        assert!(is_identifier(&policy_id), "invalid policy id");
         assert!(expires_at_unix > now_unix(), "policy already expired");
         let max_per_payment = max_per_payment.0;
         let total_cap = total_cap.0;
@@ -110,6 +113,18 @@ impl QPCNear {
             next_nonce,
             policy_version: next_version,
         });
+    }
+
+    pub fn set_recipient_permission(
+        &mut self,
+        agent: AccountId,
+        opaque_recipient_ref: String,
+        allowed: bool,
+    ) {
+        self.assert_owner();
+        assert!(is_identifier(&opaque_recipient_ref), "invalid opaque recipient reference");
+        self.allowed_recipients
+            .insert(&(agent, opaque_recipient_ref), &allowed);
     }
 
     pub fn revoke_agent(&mut self, agent: AccountId) {
@@ -157,7 +172,7 @@ impl QPCNear {
         assert!(policy.active, "agent is revoked");
         let now = now_unix();
 
-        assert!(!request_id.is_empty() && request_id.len() <= 128, "invalid request id");
+        assert!(is_identifier(&request_id), "invalid request id");
         assert!(policy.expires_at_unix > now, "agent policy expired");
         assert!(expires_at_unix > now && expires_at_unix <= policy.expires_at_unix,
             "payment intent expired or exceeds policy expiry");
@@ -169,8 +184,14 @@ impl QPCNear {
         assert_eq!(destination_router, policy.router, "destination router is not allowed");
         assert_eq!(privacy_policy, ALLOWED_PRIVACY, "shielded-only policy required");
         assert!(!payment_id.is_empty() && payment_id.len() <= 128, "invalid payment id");
-        assert!(!opaque_recipient_ref.is_empty() && opaque_recipient_ref.len() <= 128,
-            "invalid opaque recipient reference");
+        assert!(is_identifier(&payment_id), "invalid payment id");
+        assert!(is_identifier(&opaque_recipient_ref), "invalid opaque recipient reference");
+        assert!(
+            self.allowed_recipients
+                .get(&(agent.clone(), opaque_recipient_ref.clone()))
+                .unwrap_or(false),
+            "recipient is not allowed"
+        );
         assert!(self.used_payments.get(&payment_id).is_none(), "payment id already used");
 
         let amount: u128 = amount_zatoshis.parse().expect("invalid zatoshi amount");
@@ -225,6 +246,14 @@ impl QPCNear {
     fn assert_owner(&self) {
         assert_eq!(env::predecessor_account_id(), self.owner, "owner only");
     }
+}
+
+fn is_identifier(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._:-".contains(&byte))
 }
 
 fn compute_policy_args_hash(
@@ -290,6 +319,11 @@ mod tests {
             NOW + 10_000,
             U128(5_000),
             U128(10_000),
+        );
+        contract.set_recipient_permission(
+            account("agent.testnet"),
+            "recipient-opaque-1".to_string(),
+            true,
         );
         contract
     }
@@ -379,6 +413,28 @@ mod tests {
     fn rejects_unconfigured_caller() {
         let mut contract = setup();
         dispatch(&mut contract, "attacker.testnet", 0, "1000", EXPECTED_HASH);
+    }
+
+    #[test]
+    #[should_panic(expected = "recipient is not allowed")]
+    fn rejects_unapproved_recipient_reference() {
+        let mut contract = setup();
+        context("agent.testnet", NOW);
+        contract.dispatch_action(
+            "request-0".into(),
+            "policy-main".into(),
+            1,
+            0,
+            ALLOWED_ACTION.into(),
+            ALLOWED_DESTINATION.into(),
+            account("router.testnet"),
+            "pay-000".into(),
+            "1000".into(),
+            "recipient-attacker".into(),
+            NOW + 100,
+            ALLOWED_PRIVACY.into(),
+            EXPECTED_HASH.into(),
+        );
     }
 
     #[test]
