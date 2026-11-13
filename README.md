@@ -2,9 +2,9 @@
 
 <div align="center">
 
-**Policy-Controlled Agentic Finance Infrastructure**
+**Human-Authorized Agentic Finance Infrastructure**
 
-**Human intent → Policy → Agent execution → On-chain settlement → Audit**
+**Human intent → Guardrails → Agent execution → On-chain settlement → Audit**
 
 </div>
 
@@ -302,7 +302,7 @@ This keeps integrations replaceable while the security boundary remains centrali
 
 <div align="center">
 
-**Policy first. Agent second. Settlement last.**
+**Human authority first. Agent execution second. Verified settlement last.**
 
 </div>
 
