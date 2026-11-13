@@ -27,6 +27,64 @@ The Ethereum and BSC adapters share the EVM policy core in `contracts/shared/`, 
 - Fail closed when authorization or cryptographic verification is unavailable.
 - No claim of being unhackable or quantum-proof.
 
+## Cybersecurity architecture
+
+QPC treats an on-chain agent as an untrusted executor, not as a security authority. The NEAR policy contract is the enforcement point for the action that an agent is allowed to request. AI reasoning, route providers, solvers and external wallets remain outside the trust boundary and cannot expand the policy by returning a favorable result.
+
+```text
+┌──────────────────────┐
+│ Private Agent Runtime │  NEAR AI Cloud / TEE boundary
+│ intent + risk signal  │  no private key in model context
+└──────────┬───────────┘
+           │ commitment + bounded action request
+           ▼
+┌──────────────────────────────┐
+│ QPC NEAR Cyber Defense Layer  │
+│ policy/version/expiry checks  │
+│ nonce + request replay guard  │
+│ target + method + args hash   │
+│ spending + call quotas        │
+│ pause / quarantine boundary   │
+└──────────┬───────────────────┘
+           │ approved, chain-bound payload
+           ▼
+┌──────────────────────────────┐
+│ Cross-L1 Execution Adapter    │
+│ Chain Signatures or Intents   │
+│ chain ID + derivation path    │
+│ independent receipt verifier  │
+└──────────┬───────────────────┘
+           ▼
+      Target L1 settlement
+```
+
+The current NEAR contract already enforces policy versioning, exact argument hashes, nonce sequencing, request uniqueness, expiry, target/method allowlists, spending caps, bounded calls, pause/revoke behavior and idempotent callbacks. The repository also includes unit coverage for opaque cross-chain recipient references and fail-closed privacy payload changes. The planned Cyber Defense extension adds a security guardian, global circuit breaker, per-policy quarantine, incident IDs, chain-ID binding, derivation-path binding, payload limits and action cooldowns. These planned fields are specified but are not yet presented as implemented production controls.
+
+The security lifecycle is:
+
+```text
+OBSERVE → CLASSIFY → COMMIT → ENFORCE → SIGN/SETTLE → VERIFY
+                │
+                └── risk threshold → QUARANTINE / GLOBAL HALT
+```
+
+Quarantine must stop new dispatches without deleting prior execution records. A failed target call consumes its reserved nonce and quota rather than becoming silently retryable. A provider `SUCCESS` response is not a settlement proof until an independent verifier confirms the expected target, amount, recipient commitment and transaction receipt.
+
+## Quantum-resistant encryption architecture
+
+QPC uses “quantum-resistant” as an explicit cryptographic design target, not as a claim that the current contracts are quantum-safe. The intended private envelope is a hybrid construction:
+
+1. **ML-KEM** (NIST FIPS 203) establishes a session key for encrypted agent context or recipient metadata. ML-KEM is key establishment; it is not a transaction signature and must not be used as an authorization check.
+2. **AEAD** such as AES-256-GCM or ChaCha20-Poly1305 encrypts the actual envelope after authenticated key establishment. The envelope must include a version, algorithm identifiers, protocol/domain label, chain ID, policy ID, request ID, expiry and ciphertext hash as authenticated data.
+3. **ML-DSA** (NIST FIPS 204) or **SLH-DSA** (NIST FIPS 205) can provide post-quantum signatures for an off-chain decision envelope once a maintained implementation, canonical encoding and verifier are selected. The signature must be bound to the exact application, target chain, policy version and request nonce.
+4. **Existing NEAR authentication and Chain Signatures remain separate layers.** A NEAR ML-DSA access key, where supported by the protocol and tooling, authenticates a NEAR transaction at the runtime boundary. It does not mean that QPC verifies ML-DSA inside WASM, that NEAR consensus is post-quantum, or that a Chain Signatures/MPC signature is post-quantum.
+
+The private envelope must never place private keys, seed phrases or raw Zcash Unified Addresses into contract state, event logs, public README fixtures or agent prompts. On-chain state stores only the minimum commitment, opaque reference, action hash and audit metadata needed to enforce policy. Encryption also does not hide a transaction after it is broadcast to a transparent target L1; source timing, amount, route-provider data and target-chain metadata may still be correlated.
+
+### Current status and required evidence
+
+No QPC-owned ML-KEM, ML-DSA or SLH-DSA verifier is implemented in this repository. The `contracts/pqc/` directory and `near/POST_QUANTUM_EXPERIMENTS.md` describe an integration boundary and experiments, not production cryptography. Before calling any envelope quantum-resistant, the project must use a maintained implementation, pass published known-answer tests, reject malformed lengths and altered ciphertexts/signatures, enforce domain separation and chain binding, measure key/signature/ciphertext overhead, and receive independent cryptographic review. Until then, the correct status is **quantum-resistant design under evaluation**, not quantum-safe production security.
+
 ## Post-quantum standards
 
 NIST FIPS 204 (ML-DSA) and FIPS 205 (SLH-DSA) are digital-signature standards. FIPS 203 (ML-KEM) is for key establishment, not transaction signing. No QPC-owned PQ signature verifier is implemented in this repository.
