@@ -384,6 +384,42 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "cumulative spending cap exceeded")]
+    fn enforces_cumulative_spending_cap() {
+        let mut contract = setup();
+        dispatch(
+            &mut contract,
+            "agent.testnet",
+            0,
+            "5000",
+            "4f2010b5b3cf73f58eeb840e6331b5d221d7ec124e88e292350228df52ffbc8d",
+        );
+        dispatch(
+            &mut contract,
+            "agent.testnet",
+            1,
+            "5000",
+            "ffe32007ab485ccc69d115a14954a540199c36a18b87951c607456b4e5cc6fb5",
+        );
+        dispatch(
+            &mut contract,
+            "agent.testnet",
+            2,
+            "1",
+            "55e5d47728fc8c6246a8ef2eb608910549073c05c15e916408bbb1af24491d88",
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "agent is revoked")]
+    fn rejects_dispatch_after_revocation() {
+        let mut contract = setup();
+        context("owner.testnet", NOW);
+        contract.revoke_agent(account("agent.testnet"));
+        dispatch(&mut contract, "agent.testnet", 0, "1000", EXPECTED_HASH);
+    }
+
+    #[test]
     fn revocation_and_reconfiguration_preserve_monotonic_nonce() {
         let mut contract = setup();
         dispatch(&mut contract, "agent.testnet", 0, "1000", EXPECTED_HASH);
