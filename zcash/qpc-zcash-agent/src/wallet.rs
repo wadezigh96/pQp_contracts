@@ -128,10 +128,28 @@ pub fn initialize_testnet_wallet_database(path: impl AsRef<Path>) -> Result<(), 
 mod tests {
     use super::*;
 
+    fn private_test_directory(temp: &tempfile::TempDir, name: &str) -> std::path::PathBuf {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let path = temp.path().join(name);
+            fs::create_dir(&path).unwrap();
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+            path
+        }
+        #[cfg(not(unix))]
+        {
+            let path = temp.path().join(name);
+            fs::create_dir(&path).unwrap();
+            path
+        }
+    }
+
     #[test]
     fn initializes_testnet_storage_without_seed_or_network_activity() {
         let temp = tempfile::tempdir().expect("temporary directory");
-        let db_path = temp.path().join("qpc-zcash-testnet.sqlite");
+        let private = private_test_directory(&temp, "private-wallet");
+        let db_path = private.join("qpc-zcash-testnet.sqlite");
 
         initialize_testnet_wallet_database(&db_path).expect("initialize local wallet DB");
 
@@ -148,7 +166,8 @@ mod tests {
     #[test]
     fn does_not_overwrite_existing_wallet_database() {
         let temp = tempfile::tempdir().expect("temporary directory");
-        let db_path = temp.path().join("qpc-zcash-testnet.sqlite");
+        let private = private_test_directory(&temp, "private-wallet");
+        let db_path = private.join("qpc-zcash-testnet.sqlite");
 
         initialize_testnet_wallet_database(&db_path).expect("first initialization");
         let before = fs::metadata(&db_path).expect("metadata").len();

@@ -473,6 +473,14 @@ pub fn transition(current: PaymentState, next: PaymentState) -> Result<PaymentSt
 mod tests {
     use super::*;
 
+    fn private_test_directory(temp: &tempfile::TempDir, name: &str) -> std::path::PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let path = temp.path().join(name);
+        std::fs::create_dir(&path).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        path
+    }
+
     fn intent() -> PaymentIntent {
         PaymentIntent {
             payment_id: "qpc-pay-001".into(),
@@ -612,7 +620,8 @@ mod tests {
     #[test]
     fn validate_and_reserve_rejects_a_second_attempt() {
         let temp = tempfile::tempdir().expect("temporary directory");
-        let guard = ReplayGuard::open(temp.path().join("replay-store")).unwrap();
+        let parent = private_test_directory(&temp, "private");
+        let guard = ReplayGuard::open(parent.join("replay-store")).unwrap();
         let payment = intent();
         let recipient = recipient(vec![ReceiverKind::Orchard]);
         assert_eq!(
@@ -636,7 +645,8 @@ mod tests {
     #[test]
     fn replay_guard_persists_across_reopen_and_scopes_chain_nonce() {
         let temp = tempfile::tempdir().expect("temporary directory");
-        let store = temp.path().join("replay-store");
+        let parent = private_test_directory(&temp, "private");
+        let store = parent.join("replay-store");
         let guard = ReplayGuard::open(&store).expect("private replay store");
         assert_eq!(guard.register("near:mainnet", 7), Ok(()));
         assert_eq!(guard.register("zcash:testnet", 7), Ok(()));
@@ -653,7 +663,8 @@ mod tests {
     #[test]
     fn replay_guard_rejects_invalid_source_chain() {
         let temp = tempfile::tempdir().expect("temporary directory");
-        let guard = ReplayGuard::open(temp.path().join("replay-store")).unwrap();
+        let parent = private_test_directory(&temp, "private");
+        let guard = ReplayGuard::open(parent.join("replay-store")).unwrap();
         assert_eq!(
             guard.register("near:mainnet\nattacker", 9),
             Err(AdapterError::InvalidReplayKey)
@@ -665,7 +676,8 @@ mod tests {
     fn replay_guard_rejects_non_private_directory() {
         use std::os::unix::fs::PermissionsExt;
         let temp = tempfile::tempdir().expect("temporary directory");
-        let store = temp.path().join("public-replay-store");
+        let parent = private_test_directory(&temp, "private");
+        let store = parent.join("public-replay-store");
         std::fs::create_dir(&store).unwrap();
         std::fs::set_permissions(&store, std::fs::Permissions::from_mode(0o755)).unwrap();
         assert_eq!(
@@ -679,7 +691,8 @@ mod tests {
     fn replay_records_are_owner_only() {
         use std::os::unix::fs::PermissionsExt;
         let temp = tempfile::tempdir().expect("temporary directory");
-        let store = temp.path().join("replay-store");
+        let parent = private_test_directory(&temp, "private");
+        let store = parent.join("replay-store");
         let guard = ReplayGuard::open(&store).unwrap();
         guard.register("near:mainnet", 11).unwrap();
 
