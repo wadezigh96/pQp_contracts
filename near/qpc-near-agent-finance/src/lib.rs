@@ -1,7 +1,7 @@
 use near_sdk::{
     borsh::{self, BorshDeserialize, BorshSerialize},
     collections::LookupMap,
-    env, near, AccountId, PanicOnDefault,
+    env, near, AccountId, BorshStorageKey, PanicOnDefault,
 };
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::serde_json::json;
@@ -237,7 +237,7 @@ mod tests {
     use near_sdk::{testing_env, AccountId};
 
     const NOW: u64 = 1_800_000_000;
-    const EXPECTED_HASH: &str = "096b2d7c2769cd74a78b2a1b9198bbacda4dfa7f890d490bae5e9fc191396396";
+    const EXPECTED_HASH: &str = "5fb8d28e7147d27a86946efb815d27cd4e8c8626d5d12c4c9c3ba0df0a8f758f";
 
     fn account(value: &str) -> AccountId {
         value.parse().unwrap()
