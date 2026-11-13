@@ -57,7 +57,7 @@ Do not promise cross-chain atomicity. Refunds and compensation are route-specifi
 - Zcash Rust adapter tests for Unified Address validation, shielded receiver policy, redaction, payment state transitions, inbound/outbound direction, replay, and reconciliation.
 - A final acceptance job that fails unless all three layers pass.
 
-The current workflow runs local Node agent-router tests and Rust Zcash adapter tests; it does **not** run a NEAR contract test suite because a production NEAR contract crate is not yet present in this repository. These local tests do not broadcast testnet transactions, prove Zcash consensus independently, or establish a live bridge.
+The repository has separate CI workflows: .github/workflows/near-contract.yml formats, tests, and builds the NEAR Rust contract to WASM; .github/workflows/zcash-adapter.yml tests the Node router and Zcash Rust adapter. The NEAR workflow does not deploy the contract. These local tests do not broadcast testnet transactions, prove Zcash consensus independently, or establish a live bridge.
 
 ## Security invariants
 
@@ -71,4 +71,4 @@ The current workflow runs local Node agent-router tests and Rust Zcash adapter t
 
 ## Current implementation boundary
 
-The repository contains local NEAR dispatch, agent-router request preparation, and Zcash wallet-adapter/state-machine prototypes. It does **not** yet contain a production Zcash transaction signer/broadcaster, a trust-minimized shielded receipt proof, a live solver/bridge, atomic cross-chain settlement, or a production refund mechanism.
+The repository now contains a NEAR Rust policy-contract MVP, agent-router request preparation, and Zcash wallet-adapter/state-machine prototypes. The NEAR contract authorizes and records an intent only; it does not call a router or move funds. It has not been deployed to NEAR Testnet or independently audited. The repository still does **not** contain a production Zcash transaction signer/broadcaster, a trust-minimized shielded receipt proof, a live solver/bridge, atomic cross-chain settlement, or a production refund mechanism.
