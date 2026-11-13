@@ -280,3 +280,8 @@ Agent contract calls require two independent owner-configured permissions: targe
 The EVM policy contract is not a privacy layer: calldata, storage, events, and transaction metadata are public on transparent chains. Exact calldata hashing binds authorization to arguments but does not hide those arguments.
 
 Post-quantum resistance is a design objective only. This implementation has no PQ signature/KEM, hybrid authentication, or PQ key lifecycle. Likewise, the current repository does not yet contain a production NEAR contract or universal chain adapters. The JavaScript agent-router and Zcash wallet adapter are integration prototypes; Zcash transaction construction, signing, broadcast, and independent shielded-receipt verification remain unimplemented.
+
+
+## NEAR MVP boundary
+
+The NEAR Rust crate under near/qpc-near-agent-finance is an authorization-and-audit-recording MVP. It is not a deployed contract, escrow, bridge, wallet signer, or settlement verifier. Its policy hash and nonce checks do not make NEAR state private. It has not undergone independent audit or production gas/storage review.
