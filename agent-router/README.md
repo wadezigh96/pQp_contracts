@@ -22,6 +22,10 @@ Only Zcash Testnet and the shielded privacy class are accepted. There is no tran
 
 Here, `privacy_class: "shielded"` is a request/policy label, not proof that a shielded transaction was constructed, broadcast, received, or made untraceable across the route.
 
+### Adapter boundary for a future route provider
+
+The package also exposes `submitNearToZcashDispatch` and `verifyNearToZcashRoute` as a deliberately explicit integration boundary. Submission requires both a caller-owned NEAR signer and a caller-supplied route provider; the package passes the opaque request and the NEAR transaction hash to that provider but does not select a solver, hold keys, or construct/broadcast a Zcash transaction. A provider `SUCCESS` status is converted to `SETTLED` only when `verifyNearToZcashRoute` receives an independent receipt verifier that returns `true`. Until a real audited `zcash-router.near` and adapter implement these callbacks, the route remains a mockable integration seam, not an end-to-end payment service.
+
 Example preparation:
 
 ~~~js

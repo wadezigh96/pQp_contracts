@@ -198,4 +198,9 @@ export {
   computeNearToZcashPolicyArgsHash,
 } from "./near-zcash-intent.mjs";
 
+export {
+  submitNearToZcashDispatch,
+  verifyNearToZcashRoute,
+} from "./zcash-route.mjs";
+
 export { authorizeX402NearExactOffer } from "./x402-policy.mjs";
