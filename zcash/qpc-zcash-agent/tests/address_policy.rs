@@ -51,7 +51,7 @@ fn canonical_unified_address_round_trips_without_mutation() {
     // The production validator enforces the same equality for every input.
     let canonical = zcash_address::unified::Address::decode(MAINNET_UA)
         .expect("published vector should decode");
-    let (network, _revision, address) = canonical;
+    let (network, address) = canonical;
     assert_eq!(address.encode(&network), MAINNET_UA);
     assert!(validate_recipient(MAINNET_UA, ZcashNetwork::Mainnet).is_ok());
 }
