@@ -7,8 +7,10 @@ Fail-closed Zcash address, wallet-storage, and payment-policy boundary.
 - Parses ZIP-316 Unified Addresses with librustzcash `zcash_address`.
 - Checks Mainnet/Testnet using `zcash_protocol`.
 - Extracts Orchard, Sapling, and transparent receiver capabilities.
-- Requires an opaque recipient reference separate from the raw Unified Address.
-- Enforces shielded-only intent policy, expiry, recipient binding, replay guard, and receipt-gated lifecycle.
+- Creates an opaque recipient handle internally; the raw Unified Address is held in a private, non-Debug capability and is not agent-visible.
+- Enforces shielded-only intent policy, expiry, recipient binding, persistent replay reservation, and receipt-gated lifecycle.
+- Rejects `AllowTransparentExplicitly` because a separate human-authorization and transparent-signing path does not yet exist.
+- Persists replay keys using SHA-256-named files and atomic create-new semantics in a private 0700 directory; the store must survive process restarts.
 - Uses official librustzcash light-wallet crates: `zcash_client_backend 0.24.0` and `zcash_client_sqlite 0.22.0`.
 - Initializes/migrates a local Testnet SQLite wallet database without importing or generating keys.
 
@@ -16,7 +18,7 @@ Fail-closed Zcash address, wallet-storage, and payment-policy boundary.
 
 The wallet initializer is storage-only. It does not generate/import seed material, derive a Unified Address, connect to lightwalletd, sync shielded notes, build/sign transactions, broadcast, track confirmations, or verify receipts. No real NEAR ↔ Zcash payment has been completed.
 
-Spending keys must remain in a dedicated local wallet boundary and never enter agent prompts, NEAR contract state, public events, route logs, or CI output. The SQLite wallet database must be stored in private app storage with restrictive permissions. Do not commit wallet databases, seeds, viewing keys, or addresses.
+Spending keys must remain in a dedicated local wallet boundary and never enter agent prompts, NEAR contract state, public events, route logs, or CI output. The SQLite wallet database and replay-store directory must be stored in private app storage. Do not commit wallet databases, seeds, viewing keys, or addresses. The replay directory is integrity-critical: deleting or restoring an older copy can re-enable a previously used nonce; back it up atomically and do not roll it back.
 
 ## Next integration stages
 
@@ -26,7 +28,7 @@ Spending keys must remain in a dedicated local wallet boundary and never enter a
 4. Add a separate signer boundary and testnet-only broadcast gate.
 5. Verify transaction inclusion and confirmations independently before reporting settlement.
 
-CI tests only local storage initialization and policy/parser behavior. It does not access a live network or send funds.
+CI tests only local storage initialization, filesystem protections, policy/parser behavior, and persistent replay reservation. It does not access a live network or send funds.
 
 
 ## Optional private explorer query boundary
@@ -61,3 +63,11 @@ This is an upstream source-code review, not a live integration. QPC does not ven
 3. Implement the fixed-plan transport with request/response size checks, publication identity pinning, timeout limits, replay protection, and no plaintext fallback.
 4. Treat PIR output as an explorer observation only; independently verify transaction inclusion and confirmations using a trusted Zcash light client/node.
 5. Keep PIR query metadata separate from wallet keys, shielded note sync, and transaction signing.
+
+
+## Current security limits
+
+- The persistent replay guard is a local single-device store, not a distributed consensus service. A multi-host deployment must use a shared transactional store with a unique constraint before accepting cross-host payment intents.
+- A private opaque recipient handle reduces accidental disclosure in agent-facing structures; it is not an encryption system and does not protect process memory from a compromised host.
+- Transparent payments remain disabled until a separately authenticated human-consent flow and a dedicated, reviewed transparent transaction path are implemented.
+- The state machine is a policy helper only; it is not durable settlement state. Do not report completion without independently verified Zcash chain inclusion and confirmation.
