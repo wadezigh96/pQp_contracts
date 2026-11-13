@@ -1,9 +1,9 @@
 //! QPC Zcash wallet-adapter boundary.
 //!
-//! This crate deliberately does not parse Unified Addresses, hold keys, sign,
-//! broadcast, or claim consensus verification. Those operations must be supplied
-//! by a separately audited Zcash wallet backend implementing the traits below.
-//! The default policy is shielded-only and fails closed.
+//! This crate parses ZIP-316 Unified Addresses and enforces a shielded-first
+//! intent boundary. It does not hold keys, sign, broadcast, sync notes, or claim
+//! consensus/receipt verification. Those operations require a separately audited
+//! Zcash wallet backend. The default policy is shielded-only and fails closed.
 
 use std::collections::HashSet;
 use std::convert::Infallible;

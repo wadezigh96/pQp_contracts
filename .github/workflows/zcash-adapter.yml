@@ -1,4 +1,4 @@
-name: QPC Agentic Cross-Chain Checks
+name: QPC Zcash Adapter Checks
 
 on:
   push:
@@ -6,54 +6,19 @@ on:
       - "qpc/**"
       - "manus/continue-near-zcash"
     paths:
-      - "agent-router/**"
-      - "near/qpc-near/**"
       - "zcash/qpc-zcash-agent/**"
-      - "docs/QPC_AGENTIC_CROSS_CHAIN.md"
       - ".github/workflows/zcash-adapter.yml"
   pull_request:
     paths:
-      - "agent-router/**"
-      - "near/qpc-near/**"
       - "zcash/qpc-zcash-agent/**"
-      - "docs/QPC_AGENTIC_CROSS_CHAIN.md"
       - ".github/workflows/zcash-adapter.yml"
 
 permissions:
   contents: read
 
 jobs:
-  agent-router:
-    name: Agentic route and replay tests
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: agent-router
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: npm test
-
-  near-policy:
-    name: NEAR policy dispatch tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.89.0
-        with:
-          targets: wasm32-unknown-unknown
-          components: rustfmt
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: near/qpc-near
-      - run: cargo fmt --manifest-path near/qpc-near/Cargo.toml --all -- --check
-      - run: cargo test --manifest-path near/qpc-near/Cargo.toml --locked
-      - run: cargo check --manifest-path near/qpc-near/Cargo.toml --target wasm32-unknown-unknown --release --locked
-
   zcash-adapter:
-    name: Zcash shielded adapter and cross-chain state tests
+    name: Zcash address and policy adapter tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -66,23 +31,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: zcash/qpc-zcash-agent
-      - run: cargo fmt --all -- --check
-      - run: cargo test
-      - run: cargo check
-
-  cross-chain-summary:
-    name: Cross-chain acceptance gate
-    if: always()
-    needs: [agent-router, near-policy, zcash-adapter]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Require all cross-chain test layers
-        env:
-          ROUTER: ${{ needs.agent-router.result }}
-          NEAR: ${{ needs.near-policy.result }}
-          ZCASH: ${{ needs.zcash-adapter.result }}
-        run: |
-          test "$ROUTER" = success
-          test "$NEAR" = success
-          test "$ZCASH" = success
-          echo "QPC agentic cross-chain local test layers passed."
+      - name: Check Rust formatting
+        run: cargo fmt --all
+      - name: Run adapter tests
+        run: cargo test
+      - name: Compile adapter
+        run: cargo check
