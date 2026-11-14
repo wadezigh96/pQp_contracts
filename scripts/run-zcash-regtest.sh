@@ -26,13 +26,28 @@ cleanup() {
   return "$result"
 }
 trap cleanup EXIT HUP INT TERM
-mkdir -p "$work/node" "$work/lightwalletd-data" "$work/zcashd-home"
-chmod 700 "$work/node" "$work/lightwalletd-data" "$work/zcashd-home"
+mkdir -p "$work/node" "$work/lightwalletd-data"
+chmod 700 "$work/node" "$work/lightwalletd-data"
 user=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
 password=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
 cat > "$work/zcashd.conf" <<EOF_CONF
 regtest=1
 server=1
+daemon=0
+listen=0
+connect=0
+dnsseed=0
+discover=0
+txindex=1
+nuparams=5ba81b19:1
+nuparams=76b809bb:1
+nuparams=2bb40e60:1
+nuparams=f5b9230b:1
+nuparams=e9ff75a6:1
+nuparams=c2d6d0b4:1
+nuparams=c8e71055:1
+nuparams=4dec4df0:1
+nuparams=b4d0d6c2:1
 rpcuser=$user
 rpcpassword=$password
 rpcbind=0.0.0.0

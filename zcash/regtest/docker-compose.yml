@@ -2,29 +2,15 @@ services:
   zcashd:
     user: "${QPC_CONTAINER_UID:?set by script}"
     image: electriccoinco/zcashd:v6.20.0
+    entrypoint: ["zcashd"]
     command:
       - -regtest
       - -conf=/run/qpc/zcashd.conf
       - -datadir=/var/lib/zcash
-      - -server=1
       - -daemon=0
-      - -listen=0
-      - -connect=0
-      - -dnsseed=0
-      - -discover=0
-      - -txindex=1
-      - -nuparams=5ba81b19:1
-      - -nuparams=76b809bb:1
-      - -nuparams=2bb40e60:1
-      - -nuparams=f5b9230b:1
-      - -nuparams=e9ff75a6:1
-      - -nuparams=c2d6d0b4:1
-      - -nuparams=c8e71055:1
-      - -nuparams=4dec4df0:1
-      - -nuparams=b4d0d6c2:1
+      - -printtoconsole=1
     volumes:
       - ${QPC_REGTEST_DIR:?set by scripts/run-zcash-regtest.sh}/node:/var/lib/zcash
-      - ${QPC_REGTEST_DIR:?set by scripts/run-zcash-regtest.sh}/zcashd-home:/srv/zcashd/.zcash
       - ${QPC_REGTEST_DIR:?set by scripts/run-zcash-regtest.sh}/zcashd.conf:/run/qpc/zcashd.conf:ro
     ports:
       - "127.0.0.1:18232:18232"
