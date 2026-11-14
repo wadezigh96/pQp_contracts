@@ -6,8 +6,8 @@
 
 ## Exact blockers
 
-1. This environment lacks `cargo`, `rustc`, `near-sandbox`, `zcashd`, `zebrad`, `lightwalletd`, and Docker.
-2. The repository has no Zcash transaction builder/signer/broadcaster, receive-note scanner/synchronizer, or independent receipt/finality verifier. The router explicitly reports `NOT_IMPLEMENTED` for native shielded settlement.
+1. This environment has `cargo` and `rustc`, but lacks `near-sandbox`, `zcashd`, `zebrad`, `lightwalletd`, and Docker. The requested `near/sandbox-tests/` harness is also absent.
+2. The Regtest view-only wallet account and compact-block note synchronization adapter are implemented, but have not yet passed a live integration run. The repository still lacks the outgoing Zcash transaction builder, external signer, and broadcaster; the router explicitly reports `NOT_IMPLEMENTED` for native shielded settlement.
 3. The NEAR CI offline VM uses mocked host context and promises; it is not a nearcore Sandbox with real local accounts, deployed WASM, or a receipt scheduler.
 
 Installing node binaries alone would not complete the missing payment implementation. No keys or funds should be supplied to work around these blockers.
@@ -31,7 +31,7 @@ cargo test --manifest-path near/qpc-near-agent-finance/Cargo.toml --locked
 cargo test --manifest-path zcash/qpc-zcash-agent/Cargo.toml --locked
 ```
 
-The Rust commands require Cargo. The JavaScript tests create local fixtures and mocks only. Use `scripts/demo-near-zcash.sh` to generate a machine-readable preflight result; it does not start nodes, use network RPC, open a wallet, or send transactions. It is read-only with respect to external network/wallet/chain state and writes the report under `test-artifacts/`.
+The Rust commands require Cargo. The JavaScript tests create local fixtures and mocks only. Use `scripts/preflight-near-zcash.sh` to generate a machine-readable preflight result; it does not start nodes, use network RPC, open a wallet, or send transactions. It is read-only with respect to external network/wallet/chain state and writes the report under `test-artifacts/`.
 
 ## Safety requirements for future work
 

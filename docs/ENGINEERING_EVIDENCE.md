@@ -26,7 +26,7 @@ The CI run on the starting revision (`b1c758117d131b4974bada543f49b378149f8127`)
 - `node --test agent-router/test/intent-store-recovery.test.mjs`: **10 passed, 0 failed**. The compatibility regression verifies a V1-derived persisted replay index is rejected under V2 without rewriting/resetting the file.
 - `npm test --prefix agent-router/pq-auth`: **26 passed, 0 failed** after installing lockfile-pinned dependencies with `npm ci --prefix agent-router/pq-auth --ignore-scripts --no-audit --no-fund`.
 - `git diff origin/reason/deliver-qpc-hardening-dr-d997d6a3..HEAD --check`: passed before pushing code revision `db9f717`.
-- `bash -n scripts/demo-near-zcash.sh`, a fresh execution of the preflight script from an archive of the pushed commit, and JSON assertions passed. The preflight reported **BLOCKED**, every requested scenario blocked, and no transaction IDs.
+- `bash -n scripts/preflight-near-zcash.sh`, a fresh execution of the preflight script from an archive of the pushed commit, and JSON assertions passed. The preflight reported **BLOCKED**, every requested scenario blocked, and no transaction IDs.
 - A fresh local computation of the fixture authorization commitment matched the canonical literal above.
 - Local `cargo`, `rustc`, and `rustfmt` are absent, so local NEAR formatting and Rust tests could not be run. Current Rust/VM results below come from GitHub Actions.
 

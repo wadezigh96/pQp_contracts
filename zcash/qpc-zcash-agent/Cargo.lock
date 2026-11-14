@@ -1616,8 +1616,11 @@ dependencies = [
 name = "qpc-zcash-agent"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "base64 0.22.1",
  "http",
  "rand_core",
+ "serde_json",
  "sha2 0.10.9",
  "tempfile",
  "tokio",
@@ -1626,6 +1629,7 @@ dependencies = [
  "zcash_client_sqlite",
  "zcash_keys",
  "zcash_protocol",
+ "zeroize",
  "zip32",
 ]
 

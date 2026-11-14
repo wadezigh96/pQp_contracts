@@ -1,4 +1,4 @@
-//! Safe initialization boundary for a local Zcash Testnet light-wallet database.
+//! Safe initialization boundary for local Zcash Testnet and Regtest wallet databases.
 //!
 //! This initializes storage only. It does not generate/import keys, create an
 //! address, connect to a lightwalletd server, sync funds, sign, or broadcast.
@@ -101,6 +101,38 @@ pub(crate) fn harden_sqlite_sidecars(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Creates or migrates a local Regtest wallet database without importing a seed.
+///
+/// `LocalNetwork` must exactly match the NU activation heights configured on the
+/// connected regtest node. The parent directory must already exist and be private
+/// (0700 or stricter on Unix). Existing symlinks and non-regular database files
+/// are rejected, and the database plus SQLite sidecars are restricted to owner
+/// access. This initializes storage only; it does not create keys or connect to
+/// a node.
+pub fn initialize_regtest_wallet_database(
+    path: impl AsRef<Path>,
+    params: zcash_protocol::local_consensus::LocalNetwork,
+) -> Result<(), String> {
+    use zcash_protocol::consensus::Parameters;
+
+    if params.network_type() != zcash_protocol::consensus::NetworkType::Regtest {
+        return Err("regtest wallet requires regtest consensus parameters".into());
+    }
+
+    let path = path.as_ref();
+    prepare_database_file(path)?;
+    let mut wallet_db = WalletDb::for_path(path, params, SystemClock, OsRng)
+        .map_err(|_| "wallet database open failed".to_owned())?;
+    WalletMigrator::new()
+        .init_or_migrate(&mut wallet_db)
+        .map_err(|_| "wallet database migration failed".to_owned())?;
+
+    drop(wallet_db);
+    restrict_regular_file(path)?;
+    harden_sqlite_sidecars(path)?;
+    Ok(())
+}
+
 /// Creates or migrates a local Testnet wallet database without importing a seed.
 ///
 /// The parent directory must already exist and be private (0700 or stricter on
@@ -143,6 +175,45 @@ mod tests {
             fs::create_dir(&path).unwrap();
             path
         }
+    }
+
+    fn regtest_params() -> zcash_protocol::local_consensus::LocalNetwork {
+        use zcash_protocol::consensus::BlockHeight;
+        zcash_protocol::local_consensus::LocalNetwork {
+            overwinter: Some(BlockHeight::from_u32(1)),
+            sapling: Some(BlockHeight::from_u32(1)),
+            blossom: Some(BlockHeight::from_u32(1)),
+            heartwood: Some(BlockHeight::from_u32(1)),
+            canopy: Some(BlockHeight::from_u32(1)),
+            nu5: Some(BlockHeight::from_u32(1)),
+            nu6: Some(BlockHeight::from_u32(1)),
+            nu6_1: Some(BlockHeight::from_u32(1)),
+            nu6_2: Some(BlockHeight::from_u32(1)),
+            nu6_3: Some(BlockHeight::from_u32(1)),
+        }
+    }
+
+    #[test]
+    fn initializes_regtest_wallet_database_with_local_consensus_params() {
+        use zcash_client_sqlite::{util::SystemClock, wallet::init::WalletMigrator, WalletDb};
+        use zcash_protocol::consensus::Parameters;
+
+        let temp = tempfile::tempdir().expect("temporary directory");
+        let private = private_test_directory(&temp, "private-regtest-wallet");
+        let db_path = private.join("qpc-zcash-regtest.sqlite");
+        let params = regtest_params();
+
+        initialize_regtest_wallet_database(&db_path, params)
+            .expect("initialize disposable local regtest wallet DB");
+        let mut db = WalletDb::for_path(&db_path, params, SystemClock, rand_core::OsRng)
+            .expect("reopen wallet with same params");
+        WalletMigrator::new()
+            .init_or_migrate(&mut db)
+            .expect("idempotent regtest migration");
+        assert_eq!(
+            db.params().network_type(),
+            zcash_protocol::consensus::NetworkType::Regtest
+        );
     }
 
     #[test]

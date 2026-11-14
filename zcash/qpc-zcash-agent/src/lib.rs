@@ -17,6 +17,9 @@ use zcash_protocol::{consensus::NetworkType, PoolType, ShieldedPool};
 
 pub mod lightwalletd;
 pub mod privacy_query;
+pub mod regtest_node;
+pub mod regtest_sync;
+pub mod regtest_wallet;
 pub mod viewing;
 pub mod wallet;
 
@@ -24,6 +27,7 @@ pub mod wallet;
 pub enum ZcashNetwork {
     Mainnet,
     Testnet,
+    Regtest,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -166,6 +170,7 @@ impl UnifiedAddressValidator for LibrustZcashAddressValidator {
         let network = match expected_network {
             ZcashNetwork::Mainnet => NetworkType::Main,
             ZcashNetwork::Testnet => NetworkType::Test,
+            ZcashNetwork::Regtest => NetworkType::Regtest,
         };
         let parsed = parsed
             .convert_if_network::<UnifiedOnly>(network)
@@ -525,6 +530,52 @@ mod tests {
         assert_eq!(
             LibrustZcashAddressValidator
                 .validate_unified_address(VALID_TESTNET_UA, ZcashNetwork::Mainnet,),
+            Err(AdapterError::WrongNetwork)
+        );
+    }
+
+    #[test]
+    fn official_parser_accepts_regtest_unified_address() {
+        use zcash_keys::keys::{UnifiedAddressRequest, UnifiedSpendingKey};
+        use zcash_protocol::{consensus::BlockHeight, local_consensus::LocalNetwork};
+
+        let network = LocalNetwork {
+            overwinter: Some(BlockHeight::from_u32(1)),
+            sapling: Some(BlockHeight::from_u32(1)),
+            blossom: Some(BlockHeight::from_u32(1)),
+            heartwood: Some(BlockHeight::from_u32(1)),
+            canopy: Some(BlockHeight::from_u32(1)),
+            nu5: Some(BlockHeight::from_u32(1)),
+            nu6: Some(BlockHeight::from_u32(1)),
+            nu6_1: Some(BlockHeight::from_u32(1)),
+            nu6_2: Some(BlockHeight::from_u32(1)),
+            nu6_3: Some(BlockHeight::from_u32(1)),
+        };
+        let mut disposable_seed = [0u8; 32];
+        rand_core::RngCore::try_fill_bytes(&mut rand_core::OsRng, &mut disposable_seed)
+            .expect("OS randomness for disposable test key");
+        let spending_key =
+            UnifiedSpendingKey::from_seed(&network, &disposable_seed, zip32::AccountId::ZERO)
+                .expect("disposable regtest fixture key");
+        disposable_seed.fill(0);
+        let (address, _) = spending_key
+            .to_unified_full_viewing_key()
+            .default_address(UnifiedAddressRequest::AllAvailableKeys)
+            .expect("regtest fixture address");
+        let encoded = address.encode(&network);
+
+        let recipient = LibrustZcashAddressValidator
+            .validate_unified_address(&encoded, ZcashNetwork::Regtest)
+            .expect("valid regtest UA");
+        assert_eq!(recipient.network(), ZcashNetwork::Regtest);
+        assert!(recipient.receiver_kinds().contains(&ReceiverKind::Orchard));
+    }
+
+    #[test]
+    fn official_parser_rejects_testnet_address_for_regtest() {
+        assert_eq!(
+            LibrustZcashAddressValidator
+                .validate_unified_address(VALID_TESTNET_UA, ZcashNetwork::Regtest),
             Err(AdapterError::WrongNetwork)
         );
     }

@@ -5,15 +5,20 @@ on:
     branches:
       - "qpc/**"
       - "manus/continue-near-zcash"
+      - "reason/deliver-qpc-hardening-dr-d997d6a3"
     paths:
       - "zcash/qpc-zcash-agent/**"
       - "agent-router/**"
       - ".github/workflows/zcash-adapter.yml"
+      - "scripts/run-zcash-regtest.sh"
+      - "zcash/regtest/**"
   pull_request:
     paths:
       - "zcash/qpc-zcash-agent/**"
       - "agent-router/**"
       - ".github/workflows/zcash-adapter.yml"
+      - "scripts/run-zcash-regtest.sh"
+      - "zcash/regtest/**"
 
 permissions:
   contents: read
@@ -39,6 +44,21 @@ jobs:
         run: cargo test
       - name: Compile adapter and wallet backend
         run: cargo check
+
+  zcash-regtest-incoming:
+    name: Real local Regtest shielded note sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.89.0
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: zcash/qpc-zcash-agent
+      - name: Run isolated zcashd and lightwalletd incoming-note integration
+        run: ./scripts/run-zcash-regtest.sh
 
   agent-router:
     name: NEAR-to-Zcash agent-router tests

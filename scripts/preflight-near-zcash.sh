@@ -49,8 +49,6 @@ if backend_missing:
         "capabilities": [
             "shielded_transaction_construction_and_signing",
             "broadcast_and_actual_transaction_id",
-            "wallet_note_sync_and_receive_detection",
-            "independent_receipt_and_confirmation_verification",
         ],
     })
 
@@ -75,6 +73,11 @@ result = {
         "zcashToNear": "BLOCKED",
     },
     "blockers": blockers,
+    "implementedButNotIntegrationVerified": [
+        "regtest_view_only_wallet_account",
+        "regtest_lightwalletd_compact_block_sync_and_note_discovery",
+        "full_node_regtest_identity_and_receipt_checks",
+    ],
     "transactions": [],
     "transactionIds": None,
     "notes": [
