@@ -185,7 +185,12 @@ async fn receives_and_persists_a_real_shielded_regtest_note() {
         let cli_args: Vec<_> = args.iter().map(String::as_str).collect();
         let result = cli(&cli_args);
         if args[0] == "z_shieldcoinbase" {
-            wait_operation(&result).await;
+            let response: serde_json::Value =
+                serde_json::from_str(&result).expect("z_shieldcoinbase JSON response");
+            let opid = response["opid"]
+                .as_str()
+                .expect("z_shieldcoinbase operation id");
+            wait_operation(opid).await;
         }
     }
     cli(&["generate", "1"]);
@@ -265,6 +270,18 @@ async fn receives_and_persists_a_real_shielded_regtest_note() {
         std::fs::write(path, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
     }
 }
+#[test]
+fn shieldcoinbase_response_extracts_operation_id() {
+    let response = serde_json::json!({
+        "remainingUTXOs": 0,
+        "remainingValue": 0.0,
+        "shieldingUTXOs": 1,
+        "shieldingValue": 6.25,
+        "opid": "opid-test"
+    });
+    assert_eq!(response["opid"].as_str(), Some("opid-test"));
+}
+
 async fn wait_operation(opid: &str) -> String {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(240);
     loop {
