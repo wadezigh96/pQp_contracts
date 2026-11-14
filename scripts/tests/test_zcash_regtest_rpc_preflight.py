@@ -56,28 +56,28 @@ class RpcPreflightTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_accepts_authenticated_regtest_rpc(self):
-        PREFLIGHT.check(self.config, timeout=1)
+        PREFLIGHT.check(self.config, timeout=1, report=False)
 
     def test_distinguishes_authentication_failure(self):
         Handler.expected_auth = "Basic " + base64.b64encode(b"wrong:credentials").decode()
         with self.assertRaisesRegex(RuntimeError, "authentication failure"):
-            PREFLIGHT.check(self.config, timeout=1)
+            PREFLIGHT.check(self.config, timeout=1, report=False)
 
     def test_distinguishes_rpc_protocol_failure(self):
         Handler.body = {"error": {"code": -1}, "result": None}
         with self.assertRaisesRegex(RuntimeError, "protocol failure"):
-            PREFLIGHT.check(self.config, timeout=1)
+            PREFLIGHT.check(self.config, timeout=1, report=False)
 
     def test_distinguishes_connection_refused(self):
         self.server.shutdown()
         self.server.server_close()
         with self.assertRaisesRegex(RuntimeError, "connection refused"):
-            PREFLIGHT.check(self.config, timeout=0.1)
+            PREFLIGHT.check(self.config, timeout=0.1, report=False)
 
     def test_distinguishes_connection_timeout(self):
         with patch.object(PREFLIGHT.OPENER, "open", side_effect=urllib.error.URLError(socket.timeout())):
             with self.assertRaisesRegex(RuntimeError, "connection timed out"):
-                PREFLIGHT.check(self.config, timeout=0.1)
+                PREFLIGHT.check(self.config, timeout=0.1, report=False)
 
 
 if __name__ == "__main__":

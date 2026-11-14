@@ -32,7 +32,7 @@ def credentials(path):
     return values["rpcuser"], values["rpcpassword"]
 
 
-def check(path, timeout=45):
+def check(path, timeout=45, report=True):
     user, password = credentials(path)
     token = base64.b64encode(f"{user}:{password}".encode()).decode()
     body = json.dumps({"jsonrpc": "1.0", "id": "qpc-rpc-preflight", "method": "getblockchaininfo", "params": []}).encode()
@@ -52,7 +52,8 @@ def check(path, timeout=45):
             result = payload["result"]
             if result.get("chain") != "regtest" or not isinstance(result.get("blocks"), int):
                 raise RuntimeError("RPC identity failure: endpoint did not report Regtest")
-            print(f"Authenticated full-node RPC reachable at {ENDPOINT}; chain=regtest, height={result['blocks']}")
+            if report:
+                print(f"Authenticated full-node RPC reachable at {ENDPOINT}; chain=regtest, height={result['blocks']}")
             return
         except urllib.error.HTTPError as error:
             if error.code in (401, 403):

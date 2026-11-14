@@ -68,6 +68,7 @@ export QPC_REGTEST_DIR="$work" QPC_REGTEST_PROJECT="$project" QPC_CONTAINER_UID=
 python3 -m unittest discover -s "$root/scripts/tests" -p 'test_*.py'
 docker compose -p "$project" -f "$compose" up -d --wait
 mapping=$(docker compose -p "$project" -f "$compose" port zcashd 18232)
+printf 'Docker-reported zcashd RPC mapping: %s\n' "$mapping"
 [ "$mapping" = "127.0.0.1:18232" ] || {
   echo "Full-node RPC port is not published exclusively on host loopback." >&2
   exit 1
