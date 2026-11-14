@@ -1,0 +1,72 @@
+{
+  "schema": "qpc.near-zcash-demo-preflight.v1",
+  "generatedAtUtc": "2026-11-14T02:17:28.117913+00:00",
+  "overallStatus": "BLOCKED",
+  "networkPolicy": {
+    "mainnet": "NEVER_USED",
+    "publicTestnetDeployment": "NOT_AUTHORIZED"
+  },
+  "prerequisites": {
+    "requiredForRustChecks": {
+      "cargo": null,
+      "rustc": null
+    },
+    "requiredForNearSandbox": {
+      "nearSandbox": null,
+      "integrationHarness": false
+    },
+    "zcashRegtestNodeCandidates": {
+      "zcashd": null,
+      "zebradUnvalidatedAlternative": null
+    },
+    "optionalTools": {
+      "lightwalletd": null,
+      "docker": null
+    }
+  },
+  "scenarios": {
+    "nearSandbox": "BLOCKED",
+    "zcashRegtest": "BLOCKED",
+    "shieldedPaymentBackend": "BLOCKED",
+    "nearToZcash": "BLOCKED",
+    "zcashToNear": "BLOCKED"
+  },
+  "blockers": [
+    {
+      "type": "MISSING_RUST_TOOLCHAIN",
+      "requiredTools": [
+        "cargo",
+        "rustc"
+      ]
+    },
+    {
+      "type": "MISSING_NEAR_SANDBOX_RUNTIME",
+      "requiredTool": "near-sandbox"
+    },
+    {
+      "type": "NEAR_SANDBOX_TEST_HARNESS_NOT_IMPLEMENTED",
+      "expectedPath": "near/sandbox-tests/"
+    },
+    {
+      "type": "MISSING_ZCASH_REGTEST_NODE",
+      "supportedReferenceBinary": "zcashd",
+      "alternativeCandidate": "zebrad (compatibility must be validated)"
+    },
+    {
+      "type": "PAYMENT_BACKEND_NOT_IMPLEMENTED",
+      "capabilities": [
+        "shielded_transaction_construction_and_signing",
+        "broadcast_and_actual_transaction_id",
+        "wallet_note_sync_and_receive_detection",
+        "independent_receipt_and_confirmation_verification"
+      ]
+    }
+  ],
+  "transactions": [],
+  "transactionIds": null,
+  "notes": [
+    "This preflight is read-only with respect to networks, wallets, and chain state; it writes this local JSON report.",
+    "No node was started, no RPC was called, no wallet or key was opened, and no transaction was created or broadcast.",
+    "A unit test, mock callback, offline VM result, or txid-shaped string is not network settlement."
+  ]
+}

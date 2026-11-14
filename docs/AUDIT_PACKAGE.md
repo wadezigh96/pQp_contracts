@@ -36,14 +36,15 @@ Key attack trees (see `SECURITY.md` for full model):
 
 | Invariant | Enforced by | Test evidence |
 |-----------|-------------|---------------|
-| Contract initializes only once with intended owner `wkams.testnet` | `env::state_exists()` plus owner pin in `new` | `initialized_owner_is_exactly_the_intended_testnet_account`, `initializer_rejects_owner_substitution_before_state_creation`, `initializer_is_one_time_even_when_reinitialized_with_intended_owner` |
+| Contract initializes only once, only when the predecessor equals the pinned owner `wkams.testnet` | `env::state_exists()`, predecessor/owner equality, and owner pin in `new` | `initialized_owner_is_exactly_the_intended_testnet_account`, `initializer_rejects_owner_substitution_before_state_creation`, `initializer_rejects_unauthorized_predecessor_even_with_intended_owner_argument`, `initializer_is_one_time_even_when_reinitialized_with_intended_owner` |
 | Agent never becomes owner | Contract access control | Foundry + NEAR unit tests |
 | Exact calldata hash required for EVM calls | `QPCAgentFinance` | Foundry security tests |
 | NEAR predecessor (not claimed identity) authenticates | `authorize_envelope` | NEAR unit tests |
 | Unversioned / wrong-version NEAR state rejected | `StateLayout` magic + version | `incompatible_unversioned_state_is_rejected...`, `versioned_state_roundtrips...` |
-| Migration is owner-only and idempotent for current version | `migrate` | `migrate_is_idempotent...`, `migrate_cannot_be_reached_on_incompatible_state` |
+| Unsupported NEAR state layouts reject before collection access; no migration entrypoint exists | `StateLayout` magic/version deserialization guard | `incompatible_unversioned_state_is_rejected_without_storage_changes`, `versioned_state_roundtrips_and_rejects_unknown_corrupt_or_truncated_headers`, `existing_incompatible_state_cannot_be_reset_by_new` |
 | Administrative calls cannot be made by agent/attacker | `assert_owner` on configuration methods | `non_owner_cannot_administer_even_when_claiming_owner_in_request_metadata`, `owner_only_configuration_and_recipient_changes` |
 | Generic evidence cannot settle | `FileIntentStore` + verifiers | JS settlement-boundary tests |
+| Replay domain isolates source adapters | `computeCrossL1ReplayDomainKey` V2 includes `source.adapterId` | Cross-L1 replay-domain test; legacy persisted V1 replay-key migration is not implemented |
 | Zcash route cannot produce settlement | `verifyNearToZcashRoute` returns `NOT_IMPLEMENTED` | `zcash-route.test.mjs` |
 | Hybrid auth requires both Ed25519 and ML-DSA-65 | `agent-router/pq-auth` | 26 hybrid tests |
 | Solana replay / CPI constraints | Program + LiteSVM | Host + runtime tests |
@@ -56,7 +57,7 @@ Key attack trees (see `SECURITY.md` for full model):
 | Failed NEAR native transfer | Replay consumed; refund state machine | Agent-authorized refund only |
 | Callback true but no native proof | `NOT_VERIFIED` / rejected | Fail closed |
 | Expired / revoked intent | Rejected | Cannot reopen nonce |
-| Incompatible NEAR state | Deserialization fails | No silent reset; explicit migrate required |
+| Incompatible NEAR state | Deserialization fails | No silent reset and no on-chain migration; any future migration needs a separately designed and reviewed recovery/redeployment procedure |
 | Zcash provider success | Still `NOT_IMPLEMENTED` | No settlement |
 
 ## 5. Dependency inventory (selected)
@@ -72,15 +73,15 @@ Lockfiles are present. No full vulnerability scan is claimed here.
 ## 6. Reproducible test commands (current branch)
 
 ```bash
-node --test agent-router/test/*.test.mjs          # 516
+node --test agent-router/test/*.test.mjs          # 517
 npm test --prefix agent-router/pq-auth            # 26
-cargo test --manifest-path near/qpc-near-agent-finance/Cargo.toml --locked   # 33 expected after owner hardening; execution currently blocked
+cargo test --manifest-path near/qpc-near-agent-finance/Cargo.toml --locked   # current source: 32 test declarations; run result is revision-specific
 cargo test --manifest-path zcash/qpc-zcash-agent/Cargo.toml --locked         # 46
 # Solana host + SBF + LiteSVM: see solana/qpc-native-executor/scripts/
 # Foundry: forge test --summary
 ```
 
-Exact counts and historical checkpoints are recorded in `ENGINEERING_EVIDENCE.md`. The owner-hardening branch is currently blocked from executing Rust/Sandbox checks when the required toolchain is unavailable.
+The starting revision's CI ran 31 NEAR unit tests and 5 separate offline-VM tests. History reconciles 27 pre-owner-hardening tests plus four owner tests to 31; this change adds one unauthorized-predecessor test, so the current source declares 32. The current-revision Rust result must be read from its CI run. Cargo and the NEAR Sandbox toolchain are unavailable in the local execution environment; offline VM is not Sandbox. Exact counts and network-test boundaries are recorded in `ENGINEERING_EVIDENCE.md`.
 
 ## 7. Known limitations and unresolved risks
 
@@ -97,7 +98,7 @@ Exact counts and historical checkpoints are recorded in `ENGINEERING_EVIDENCE.md
 
 - [ ] Review exact calldata hash binding and allowance-selector denylist on EVM.
 - [ ] Review NEAR predecessor authentication, nonce/intent scoping, and state layout rejection.
-- [ ] Confirm `migrate` cannot be used to reset or reinterpret incompatible state.
+- [ ] Confirm no on-chain `migrate` entrypoint exists; review any future recovery or redeployment path separately.
 - [ ] Review Solana PDA, CPI, and replay logic (including LiteSVM rollback tests).
 - [ ] Review Zcash address/policy boundary and confirm no key material reaches the agent.
 - [ ] Review optional hybrid verifier (domain separation, epoch pinning, rejection cases).

@@ -1,48 +1,50 @@
-# QPC engineering evidence — owner hardening
+# QPC engineering evidence — owner and replay hardening
 
 **Branch:** `reason/deliver-qpc-hardening-dr-d997d6a3`
-**Scope:** local implementation and review draft only. No deployment, public transaction, key rotation, or external professional audit was performed.
+**Starting revision:** `b1c758117d131b4974bada543f49b378149f8127`
+**Scope:** local implementation and PR review only. No deployment, public transaction, key rotation, real-funds operation, or external professional audit was performed.
 
-## Owner initialization evidence
+## Implemented security corrections
 
-The NEAR contract initializer is now guarded by both `env::state_exists()` and an explicit owner check for `wkams.testnet`. Any existing state rejects reinitialization before replacement, and any other owner account rejects substitution before a supported state is created. `get_owner()` exposes the contract-storage owner for read-only verification, while `get_state_layout_version()` remains available for layout verification.
+- NEAR initialization now requires (1) empty state, (2) `predecessor_account_id` equal to the supplied owner, and (3) the pinned owner `wkams.testnet`. A regression test supplies the correct owner argument from `attacker.testnet` and requires rejection before state creation. Contract storage ownership remains distinct from account-level access-key and deployment authority.
+- The JavaScript replay-domain key is now versioned `V2` and binds `source.adapterId` in addition to replay authority/scope, network, native chain, source account, and agent identity. A regression test checks that changing only the source adapter changes the replay domain. The canonical envelope serialization and authorization commitment are unchanged. Existing durable replay stores using the former V1 key derivation require an explicitly designed, atomic migration before any upgrade; no replay-store migration is implemented here.
 
-Administrative methods continue to authorize only `env::predecessor_account_id()` equal to the stored owner. Tests cover unauthorized `configure_agent`, `configure_envelope_profile`, recipient permission changes, and agent revocation. No owner-transfer method was added because WASM cannot control the NEAR account's FullAccess or deployment authority.
+The shared fixture `docs/fixtures/cross-l1-v1.json` still produces commitment `c72c9a07dfd9ce8aecbd21c9c6bf858e5f089072a9ec84bafb03aadada653333`; a fresh local computation after the replay-key change matched this literal value. **Release gate:** do not upgrade an existing durable store to V2 without a tested atomic rekey migration that preserves all consumed claims. Freeze V1 writers during migration and prevent mixed V1/V2 authorities from accepting the same replay claim. Never delete/reset a V1 store to bypass the V2 consistency rejection. No store migrator is implemented.
 
-## Canonical fixture synchronization
+## NEAR test-count reconciliation
 
-The shared fixture `docs/fixtures/cross-l1-v1.json` now binds `cancellation.authorityId` to `wkams.testnet`. Its canonical JSON and commitment were regenerated with `stringifyCrossL1AuthorizationEnvelope` and `computeCrossL1AuthorizationCommitment`, not manually edited: `canonicalJson` matches byte-for-byte and the resulting `authorizationCommitment` is `c72c9a07dfd9ce8aecbd21c9c6bf858e5f089072a9ec84bafb03aadada653333`. The Rust fixture tests assert that cancellation authority equals `INTENDED_OWNER`; the offline VM predecessor constant and generated demo artifacts use the same owner/commitment.
+The CI run on the starting revision (`b1c758117d131b4974bada543f49b378149f8127`) executed **31 Rust unit tests**, not 33. Repository history shows 27 tests before owner hardening; commit `0166383` added four owner tests, giving 31. The “29 baseline / 33 expected” wording was unsupported by source history and test discovery. This change adds one predecessor-authorization regression test, so the current source declares **32** NEAR tests; the result for this revision must be taken from its post-push CI run, not inferred from source count.
 
-## State and migration boundary
+## Verification evidence
 
-The root state begins with the `QPCNEAR\0LAYOUT\0\0` magic and layout version `1`. Missing, corrupt, unknown-version, truncated, and unversioned roots reject before collection handles are interpreted. No automatic migration or silent reset is implemented. No authentic historical deployed-state fixture was available, so no data transformation is claimed.
+### Local, on the modified working tree
 
-## Verification commands
+- `node --test agent-router/test/*.test.mjs`: **517 passed, 0 failed** (fresh complete run, exit code 0).
+- `node --test agent-router/test/cross-l1-envelope.test.mjs`: **60 passed, 0 failed**.
+- `npm test --prefix agent-router/pq-auth`: **26 passed, 0 failed** after installing the lockfile-pinned dependencies with `npm ci --prefix agent-router/pq-auth --ignore-scripts --no-audit --no-fund`.
+- `git diff --check`: passed on the current complete diff; rerun before commit.
+- NEAR test source discovery: **32** `#[test]` declarations. NEAR formatting and Rust tests for the modified revision have not been run locally because `cargo`, `rustc`, and `rustfmt` are absent. The current workflow run on the modified revision is the authority for Rust results.
+- `node --test agent-router/test/intent-store-recovery.test.mjs`: **10 passed, 0 failed**. The new compatibility regression verifies a V1-derived persisted replay index is rejected under V2 without rewriting/resetting the file.
 
-Commands prepared for the hardening change:
+### Existing remote CI on the starting revision only
 
-```bash
-cargo fmt --manifest-path near/qpc-near-agent-finance/Cargo.toml -- --check
-cargo test --manifest-path near/qpc-near-agent-finance/Cargo.toml --locked
-cargo build --manifest-path near/qpc-near-agent-finance/Cargo.toml \
-  --target wasm32-unknown-unknown --release
-bash near/offline-vm/check.sh
-```
+- [NEAR run 43541003900](https://github.com/wadezigh96/pQp_contracts/actions/runs/43541003900): **31 Rust unit tests passed** and a separate **5 offline-VM tests passed**. Formatting and compatible WASM/offline-VM checks passed in that workflow. These results apply to the starting revision, not the code changes described above.
+- [Zcash adapter run 43541003951](https://github.com/wadezigh96/pQp_contracts/actions/runs/43541003951): **46 adapter unit tests passed** on the starting revision. This workflow does not run Zcash regtest.
+- The starting PR revision reported 11/11 checks successful. That is historical evidence, not a result for the modified revision.
 
-**Current execution status:** BLOCKED in this sandbox because `cargo`, `rustc`, `rustfmt`, `rustup`, and NEAR Sandbox binaries are not installed. No offline VM, real NEAR Sandbox, WASM build, or deployed RPC test was represented as passing. The existing branch baseline records 29 NEAR unit tests; four owner-hardening tests were added, so the expected targeted count is 33 once the Rust toolchain is available. This count is not a pass claim.
+## Network and settlement boundaries
 
-## Sandbox requirement
-
-A real local NEAR Sandbox test remains unresolved and must be run with disposable accounts only. Required scenarios are deployment, initialization with `wkams.testnet` as the intended storage owner, unauthorized owner substitution, reinitialization, owner-only admin calls, failed-call rollback, state persistence, gas/storage behavior, and account-level upgrade authority review. If Sandbox cannot be provisioned, the result must remain **BLOCKED**.
+- **Actual NEAR Sandbox:** BLOCKED / NOT RUN. The execution environment has no Rust toolchain or `near-sandbox`. The CI offline VM executes the built WASM with mocked host context; it is not a nearcore Sandbox, account deployment, signed transaction, or live receipt graph.
+- **Zcash regtest:** BLOCKED / NOT RUN. `zcashd`, `zebrad`, `lightwalletd`, and Docker are absent. More importantly, this repository does not implement Zcash transaction construction/signing/broadcast, wallet synchronization, or independent receipt/confirmation verification. Installing node binaries alone would not create the missing payment flow.
+- **NEAR → Zcash / Zcash → NEAR transactions:** NOT RUN. There are no transaction IDs or settlement results to report. The router explicitly returns `NOT_IMPLEMENTED` for native shielded Zcash settlement.
+- Zcash adapter tests validate addresses, policy/replay boundaries, wallet database behavior, and read-only probes; they are not regtest or Testnet transactions.
 
 ## Account-level authority
 
-`funzest6203.testnet` account deployment authority and any FullAccess key are outside the contract-storage owner boundary. A contract method cannot revoke or constrain that authority. The documented upgrade procedure therefore requires two-person review of the exact WASM hash, layout version, migration plan, owner, deployment account and transaction parameters, followed by read-only verification. No key is requested, stored, printed, rotated, or transmitted.
+`funzest6203.testnet` is the intended deployment target only. No deployment occurred. NEAR account access keys and deployment authority are outside contract storage ownership; a WASM method cannot revoke or constrain FullAccess keys. No account credentials or key material were requested, stored, or transmitted.
 
 ## Claims not supported
 
-- No production readiness or live payment claim.
-- No post-quantum readiness claim.
+- No production readiness, live payment, cross-chain atomic settlement, or post-quantum security claim.
 - No claim of a professional external audit.
-- No claim that unit tests or offline VM are equivalent to a real NEAR Sandbox or deployed receipt graph.
-- No deployment to `funzest6203.testnet` and no public transaction submission.
+- Unit tests, offline VM tests, NEAR Sandbox, Zcash regtest, and Zcash Testnet transactions are distinct and are not interchangeable.
