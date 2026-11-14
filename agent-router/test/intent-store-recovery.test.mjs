@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, writeFile, rm, mkdir, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -33,6 +34,33 @@ test('missing or orphan replay indexes fail closed instead of permitting reautho
     await assert.rejects(store.create(changed, { nowUnix: NOW }), /invalid persistent/);
     await assert.rejects(store.get(id), /invalid persistent/);
   }
+});
+
+test('legacy V1 replay indexes fail closed under V2 instead of being silently discarded', async t => {
+  const { root, store } = await setup(t);
+  const id = await authorize(store);
+  const state = JSON.parse(await readFile(join(root, 'state.json'), 'utf8'));
+  const e = state.records[id].envelope;
+  const legacyDomain = createHash('sha256')
+    .update('QPC-CROSS-L1-REPLAY-V1\0')
+    .update(JSON.stringify([
+      e.replayDomain.authorityId,
+      e.replayDomain.scope,
+      e.source.networkId,
+      e.source.nativeChainId,
+      e.source.accountId,
+      e.agentIdentity.namespace,
+      e.agentIdentity.id,
+    ]))
+    .digest('hex');
+  state.nonces = { [JSON.stringify([legacyDomain, e.nonce])]: id };
+  state.intents = { [JSON.stringify([legacyDomain, e.intentId])]: id };
+  const legacyBytes = JSON.stringify(state);
+  await writeFile(join(root, 'state.json'), legacyBytes);
+
+  await assert.rejects(store.get(id), /invalid persistent store: replay index mismatch/);
+  await assert.rejects(store.authorize(e, auth), /invalid persistent store: replay index mismatch/);
+  assert.equal(await readFile(join(root, 'state.json'), 'utf8'), legacyBytes);
 });
 
 test('restart recovery atomically quarantines uncertain submissions without releasing replay', async t => {

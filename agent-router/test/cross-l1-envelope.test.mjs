@@ -198,9 +198,10 @@ test("authorization snapshot and every nested field remain immutable across asyn
   assert.equal(result.authorizationCommitment, expected);
 });
 
-test("replay domain tuple binds native chain and cannot reset on key rotation", () => {
+test("replay domain tuple binds native chain and adapter and cannot reset on key rotation", () => {
   const original = computeCrossL1ReplayDomainKey(envelope());
   assert.notEqual(original, computeCrossL1ReplayDomainKey(changedAt(["source", "nativeChainId"], "testnet")));
+  assert.notEqual(original, computeCrossL1ReplayDomainKey(changedAt(["source", "adapterId"], "near-v2")));
   assert.equal(original, computeCrossL1ReplayDomainKey(changedAt(["agentIdentity", "keyId"], "rotated-key")));
   assert.equal(original, computeCrossL1ReplayDomainKey(changedAt(["policy", "version"], 9)));
   assert.throws(() => computeCrossL1ReplayDomainKey(changedAt(["replayDomain", "scope"], "contains|delimiter")));

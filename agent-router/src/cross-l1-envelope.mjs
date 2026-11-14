@@ -241,10 +241,12 @@ export async function authorizeCrossL1Envelope(input, {
 
 export function computeCrossL1ReplayDomainKey(input) {
   const e = canonicalizeCrossL1AuthorizationEnvelope(input);
-  // A structured tuple avoids delimiter collisions and binds native chain identity.
-  return createHash("sha256").update("QPC-CROSS-L1-REPLAY-V1\0").update(JSON.stringify([
+  // A structured tuple avoids delimiter collisions and isolates network, account,
+  // and adapter namespaces even when they share one replay authority.
+  return createHash("sha256").update("QPC-CROSS-L1-REPLAY-V2\0").update(JSON.stringify([
     e.replayDomain.authorityId, e.replayDomain.scope, e.source.networkId,
-    e.source.nativeChainId, e.source.accountId, e.agentIdentity.namespace, e.agentIdentity.id,
+    e.source.nativeChainId, e.source.accountId, e.source.adapterId,
+    e.agentIdentity.namespace, e.agentIdentity.id,
   ])).digest("hex");
 }
 

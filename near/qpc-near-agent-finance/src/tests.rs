@@ -58,6 +58,15 @@ fn initializer_rejects_owner_substitution_before_state_creation() {
 }
 
 #[test]
+fn initializer_rejects_unauthorized_predecessor_even_with_intended_owner_argument() {
+    context("attacker.testnet", NOW);
+    rejects(|| {
+        QPCNear::new(account("wkams.testnet"));
+    });
+    assert!(env::storage_read(b"STATE").is_none());
+}
+
+#[test]
 fn initializer_is_one_time_even_when_reinitialized_with_intended_owner() {
     let (contract, _) = setup();
     let bytes = borsh::to_vec(&contract).unwrap();

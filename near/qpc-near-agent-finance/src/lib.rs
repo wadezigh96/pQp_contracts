@@ -159,6 +159,11 @@ impl QPCNear {
     #[init]
     pub fn new(owner: AccountId) -> Self {
         assert!(!env::state_exists(), "already initialized");
+        assert_eq!(
+            env::predecessor_account_id(),
+            owner,
+            "initializer caller must be owner"
+        );
         assert_eq!(owner.as_str(), INTENDED_OWNER, "unexpected owner");
         Self {
             layout: StateLayout,
