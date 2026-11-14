@@ -195,9 +195,12 @@ async fn receives_and_persists_a_real_shielded_regtest_note() {
     }
     cli(&["generate", "1"]);
 
-    // The node wallet constructs and proves the requested shielded UA output.
-    let outputs_json = serde_json::json!([{"address":recipient,"amount":0.5}]).to_string();
-    let opid = cli(&["z_sendmany", &shielded_source, &outputs_json, "1", "0.0001"]);
+    // The UA may select an Orchard receiver while the disposable source is Sapling.
+    // zcashd rejects that cross-pool send under FullPrivacy. The Regtest-only
+    // harness explicitly opts into AllowRevealedAmounts; production policy is untouched.
+    let send_args = shielded_payment_command(&shielded_source, &recipient);
+    let cli_args: Vec<_> = send_args.iter().map(String::as_str).collect();
+    let opid = cli(&cli_args);
     let txid_text = wait_operation(&opid).await;
     cli(&["generate", "1"]);
     let tx: serde_json::Value =
@@ -270,6 +273,29 @@ async fn receives_and_persists_a_real_shielded_regtest_note() {
         std::fs::write(path, serde_json::to_vec_pretty(&report).unwrap()).unwrap();
     }
 }
+fn shielded_payment_command(source: &str, recipient: &str) -> Vec<String> {
+    let outputs = serde_json::json!([{"address": recipient, "amount": 0.5}]).to_string();
+    vec![
+        "z_sendmany".to_owned(),
+        source.to_owned(),
+        outputs,
+        "1".to_owned(),
+        "0.0001".to_owned(),
+        "AllowRevealedAmounts".to_owned(),
+    ]
+}
+
+#[test]
+fn shielded_payment_explicitly_allows_cross_pool_ua_receiver_only_in_regtest() {
+    let args = shielded_payment_command("sapling-source", "unified-recipient");
+    assert_eq!(args[0], "z_sendmany");
+    let outputs: serde_json::Value = serde_json::from_str(&args[2]).unwrap();
+    assert_eq!(outputs[0]["address"], "unified-recipient");
+    assert_eq!(args[3], "1");
+    assert_eq!(args[4], "0.0001");
+    assert_eq!(args[5], "AllowRevealedAmounts");
+}
+
 #[test]
 fn shieldcoinbase_response_extracts_operation_id() {
     let response = serde_json::json!({
@@ -282,30 +308,93 @@ fn shieldcoinbase_response_extracts_operation_id() {
     assert_eq!(response["opid"].as_str(), Some("opid-test"));
 }
 
+#[derive(Debug, PartialEq)]
+enum OperationState {
+    Pending,
+    Success,
+    Failed(String),
+}
+
+/// Classify the first entry of a z_getoperationstatus response and preserve
+/// the node's error code/message for terminal failures.
+fn classify_operation_status(status: &serde_json::Value) -> Result<OperationState, String> {
+    let entry = status
+        .as_array()
+        .and_then(|entries| entries.first())
+        .ok_or_else(|| format!("z_getoperationstatus returned no operation entry: {status}"))?;
+    match entry["status"].as_str() {
+        Some("queued" | "executing") => Ok(OperationState::Pending),
+        Some("success") => Ok(OperationState::Success),
+        Some(state @ ("failed" | "cancelled")) => {
+            let code = entry["error"]["code"].as_i64();
+            let message = entry["error"]["message"]
+                .as_str()
+                .unwrap_or("no error message reported");
+            Ok(OperationState::Failed(format!(
+                "{state}: code {code:?}: {message}"
+            )))
+        }
+        other => Err(format!("unexpected operation status {other:?}: {status}")),
+    }
+}
+
 async fn wait_operation(opid: &str) -> String {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(240);
+    let ids = serde_json::json!([opid]).to_string();
     loop {
-        let ids = format!("[\"{opid}\"]");
         let status: serde_json::Value =
-            serde_json::from_str(&cli(&["z_getoperationstatus", &ids])).unwrap();
-        match status[0]["status"].as_str() {
-            Some("success") => {
+            serde_json::from_str(&cli(&["z_getoperationstatus", &ids]))
+                .expect("z_getoperationstatus returned malformed JSON");
+        match classify_operation_status(&status) {
+            Ok(OperationState::Success) => {
                 let done: serde_json::Value =
-                    serde_json::from_str(&cli(&["z_getoperationresult", &ids])).unwrap();
+                    serde_json::from_str(&cli(&["z_getoperationresult", &ids]))
+                        .expect("z_getoperationresult returned malformed JSON");
                 return done[0]["result"]["txid"]
                     .as_str()
                     .expect("node transaction id")
                     .to_owned();
             }
-            Some("failed") => panic!("local node shielded operation failed"),
-            _ => {}
+            Ok(OperationState::Failed(reason)) => {
+                panic!("local node shielded operation {opid} {reason}")
+            }
+            Ok(OperationState::Pending) => {}
+            Err(reason) => panic!("{reason}"),
         }
         assert!(
             tokio::time::Instant::now() < deadline,
-            "node shielded operation timed out"
+            "node shielded operation {opid} timed out"
         );
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
+}
+
+#[test]
+fn operation_status_surfaces_node_failure_reason() {
+    let failed = serde_json::json!([{
+        "id": "opid-1",
+        "status": "failed",
+        "error": {"code": -4, "message": "privacy policy violation"}
+    }]);
+    assert_eq!(
+        classify_operation_status(&failed),
+        Ok(OperationState::Failed(
+            "failed: code Some(-4): privacy policy violation".to_owned()
+        ))
+    );
+}
+
+#[test]
+fn operation_status_handles_pending_success_missing_and_unknown() {
+    for pending in ["queued", "executing"] {
+        let status = serde_json::json!([{"id": "opid-1", "status": pending}]);
+        assert_eq!(classify_operation_status(&status), Ok(OperationState::Pending));
+    }
+    let success = serde_json::json!([{"id": "opid-1", "status": "success"}]);
+    assert_eq!(classify_operation_status(&success), Ok(OperationState::Success));
+    assert!(classify_operation_status(&serde_json::json!([])).is_err());
+    assert!(classify_operation_status(&serde_json::json!({"status": "success"})).is_err());
+    assert!(classify_operation_status(&serde_json::json!([{"status": "mystery"}])).is_err());
 }
 
 fn verified_node_shielded_amount(view: &serde_json::Value, recipient: &str) -> Option<u64> {
