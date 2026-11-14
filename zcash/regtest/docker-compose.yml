@@ -12,8 +12,7 @@ services:
     volumes:
       - ${QPC_REGTEST_DIR:?set by scripts/run-zcash-regtest.sh}/node:/var/lib/zcash
       - ${QPC_REGTEST_DIR:?set by scripts/run-zcash-regtest.sh}/zcashd.conf:/run/qpc/zcashd.conf:ro
-    ports:
-      - "127.0.0.1:18232:18232"
+    expose: ["18232"]
     networks: [qpc-regtest]
     healthcheck:
       test: ["CMD-SHELL", "zcash-cli -regtest -conf=/run/qpc/zcashd.conf -datadir=/var/lib/zcash getblockchaininfo >/dev/null"]
@@ -33,8 +32,7 @@ services:
     depends_on:
       zcashd:
         condition: service_healthy
-    ports:
-      - "127.0.0.1:9067:9067"
+    expose: ["9067"]
     networks: [qpc-regtest]
     restart: "no"
 

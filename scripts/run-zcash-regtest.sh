@@ -12,8 +12,12 @@ docker compose version >/dev/null 2>&1 || { echo "Docker Compose v2 is required;
 work=$(mktemp -d "${TMPDIR:-/tmp}/qpc-zcash-regtest.XXXXXX")
 chmod 700 "$work"
 project="qpc-regtest-$$"
+rpc_proxy_pid=
+lightd_proxy_pid=
 cleanup() {
   result=$?
+  if [ -n "$rpc_proxy_pid" ]; then kill "$rpc_proxy_pid" >/dev/null 2>&1 || true; wait "$rpc_proxy_pid" >/dev/null 2>&1 || true; fi
+  if [ -n "$lightd_proxy_pid" ]; then kill "$lightd_proxy_pid" >/dev/null 2>&1 || true; wait "$lightd_proxy_pid" >/dev/null 2>&1 || true; fi
   if [ "$result" -ne 0 ]; then
     # Preserve actionable startup/test diagnostics while redacting the generated
     # RPC credentials before they can enter CI logs.
@@ -69,8 +73,16 @@ python3 -m unittest discover -s "$root/scripts/tests" -p 'test_*.py'
 docker compose -p "$project" -f "$compose" up -d --wait
 container_id=$(docker compose -p "$project" -f "$compose" ps -q zcashd)
 [ -n "$container_id" ] || { echo "Regtest full-node container is missing." >&2; exit 1; }
-ports=$(docker inspect --format '{{json .Config.ExposedPorts}}|{{json .HostConfig.PortBindings}}|{{json .NetworkSettings.Ports}}' "$container_id")
-python3 "$root/scripts/check-zcash-regtest-rpc.py" --verify-docker-mapping "$ports"
+node_info=$(docker inspect --format '{{json .Config.ExposedPorts}}|{{json .HostConfig.PortBindings}}|{{json .NetworkSettings.Ports}}|{{json .NetworkSettings.Networks}}' "$container_id")
+node_ip=$(python3 "$root/scripts/check-zcash-regtest-rpc.py" --verify-internal-port 18232 "$node_info")
+lightd_container_id=$(docker compose -p "$project" -f "$compose" ps -q lightwalletd)
+[ -n "$lightd_container_id" ] || { echo "Regtest lightwalletd container is missing." >&2; exit 1; }
+lightd_info=$(docker inspect --format '{{json .Config.ExposedPorts}}|{{json .HostConfig.PortBindings}}|{{json .NetworkSettings.Ports}}|{{json .NetworkSettings.Networks}}' "$lightd_container_id")
+lightd_ip=$(python3 "$root/scripts/check-zcash-regtest-rpc.py" --verify-internal-port 9067 "$lightd_info")
+python3 "$root/scripts/forward-zcash-regtest-port.py" 18232 "$node_ip" 18232 >"$work/rpc-proxy.log" 2>&1 &
+rpc_proxy_pid=$!
+python3 "$root/scripts/forward-zcash-regtest-port.py" 9067 "$lightd_ip" 9067 >"$work/lightd-proxy.log" 2>&1 &
+lightd_proxy_pid=$!
 export QPC_ZCASH_CONF="$work/zcashd.conf"
 python3 "$root/scripts/check-zcash-regtest-rpc.py"
 cat > "$work/zcash-cli" <<'EOF_CLI'

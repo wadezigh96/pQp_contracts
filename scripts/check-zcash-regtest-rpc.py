@@ -2,6 +2,7 @@
 """Verify host-loopback reachability and authenticated Regtest RPC without logging secrets."""
 import base64
 import json
+import ipaddress
 import os
 import socket
 import sys
@@ -32,25 +33,32 @@ def credentials(path):
     return values["rpcuser"], values["rpcpassword"]
 
 
-def verify_docker_mapping(raw):
+def verify_docker_internal_port(raw, port):
     try:
-        exposed_raw, bindings_raw, active_raw = raw.split("|", 2)
+        exposed_raw, bindings_raw, active_raw, networks_raw = raw.split("|", 3)
         exposed = json.loads(exposed_raw)
         bindings = json.loads(bindings_raw)
         active = json.loads(active_raw)
+        networks = json.loads(networks_raw)
     except (ValueError, json.JSONDecodeError):
-        raise RuntimeError("Docker returned malformed port mapping data") from None
-    expected = [{"HostIp": "127.0.0.1", "HostPort": "18232"}]
-    if (
-        not isinstance(exposed, dict)
-        or "18232/tcp" not in exposed
-        or not isinstance(bindings, dict)
-        or bindings.get("18232/tcp") != expected
-        or not isinstance(active, dict)
-        or active.get("18232/tcp") != expected
-    ):
-        observed = {"exposed": exposed, "bindings": bindings, "active": active}
-        raise RuntimeError(f"Docker RPC port mapping mismatch (loopback only required): {observed!r}")
+        raise RuntimeError("Docker returned malformed internal port data") from None
+    key = f"{port}/tcp"
+    if not isinstance(exposed, dict) or key not in exposed:
+        raise RuntimeError("Docker service does not expose the expected internal TCP port")
+    if isinstance(bindings, dict) and bindings.get(key) not in (None, []):
+        raise RuntimeError("Regtest service port must not be published on a host interface")
+    if isinstance(active, dict) and active.get(key) not in (None, []):
+        raise RuntimeError("Regtest service port unexpectedly has an active host mapping")
+    if not isinstance(networks, dict) or len(networks) != 1:
+        raise RuntimeError("Regtest service must attach only to its isolated Docker network")
+    try:
+        address = next(iter(networks.values()))["IPAddress"]
+        ip = ipaddress.ip_address(address)
+    except (StopIteration, KeyError, ValueError, TypeError):
+        raise RuntimeError("Docker did not report a valid isolated Regtest container address") from None
+    if ip not in ipaddress.ip_network("172.30.8.0/24"):
+        raise RuntimeError("Regtest container address is outside the configured isolated bridge")
+    return str(ip)
 
 
 def check(path, timeout=45, report=True):
@@ -97,8 +105,8 @@ def check(path, timeout=45, report=True):
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) == 3 and sys.argv[1] == "--verify-docker-mapping":
-            verify_docker_mapping(sys.argv[2])
+        if len(sys.argv) == 4 and sys.argv[1] == "--verify-internal-port":
+            print(verify_docker_internal_port(sys.argv[3], int(sys.argv[2])))
         elif len(sys.argv) == 1:
             check(os.environ["QPC_ZCASH_CONF"])
         else:
