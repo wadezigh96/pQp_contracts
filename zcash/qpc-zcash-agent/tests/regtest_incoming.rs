@@ -153,14 +153,6 @@ async fn receives_and_persists_a_real_shielded_regtest_note() {
     let confirmed_height = qpc_zcash_agent::regtest_node::verify_node_identity(&chain, &p).unwrap();
     assert_eq!(chain["chain"], "regtest");
     // Mine mature disposable coinbase funds only on the isolated local chain.
-    let source = cli(&["getnewaddress"]);
-    if confirmed_height < 101 {
-        cli(&[
-            "generatetoaddress",
-            &format!("{}", 101 - confirmed_height),
-            &source,
-        ]);
-    }
     let mut seed = [0u8; 32];
     OsRng.fill_bytes(&mut seed);
     let usk = UnifiedSpendingKey::from_seed(&p, &seed, AccountId::ZERO)
@@ -176,8 +168,13 @@ async fn receives_and_persists_a_real_shielded_regtest_note() {
     // z_sendmany cannot make arbitrary change from coinbase inputs. First
     // shield disposable mature coinbase funds into the local Sapling wallet.
     let shielded_source = cli(&["z_getnewaddress"]);
-    let shield_op = cli(&["z_shieldcoinbase", &source, &shielded_source]);
-    wait_operation(&shield_op).await;
+    for args in coinbase_funding_commands(confirmed_height, &shielded_source) {
+        let cli_args: Vec<_> = args.iter().map(String::as_str).collect();
+        let result = cli(&cli_args);
+        if args[0] == "z_shieldcoinbase" {
+            wait_operation(&result).await;
+        }
+    }
     cli(&["generate", "1"]);
 
     // The node wallet constructs and proves the requested shielded UA output.
@@ -294,6 +291,42 @@ fn verified_node_shielded_amount(view: &serde_json::Value, recipient: &str) -> O
                 .map(|zec| (zec * 100_000_000.0).round() as u64)
         })
     })
+}
+
+fn coinbase_funding_commands(height: u64, shielded_destination: &str) -> Vec<Vec<String>> {
+    let mut commands = Vec::new();
+    if height < 101 {
+        commands.push(vec!["generate".to_owned(), (101 - height).to_string()]);
+    }
+    commands.push(vec![
+        "z_shieldcoinbase".to_owned(),
+        "*".to_owned(),
+        shielded_destination.to_owned(),
+    ]);
+    commands
+}
+
+#[test]
+fn coinbase_funding_uses_zcashd_wallet_mining_and_wallet_wide_shielding() {
+    assert_eq!(
+        coinbase_funding_commands(0, "shielded-destination"),
+        vec![
+            vec!["generate".to_owned(), "101".to_owned()],
+            vec![
+                "z_shieldcoinbase".to_owned(),
+                "*".to_owned(),
+                "shielded-destination".to_owned()
+            ]
+        ]
+    );
+    assert_eq!(
+        coinbase_funding_commands(101, "shielded-destination"),
+        vec![vec![
+            "z_shieldcoinbase".to_owned(),
+            "*".to_owned(),
+            "shielded-destination".to_owned()
+        ]]
+    );
 }
 
 #[test]

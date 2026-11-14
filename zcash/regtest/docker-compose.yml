@@ -9,7 +9,6 @@ services:
       - -datadir=/var/lib/zcash
       - -daemon=0
       - -printtoconsole=1
-      - -allowdeprecated=getnewaddress
     volumes:
       - ${QPC_REGTEST_DIR:?set by scripts/run-zcash-regtest.sh}/node:/var/lib/zcash
       - ${QPC_REGTEST_DIR:?set by scripts/run-zcash-regtest.sh}/zcashd.conf:/run/qpc/zcashd.conf:ro
