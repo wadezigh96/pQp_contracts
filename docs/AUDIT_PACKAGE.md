@@ -77,13 +77,13 @@ node --test agent-router/test/*.test.mjs          # 517 local tests
 node --test agent-router/test/cross-l1-envelope.test.mjs # 60 local tests
 node --test agent-router/test/intent-store-recovery.test.mjs # 10 local tests
 npm test --prefix agent-router/pq-auth            # 26 local tests
-cargo test --manifest-path near/qpc-near-agent-finance/Cargo.toml --locked   # 32 in current final-head CI
-cargo test --manifest-path zcash/qpc-zcash-agent/Cargo.toml --locked         # 46 in current final-head CI
+cargo test --manifest-path near/qpc-near-agent-finance/Cargo.toml --locked   # 32 in CI on revision 53be9ab
+cargo test --manifest-path zcash/qpc-zcash-agent/Cargo.toml --locked         # 46 in CI on revision 53be9ab
 # Solana host + SBF + LiteSVM: see solana/qpc-native-executor/scripts/
 # Foundry: forge test --summary
 ```
 
-At final head `5a523cbf9f8d46152bdcaaf9004ebd185829ffbd`, [NEAR CI run 43546720154](https://github.com/wadezigh96/pQp_contracts/actions/runs/43546720154) reports 32/32 Rust unit tests passing and, separately, 5/5 offline-VM tests passing after a compatible WASM build. Offline VM is not NEAR Sandbox. [Zcash CI run 43546720130](https://github.com/wadezigh96/pQp_contracts/actions/runs/43546720130) reports 46/46 adapter unit tests passing; it is not Zcash regtest. [PR #1](https://github.com/wadezigh96/pQp_contracts/pull/1) lists 10/10 successful status checks on the final head. The local environment lacks Cargo/Rust and the Sandbox/Zcash node tools, so local Rust, NEAR Sandbox, and Zcash regtest were not run.
+On revision `53be9abb22eb96187e41d82cc96bb632aea966ab`, [NEAR CI run 43547602913](https://github.com/wadezigh96/pQp_contracts/actions/runs/43547602913) reports 32/32 Rust unit tests passing and, separately, 5/5 offline-VM tests passing after a compatible WASM build. Offline VM is not NEAR Sandbox. [Zcash CI run 43547602899](https://github.com/wadezigh96/pQp_contracts/actions/runs/43547602899) reports 46/46 adapter unit tests passing; it is not Zcash regtest. [PR #1](https://github.com/wadezigh96/pQp_contracts/pull/1) lists 10/10 successful status checks on that revision. The local environment lacks Cargo/Rust and the Sandbox/Zcash node tools, so local Rust, NEAR Sandbox, and Zcash regtest were not run.
 
 The starting revision had 31 NEAR unit tests, reconciled as 27 pre-owner-hardening tests plus four owner tests. This change adds one unauthorized-predecessor regression; current source and CI both report 32 tests. Exact scope limits and replay-store migration release gate are recorded in `ENGINEERING_EVIDENCE.md`.
 

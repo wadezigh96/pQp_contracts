@@ -10,13 +10,13 @@ Last updated: 2026-11-14
 | Cross-L1 envelope/replay tests | **60/60 PASS** | Fresh local focused suite; canonical authorization commitment unchanged. |
 | Replay-store recovery | **10/10 PASS** | Includes fail-closed handling of a persisted V1 replay index under V2. |
 | Optional hybrid-auth prototype | **26/26 PASS** | Fresh local run with lockfile-pinned dependencies. |
-| NEAR Rust unit tests | **32/32 PASS** | GitHub Actions on final head `5a523cbf9f8d46152bdcaaf9004ebd185829ffbd`; [run 43546720154](https://github.com/wadezigh96/pQp_contracts/actions/runs/43546720154). |
-| NEAR offline WASM VM | **5/5 PASS** | Separate mocked-host/offline-VM suite in [run 43546720154](https://github.com/wadezigh96/pQp_contracts/actions/runs/43546720154); this is not NEAR Sandbox. |
-| Zcash adapter unit tests | **46/46 PASS** | GitHub Actions [run 43546720130](https://github.com/wadezigh96/pQp_contracts/actions/runs/43546720130); not regtest. |
-| PR #1 required/status checks | **10/10 PASS** | All listed PR checks successful on final head `5a523cb`; [PR #1](https://github.com/wadezigh96/pQp_contracts/pull/1). |
+| NEAR Rust unit tests | **32/32 PASS** | GitHub Actions on revision `53be9abb22eb96187e41d82cc96bb632aea966ab`; [run 43547602913](https://github.com/wadezigh96/pQp_contracts/actions/runs/43547602913). |
+| NEAR offline WASM VM | **5/5 PASS** | Separate mocked-host/offline-VM suite in [run 43547602913](https://github.com/wadezigh96/pQp_contracts/actions/runs/43547602913); this is not NEAR Sandbox. |
+| Zcash adapter unit tests | **46/46 PASS** | GitHub Actions [run 43547602899](https://github.com/wadezigh96/pQp_contracts/actions/runs/43547602899); not regtest. |
+| PR #1 required/status checks | **10/10 PASS** | All listed PR checks successful on revision `53be9ab`; [PR #1](https://github.com/wadezigh96/pQp_contracts/pull/1). |
 | NEAR Sandbox ↔ Zcash regtest demo | **BLOCKED / NOT RUN** | Missing local runtimes and missing shielded-payment, wallet-sync, and independent receipt-verification implementation. |
 
-The historical **29 baseline / 33 expected** NEAR count was incorrect. Repository history supports 27 tests before owner hardening, then 31 after four owner tests. This branch adds one predecessor-authorization regression, for 32 source tests; the final-head CI reports all 32 passing.
+The historical **29 baseline / 33 expected** NEAR count was incorrect. Repository history supports 27 tests before owner hardening, then 31 after four owner tests. This branch adds one predecessor-authorization regression, for 32 source tests; the CI run on revision `53be9ab` reports all 32 passing.
 
 The CI run above executed a compatible WASM build/offline VM test suite. It does **not** establish a nearcore Sandbox deployment, signed transaction, live receipt graph, or Zcash payment. `cargo`, `rustc`, `rustfmt`, `near-sandbox`, `zcashd`, `zebrad`, `lightwalletd`, and Docker are absent locally. The CI Rust result is the evidence for current Rust source tests; local Rust tests were not run.
 
