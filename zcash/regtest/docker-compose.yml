@@ -24,6 +24,7 @@ services:
       - -nuparams=b4d0d6c2:1
     volumes:
       - ${QPC_REGTEST_DIR:?set by scripts/run-zcash-regtest.sh}/node:/var/lib/zcash
+      - ${QPC_REGTEST_DIR:?set by scripts/run-zcash-regtest.sh}/zcashd-home:/srv/zcashd/.zcash
       - ${QPC_REGTEST_DIR:?set by scripts/run-zcash-regtest.sh}/zcashd.conf:/run/qpc/zcashd.conf:ro
     ports:
       - "127.0.0.1:18232:18232"

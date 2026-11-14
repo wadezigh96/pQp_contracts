@@ -26,8 +26,8 @@ cleanup() {
   return "$result"
 }
 trap cleanup EXIT HUP INT TERM
-mkdir -p "$work/node" "$work/lightwalletd-data"
-chmod 700 "$work/node" "$work/lightwalletd-data"
+mkdir -p "$work/node" "$work/lightwalletd-data" "$work/zcashd-home"
+chmod 700 "$work/node" "$work/lightwalletd-data" "$work/zcashd-home"
 user=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
 password=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
 cat > "$work/zcashd.conf" <<EOF_CONF
