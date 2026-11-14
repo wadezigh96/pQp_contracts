@@ -31,6 +31,7 @@ chmod 700 "$work/node" "$work/lightwalletd-data"
 user=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
 password=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
 cat > "$work/zcashd.conf" <<EOF_CONF
+i-am-aware-zcashd-will-be-replaced-by-zebrad-and-zallet-in-2025=1
 regtest=1
 server=1
 daemon=0
