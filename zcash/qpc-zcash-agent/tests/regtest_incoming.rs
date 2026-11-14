@@ -16,10 +16,32 @@ use zcash_client_backend::{
 };
 use zcash_client_sqlite::{util::SystemClock, wallet::init::WalletMigrator, WalletDb};
 use zcash_keys::{keys::UnifiedAddressRequest, keys::UnifiedSpendingKey};
-use zcash_protocol::{consensus::BlockHeight, local_consensus::LocalNetwork, PoolType, TxId};
+use zcash_protocol::{
+    consensus::{BlockHeight, NetworkUpgrade, Parameters},
+    local_consensus::LocalNetwork,
+    PoolType, TxId,
+};
 use zip32::AccountId;
 
 const PAYMENT_ZATOSHIS: u64 = 50_000_000;
+
+#[test]
+fn pinned_zcashd_620_activation_schedule_matches_wallet_parameters() {
+    let mut upgrades = serde_json::Map::new();
+    for branch in [
+        "5ba81b19", "76b809bb", "2bb40e60", "f5b9230b", "e9ff75a6", "c2d6d0b4", "c8e71055",
+        "4dec4df0",
+    ] {
+        upgrades.insert(
+            branch.to_owned(),
+            serde_json::json!({"activationheight": 1}),
+        );
+    }
+    let info = serde_json::json!({"chain":"regtest", "blocks":0, "upgrades":upgrades});
+    qpc_zcash_agent::regtest_node::verify_node_identity(&info, &params())
+        .expect("pinned zcashd 6.20.0 activation schedule should match local wallet parameters");
+    assert_eq!(params().activation_height(NetworkUpgrade::Nu6_2), None);
+}
 
 fn params() -> LocalNetwork {
     LocalNetwork {
@@ -31,7 +53,7 @@ fn params() -> LocalNetwork {
         nu5: Some(BlockHeight::from_u32(1)),
         nu6: Some(BlockHeight::from_u32(1)),
         nu6_1: Some(BlockHeight::from_u32(1)),
-        nu6_2: Some(BlockHeight::from_u32(1)),
+        nu6_2: None,
         nu6_3: None,
     }
 }
