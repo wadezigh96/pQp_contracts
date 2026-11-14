@@ -77,6 +77,10 @@ class RpcPreflightTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "outside the configured isolated bridge"):
             PREFLIGHT.verify_docker_internal_port(self.inspect_data(address="192.168.1.3"), 18232)
 
+    def test_node_explicitly_enables_deprecated_coinbase_funding_rpc(self):
+        compose = (SCRIPT.parents[1] / "zcash" / "regtest" / "docker-compose.yml").read_text()
+        self.assertIn("-allowdeprecated=getnewaddress", compose)
+
     def test_proxy_accepts_only_qpc_internal_targets(self):
         self.assertEqual(PROXY.validate_target(18232, "172.30.8.2"), "172.30.8.2")
         with self.assertRaisesRegex(ValueError, "isolated QPC Regtest bridge"):
