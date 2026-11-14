@@ -2,7 +2,8 @@
 
 **Branch:** `reason/deliver-qpc-hardening-dr-d997d6a3`
 **Starting revision:** `b1c758117d131b4974bada543f49b378149f8127`
-**Code revision with completed CI:** `db9f7178f593a10096a8d40f61fe60d77ae583ca`
+**Hardening code revision:** `db9f7178f593a10096a8d40f61fe60d77ae583ca`
+**Final pushed head with completed CI:** `5a523cbf9f8d46152bdcaaf9004ebd185829ffbd`
 **Scope:** local implementation and PR review only. No deployment, public transaction, key rotation, real-funds operation, or external professional audit was performed.
 
 ## Implemented security corrections
@@ -29,11 +30,11 @@ The CI run on the starting revision (`b1c758117d131b4974bada543f49b378149f8127`)
 - A fresh local computation of the fixture authorization commitment matched the canonical literal above.
 - Local `cargo`, `rustc`, and `rustfmt` are absent, so local NEAR formatting and Rust tests could not be run. Current Rust/VM results below come from GitHub Actions.
 
-### Current pushed code-revision CI (`db9f7178f593a10096a8d40f61fe60d77ae583ca`)
+### Current final-head CI (`5a523cbf9f8d46152bdcaaf9004ebd185829ffbd`; implementation unchanged since `db9f717`)
 
-- [NEAR contract run 43545644121](https://github.com/wadezigh96/pQp_contracts/actions/runs/43545644121): **32 Rust unit tests passed, 0 failed**. The same workflow separately built compatible WASM and ran **5 offline-VM tests, 5 passed, 0 failed**. This is mocked-host/offline-VM execution, not NEAR Sandbox.
-- [Zcash adapter run 43545644024](https://github.com/wadezigh96/pQp_contracts/actions/runs/43545644024): **46 adapter unit tests passed, 0 failed**. This does not run Zcash regtest.
-- [PR #1](https://github.com/wadezigh96/pQp_contracts/pull/1): **11/11 status checks successful**, with 0 failing, 0 cancelled, and 0 pending on the code revision.
+- [NEAR contract run 43546720154](https://github.com/wadezigh96/pQp_contracts/actions/runs/43546720154): **32 Rust unit tests passed, 0 failed**. The same workflow separately built compatible WASM and ran **5 offline-VM tests, 5 passed, 0 failed**. This is mocked-host/offline-VM execution, not NEAR Sandbox.
+- [Zcash adapter run 43546720130](https://github.com/wadezigh96/pQp_contracts/actions/runs/43546720130): **46 adapter unit tests passed, 0 failed**. This does not run Zcash regtest.
+- [PR #1](https://github.com/wadezigh96/pQp_contracts/pull/1): **10/10 listed status checks successful** on the final head, with 0 failing and 0 pending.
 
 ### Historical CI on the starting revision only
 
