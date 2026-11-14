@@ -2,9 +2,9 @@
 
 <div align="center">
 
-**Policy-Controlled Agentic Finance Infrastructure**
+**Policy-governed agentic finance — local prototype**
 
-**Human intent → Policy → Agent execution → On-chain settlement → Audit**
+**Human intent → Guardrails → Agent execution → On-chain settlement → Audit**
 
 </div>
 
@@ -21,6 +21,10 @@ The core principle is simple:
 The contract separates **human authority** from **agent execution authority**. Policies define what an agent can do, how much it can spend, where it can send funds, which contract functions it can call, and when its authority expires.
 
 
+
+## Implementation scope
+
+The execution workflow below describes the **EVM policy contract**, not a live cross-chain payment system. NEAR now also has a narrow caller-funded same-chain native execution/refund prototype; separate exact owner-attested EVM executors support local Sepolia/BSC tests. Native RPC verification and durable settlement integration are exercised with mocked RPC fixtures, not a deployed end-to-end payment. The dashboard remains explicitly simulated. Public chain metadata remains public, and no post-quantum authentication or private agent transport is active. See the [Phase 4 threat model and production blockers](SECURITY.md).
 
 ## Core workflow
 
@@ -55,7 +59,7 @@ flowchart TB
 1. Owner configures an agent.
 2. Agent receives limited authority.
 3. Agent submits an execution request.
-4. Contract checks expiry, pause state, target, selector, recipient and spending limits.
+4. Contract checks expiry, pause state, target, selector, exact calldata hash, recipient and spending limits.
 5. Spending accounting is updated.
 6. The approved call or token transfer executes.
 7. Nonce and event data provide an on-chain execution trail.
@@ -124,7 +128,11 @@ qpc_contracts/
 │   └── QPCAgentFinance.stateful.t.sol
 │                                  # Stateful handler scenarios
 │
-├── script/                        # Deployment scripts
+├── near/
+│   └── qpc-near-agent-finance/    # NEAR Rust authorization-contract MVP
+├── agent-router/                 # Local-only unsigned preparation and lifecycle
+├── zcash/                        # Shielded wallet adapter boundary
+├── script/                       # Deployment scripts (not executed by the demo)
 ├── foundry.toml                   # Foundry compiler/test configuration
 ├── README.md                      # Architecture + usage overview
 └── ARCHITECTURE.md                # Detailed system design
@@ -157,7 +165,7 @@ Each agent/token pair can define:
 
 Calls require an explicit:
 
-**agent + target + function selector**
+**agent + target + function selector + exact calldata hash**
 
 allowlist entry.
 
@@ -244,9 +252,11 @@ Current defenses include:
 - ERC-20 spending caps
 - ERC-20 per-transaction limits
 - target/function-selector allowlisting
+- exact calldata-hash allowlisting for every agent call
+- rejection of common ERC-20 allowance-granting selectors (`approve`, `increaseAllowance`, `permit`)
 - recipient allowlisting
 - emergency pause
-- monotonic nonce
+- monotonic execution/audit nonce (not one-use intent or cross-chain replay protection)
 - reentrancy protection
 - defensive ERC-20 transfer handling
 - policy validation
@@ -300,6 +310,108 @@ This keeps integrations replaceable while the security boundary remains centrali
 
 <div align="center">
 
-**Policy first. Agent second. Settlement last.**
+**Human authority first. Agent execution second. Verified settlement last.**
 
 </div>
+
+
+## Verified engineering boundary
+
+This branch adds a strict [canonical envelope and shared JS/Rust vector](docs/CANONICAL_SPEC.md), NEAR native-identity authorization, [local native adapter boundaries](docs/NATIVE_ADAPTERS.md), and a durable single-host local intent lifecycle. See [engineering evidence and requirement traceability](docs/ENGINEERING_EVIDENCE.md) for checks and gaps. The supported demo/testnet verification boundary is unsigned preparation, simulation and read-only observation, not evidence of deployment, signing, broadcast or real payment. Narrow NEAR/EVM/Solana execution verifiers are local fixture-tested prototypes under explicit operator RPC/code-pin trust; no production audit or PQ cryptography is active. Generic evidence remains `NOT_VERIFIED`; native mock evidence is `MOCK_VALIDATED_NOT_SETTLED`; Zcash route success cannot produce settlement. Generic store confirmation/settlement still fail closed, including historical callback-created confirmations. The separate `settleNative` path requires a fresh, module-owned native RPC receipt and independently operator-pinned verifier identity; it cannot accept a boolean or deserialized confirmation. See [local execution and verification boundaries](docs/LOCAL_EXECUTION.md). A persisted state or a testnet RPC response is not proof that an authorized payment occurred.
+
+## QPC design principles and security requirements
+
+Detailed cross-network authorization fields, replay domains, settlement evidence, adapter-specific validation, and acceptance tests are defined in [QPC Cross-L1 Authorization Envelope](docs/QPC_CROSS_L1_AUTHORIZATION.md).
+
+These principles define the intended system architecture. They are **design requirements**, not claims that every capability is already implemented.
+
+### 1. Quantum Persistence: post-quantum readiness
+
+Quantum resistance is a design target. QPC must not claim post-quantum security until suitable post-quantum cryptography is implemented, interoperable with the relevant chain adapters, and tested.
+
+Required work includes:
+- define cryptographic agility and versioned identity/authorization formats;
+- evaluate standardized ML-DSA and SLH-DSA signatures and ML-KEM key establishment against the threat model (ML-KEM is not a signature);
+- design a carefully reviewed hybrid classical + post-quantum migration path where chain capabilities permit;
+- define key rotation, compromise recovery, downgrade prevention, and algorithm deprecation;
+- test cross-chain verification, serialization, resource limits, and failure handling.
+
+**Current status:** an optional [off-chain Ed25519 + ML-DSA-65 hybrid verifier](agent-router/pq-auth/README.md) now exists with local adversarial tests. It is not enabled by default, audited, or enforced by chain owners. PQ key establishment and PQ recovery are not implemented. Neither hashing nor this optional hook makes the whole system quantum-resistant.
+
+### 2. Comprehensive cybersecurity
+
+The security model must protect the complete authorization-to-settlement lifecycle, not only the smart contract call. Threat coverage must include:
+
+- stolen agent credentials, forged or unauthorized requests, and privilege escalation;
+- replay across agents, chains, contracts, assets, and policy versions;
+- parameter substitution, including recipient, amount, asset, destination, fees, calldata, and expiry;
+- reentrancy, malicious tokens/contracts, allowance abuse, integer/serialization edge cases, and policy mutation;
+- compromised or unavailable RPCs, routers, relayers, signers, light clients, and proof providers;
+- chain reorganizations, finality disagreements, duplicate delivery, timeout, partial failure, and refund/reconciliation paths;
+- key rotation/revocation, emergency pause, monitoring, and incident recovery.
+
+Each adapter must enforce its own chain-specific threat model and finality rules. Tests, fuzzing, invariant checks, static analysis, independent review, and operational controls are required; CI success alone is not an audit.
+
+### 3. Private on-chain and private agentic operation
+
+Privacy is an end-to-end requirement across:
+- **identity:** minimize public linkage between human owners, agent identities, and wallets;
+- **authorization:** disclose only the policy facts needed to authorize an action, using suitable cryptographic proofs where supported;
+- **communication:** authenticate and protect agent-to-agent messages, prevent replay, and minimize metadata leakage;
+- **settlement:** use chain-native privacy mechanisms where available and verify their receipts without silently falling back to public transfers.
+
+A hidden recipient reference, encrypted off-chain message, or hash by itself does not make public chain state private. Public chains expose varying combinations of calldata, state, events, transaction timing, and network metadata. Zcash shielded transfers have a distinct UTXO and note model; they must not be represented as EVM smart-contract calls.
+
+**Current status:** the NEAR MVP records an authorization event and is not a private NEAR execution layer. The current Zcash work is an adapter prototype and does not yet construct, sign, broadcast, or independently verify a shielded payment.
+
+### 4. Multi-L1 adapters, not a universal contract
+
+QPC is intended to support independent adapters with a shared authorization intent format and chain-specific enforcement. It must not assume that one smart contract or one finality model works on every network.
+
+| Network | Adapter model | Chain-specific security responsibilities |
+|---|---|---|
+| NEAR | NEAR Rust contract and NEAR transaction adapter | account/function-call authorization, access control, nonce, gas, receipt and finality verification |
+| Ethereum | EVM contract and transaction adapter | EVM call/value policy, chain ID, nonce, calldata, token behavior, confirmations/finality |
+| BSC | EVM-compatible adapter, separately configured | BSC chain ID, RPC/finality assumptions, token and contract policy; do not infer safety solely from EVM compatibility |
+| Solana | Solana program/client adapter | program IDs, instruction/account constraints, signer and PDA rules, recent blockhash/replay handling, commitment/finality |
+| Zcash | Shielded UTXO wallet and light-client adapter | Unified Address/network validation, shielded note handling, nullifier/replay controls, witness/consensus and shielded receipt verification |
+
+**Current status:** NEAR has authorization plus a same-chain native execution/refund prototype; EVM has its existing policy contract plus a separate owner-attested testnet executor; Solana has a native SBF program, unsigned codec and local LiteSVM execution/rollback tests, without validator or live-cluster execution evidence; Zcash has a wallet/adapter prototype. Production-grade, independently verified adapters and settlement are not yet complete for all listed networks. Ethereum, BSC, and Solana must not be presented as integrated merely because an adapter is planned.
+
+### 5. One authorization bound across networks
+
+Every cross-network action must be represented by one canonical, versioned authorization intent. At minimum, its signed or otherwise cryptographically authenticated commitment must bind:
+
+- authorization/intent ID and agent identity;
+- source chain, source account, destination chain, and destination account or privacy-preserving recipient commitment;
+- asset identifier on each chain, amount, decimals, and any conversion/fee limits;
+- exact action and permitted parameters;
+- nonce and replay domain, including chain/contract/adapter identity;
+- policy ID and policy version;
+- issue time, expiry/deadline, and cancellation/revocation state;
+- settlement condition and required evidence type;
+- transaction/receipt identifier and verified settlement evidence when settlement occurs.
+
+Adapters must validate the same intent commitment against their own chain-specific rules. A destination transaction must not be accepted if any bound field changes, if the intent is expired or revoked, or if its nonce/replay domain has already been consumed. Source and destination identifiers, amounts, and asset mappings must be explicit; no adapter may silently reinterpret them.
+
+A transaction hash supplied by an agent or relayer is not proof of settlement by itself. The receiving side must independently verify the appropriate chain receipt/finality or shielded proof before marking an intent settled. Timeout, reorg, partial completion, and refund states must be explicit and idempotent.
+
+**Current status:** the NEAR MVP now has a strict full-envelope authorization entrypoint with owner-pinned policy profile and native predecessor authentication; its authorization-only entrypoint remains separate from the new same-chain NEAR execution/refund entrypoint. The legacy limited dispatch is disabled to avoid a weaker authorization bypass. Cross-chain proof verification, atomic cross-chain settlement, and cross-chain refunds are not implemented; same-chain NEAR failed-transfer refunds are a separate local prototype. The full production one-authorization model is not active.
+
+---
+
+## Privacy and quantum-resistance status
+
+The name **Quantum Persistence Contract** describes the project's direction, not a currently achieved cryptographic guarantee.
+
+- The current EVM contract is public-chain software. Contract storage, calldata, transaction metadata, and emitted events are observable; the contract does not provide private on-chain execution by itself.
+- No post-quantum signature, key-encapsulation mechanism, hybrid classical/PQ authentication, or PQ key-rotation/recovery protocol is implemented in the contracts. The optional off-chain hybrid verifier is separate and cannot protect a compromised classical chain-owner key.
+- The current cross-chain work is a prototype boundary, not a universal L1 network. A NEAR Rust authorization-contract MVP exists, but it is not deployed or production-ready; production adapters for all L1s are not yet implemented.
+- The Zcash adapter currently provides address/policy validation, local wallet database initialization, replay protection, and a read-only lightwalletd probe. It does not yet scan shielded notes, construct/sign/broadcast payments, or independently prove shielded receipts.
+
+Do not describe QPC as quantum-resistant, private-on-chain, a live bridge, or production-ready until those capabilities are implemented and independently reviewed.
+
+
+## NEAR contract status
+
+A NEAR Rust policy-contract MVP lives in near/qpc-near-agent-finance. Its full-envelope entrypoint checks native agent identity, owner-pinned profile, router binding, policy version, replay, recipient, expiry, commitment, revocation state and spending caps before recording an authorization event. On the hardening branch, initialization is one-time and pinned to `wkams.testnet`, with a read-only owner getter; this does not control `funzest6203.testnet` account-level FullAccess or deployment authority. It does not execute a Zcash payment, call a router, or prove settlement. It has not been deployed to NEAR Testnet or independently audited. See that crate's README and the NEAR contract CI workflow.

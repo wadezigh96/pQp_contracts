@@ -1,0 +1,70 @@
+{
+  "envelope": {
+    "schema": "qpc.cross-l1.authorization",
+    "version": 1,
+    "intentId": "intent-2026-0001",
+    "agentIdentity": {
+      "namespace": "near",
+      "id": "agent.testnet",
+      "keyId": "agent.testnet"
+    },
+    "source": {
+      "networkId": "near:testnet",
+      "nativeChainId": "testnet",
+      "accountId": "agent.testnet",
+      "adapterId": "qpc.testnet"
+    },
+    "destination": {
+      "networkId": "zcash:testnet",
+      "nativeChainId": "testnet",
+      "adapterId": "router.testnet",
+      "recipientCommitment": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "action": {
+      "type": "asset-transfer",
+      "operation": "pay"
+    },
+    "asset": {
+      "sourceAssetId": "near:wrap.near",
+      "destinationAssetId": "zcash:zec",
+      "sourceDecimals": 24,
+      "destinationDecimals": 8,
+      "mappingId": "map-near-zec-v1"
+    },
+    "amount": {
+      "sourceAtomic": "1000000000000000000000000",
+      "destinationAtomic": "123456789"
+    },
+    "fees": {
+      "maxFeeAtomic": "1000",
+      "feeAssetId": "near:wrap.near",
+      "maxSlippageBps": 50
+    },
+    "nonce": "7",
+    "replayDomain": {
+      "authorityId": "qpc.testnet",
+      "scope": "agent-payment"
+    },
+    "policy": {
+      "id": "policy-1",
+      "version": 4,
+      "commitment": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "time": {
+      "issuedAtUnix": 1800000000,
+      "notBeforeUnix": 1800000000,
+      "expiresAtUnix": 1800000300
+    },
+    "settlement": {
+      "evidenceClass": "shielded-note-proof-v1",
+      "finalityPolicy": "zcash-finalized-v1",
+      "minConfirmations": 10
+    },
+    "cancellation": {
+      "authorityId": "wkams.testnet",
+      "revocationEpoch": 3
+    }
+  },
+  "canonicalJson": "{\"action\":{\"operation\":\"pay\",\"type\":\"asset-transfer\"},\"agentIdentity\":{\"id\":\"agent.testnet\",\"keyId\":\"agent.testnet\",\"namespace\":\"near\"},\"amount\":{\"destinationAtomic\":\"123456789\",\"sourceAtomic\":\"1000000000000000000000000\"},\"asset\":{\"destinationAssetId\":\"zcash:zec\",\"destinationDecimals\":8,\"mappingId\":\"map-near-zec-v1\",\"sourceAssetId\":\"near:wrap.near\",\"sourceDecimals\":24},\"cancellation\":{\"authorityId\":\"wkams.testnet\",\"revocationEpoch\":3},\"destination\":{\"adapterId\":\"router.testnet\",\"nativeChainId\":\"testnet\",\"networkId\":\"zcash:testnet\",\"recipientCommitment\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"fees\":{\"feeAssetId\":\"near:wrap.near\",\"maxFeeAtomic\":\"1000\",\"maxSlippageBps\":50},\"intentId\":\"intent-2026-0001\",\"nonce\":\"7\",\"policy\":{\"commitment\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"id\":\"policy-1\",\"version\":4},\"replayDomain\":{\"authorityId\":\"qpc.testnet\",\"scope\":\"agent-payment\"},\"schema\":\"qpc.cross-l1.authorization\",\"settlement\":{\"evidenceClass\":\"shielded-note-proof-v1\",\"finalityPolicy\":\"zcash-finalized-v1\",\"minConfirmations\":10},\"source\":{\"accountId\":\"agent.testnet\",\"adapterId\":\"qpc.testnet\",\"nativeChainId\":\"testnet\",\"networkId\":\"near:testnet\"},\"time\":{\"expiresAtUnix\":1800000300,\"issuedAtUnix\":1800000000,\"notBeforeUnix\":1800000000},\"version\":1}",
+  "authorizationCommitment": "c72c9a07dfd9ce8aecbd21c9c6bf858e5f089072a9ec84bafb03aadada653333"
+}

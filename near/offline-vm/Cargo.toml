@@ -1,0 +1,18 @@
+[package]
+name = "qpc-near-offline-vm"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dev-dependencies]
+near-vm-runner = { version = "=0.31.1", features = ["wasmtime_vm"] }
+near-parameters = "=0.31.1"
+near-primitives-core = "=0.31.1"
+serde_json = "1"
+sha2 = "0.10"
+
+[profile.dev]
+debug = 0
+
+[profile.test]
+debug = 0

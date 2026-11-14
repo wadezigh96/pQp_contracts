@@ -1,0 +1,8 @@
+{
+  "name": "qpc-hybrid-auth-prototype",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test test/*.test.mjs" },
+  "engines": { "node": ">=20.19.0" },
+  "dependencies": { "@noble/post-quantum": "0.7.1" }
+}

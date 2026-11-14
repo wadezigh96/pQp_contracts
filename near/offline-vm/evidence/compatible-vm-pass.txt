@@ -1,0 +1,59 @@
+   Compiling qpc-near-offline-vm v0.1.0 (/home/runner/.reason/workspace/sessions/ac964da9-e70d-4a02-ad6e-670435ce1d0a/repo/near/offline-vm)
+    Finished `test` profile [unoptimized] target(s) in 1.68s
+warning: the following packages contain code that will be rejected by a future version of Rust: wasmparser v0.78.2
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (near/offline-vm/target/debug/build/qpc-near-offline-vm/4a1b61b8f9beb33a/out/qpc_near_offline_vm-4a1b61b8f9beb33a)
+
+running 4 tests
+Executing WASM sha256=47ecae1fa285d4c6a0966a65d06d8874c357992f467755436e6fbb29c8cc0867, protocol=79
+Executing WASM sha256=47ecae1fa285d4c6a0966a65d06d8874c357992f467755436e6fbb29c8cc0867, protocol=79
+new: burnt_gas=477078058168 used_gas=477078058168
+configure_agent: burnt_gas=671433752628 used_gas=671433752628
+configure_envelope_profile: burnt_gas=2154767594745 used_gas=2154767594745
+set_recipient_permission: burnt_gas=541196211814 used_gas=541196211814
+execute_near_envelope: burnt_gas=5885863552655 used_gas=16997438769321
+get_execution_result: burnt_gas=494645320828 used_gas=494645320828
+on_near_transfer_result: burnt_gas=1032432164323 used_gas=1032432164323
+get_execution_result: burnt_gas=495682139341 used_gas=495682139341
+test tests::wasm_execution_success_private_callback_and_replay_boundary ... ok
+Executing WASM sha256=47ecae1fa285d4c6a0966a65d06d8874c357992f467755436e6fbb29c8cc0867, protocol=79
+new: burnt_gas=477078058168 used_gas=477078058168
+configure_agent: burnt_gas=671433752628 used_gas=671433752628
+configure_envelope_profile: burnt_gas=2154767594745 used_gas=2154767594745
+set_recipient_permission: burnt_gas=541196211814 used_gas=541196211814
+authorize_envelope: burnt_gas=4275222290524 used_gas=4275222290524
+get_authorization_receipt: burnt_gas=506905499723 used_gas=506905499723
+get_execution_result: burnt_gas=425665486947 used_gas=425665486947
+test tests::wasm_authorization_is_durable_but_cannot_execute_or_settle ... ok
+Executing WASM sha256=47ecae1fa285d4c6a0966a65d06d8874c357992f467755436e6fbb29c8cc0867, protocol=79
+new: burnt_gas=477078058168 used_gas=477078058168
+configure_agent: burnt_gas=671433752628 used_gas=671433752628
+configure_envelope_profile: burnt_gas=2154767594745 used_gas=2154767594745
+set_recipient_permission: burnt_gas=541196211814 used_gas=541196211814
+execute_near_envelope: burnt_gas=5885863552655 used_gas=16997438769321
+on_near_transfer_result: burnt_gas=1021463448208 used_gas=1021463448208
+get_execution_result: burnt_gas=494970096572 used_gas=494970096572
+claim_failed_near_refund: burnt_gas=1432927616047 used_gas=12544540843591
+on_near_refund_result: burnt_gas=1021786828825 used_gas=1021786828825
+get_execution_result: burnt_gas=494973387596 used_gas=494973387596
+claim_failed_near_refund: burnt_gas=1432979449675 used_gas=12544592677219
+on_near_refund_result: burnt_gas=1030236275860 used_gas=1030236275860
+get_execution_result: burnt_gas=494857797885 used_gas=494857797885
+new: burnt_gas=477078058168 used_gas=477078058168
+configure_agent: burnt_gas=671433752628 used_gas=671433752628
+test tests::wasm_failed_transfer_refund_failure_retry_and_exactly_once_success ... ok
+configure_envelope_profile: burnt_gas=2154767594745 used_gas=2154767594745
+set_recipient_permission: burnt_gas=541196211814 used_gas=541196211814
+get_execution_result: burnt_gas=425665486947 used_gas=425665486947
+revoke_agent: burnt_gas=734815172472 used_gas=734815172472
+get_authorization_receipt: burnt_gas=425661373167 used_gas=425661373167
+get_execution_result: burnt_gas=425665486947 used_gas=425665486947
+test tests::wasm_gas_expiry_and_revocation_fail_without_state_consumption ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.18s
+
+   Doc-tests qpc_near_offline_vm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

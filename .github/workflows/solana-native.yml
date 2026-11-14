@@ -1,0 +1,50 @@
+name: Solana native executor local checks
+
+on:
+  push:
+    branches: ["qpc/**"]
+    paths:
+      - "solana/qpc-native-executor/**"
+      - "agent-router/src/solana-exact-execution.mjs"
+      - "agent-router/test/solana-exact-execution.test.mjs"
+      - ".github/workflows/solana-native.yml"
+  pull_request:
+    paths:
+      - "solana/qpc-native-executor/**"
+      - "agent-router/src/solana-exact-execution.mjs"
+      - "agent-router/test/solana-exact-execution.test.mjs"
+      - ".github/workflows/solana-native.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  host-processor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: solana/qpc-native-executor
+      - name: Format
+        run: cargo fmt --manifest-path solana/qpc-native-executor/Cargo.toml -- --check
+      - name: Host processor tests (not SBF or validator integration)
+        run: cargo test --manifest-path solana/qpc-native-executor/Cargo.toml --locked
+      - name: Clippy
+        run: cargo clippy --manifest-path solana/qpc-native-executor/Cargo.toml --locked --all-targets -- -D warnings
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: JavaScript wire and unsigned preparation tests
+        run: node --test agent-router/test/solana-exact-execution.test.mjs
+      - name: Install checksum-pinned official SBF compiler
+        run: bash solana/qpc-native-executor/scripts/install-sbf-tools.sh
+      - name: Build SBF without generating a deploy keypair
+        run: bash solana/qpc-native-executor/scripts/build-sbf.sh
+      - name: Format unsigned runtime suite
+        run: cargo fmt --manifest-path solana/qpc-native-executor/runtime-tests/Cargo.toml -- --check
+      - name: Execute SBF CPI and rollback in unsigned LiteSVM simulations
+        run: bash solana/qpc-native-executor/scripts/test-runtime.sh

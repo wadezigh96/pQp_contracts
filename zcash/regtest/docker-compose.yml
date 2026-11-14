@@ -1,0 +1,45 @@
+services:
+  zcashd:
+    user: "${QPC_CONTAINER_UID:?set by script}"
+    image: electriccoinco/zcashd:v6.20.0
+    entrypoint: ["zcashd"]
+    command:
+      - -regtest
+      - -conf=/run/qpc/zcashd.conf
+      - -datadir=/var/lib/zcash
+      - -daemon=0
+      - -printtoconsole=1
+    volumes:
+      - ${QPC_REGTEST_DIR:?set by scripts/run-zcash-regtest.sh}/node:/var/lib/zcash
+      - ${QPC_REGTEST_DIR:?set by scripts/run-zcash-regtest.sh}/zcashd.conf:/run/qpc/zcashd.conf:ro
+    expose: ["18232"]
+    networks: [qpc-regtest]
+    healthcheck:
+      test: ["CMD-SHELL", "zcash-cli -regtest -conf=/run/qpc/zcashd.conf -datadir=/var/lib/zcash getblockchaininfo >/dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+      start_period: 5s
+    restart: "no"
+
+  lightwalletd:
+    user: "${QPC_CONTAINER_UID:?set by script}"
+    image: electriccoinco/lightwalletd:v0.4.2
+    command: ["--config", "/run/qpc/lightwalletd.yml"]
+    volumes:
+      - ${QPC_REGTEST_DIR:?set by scripts/run-zcash-regtest.sh}/lightwalletd.yml:/run/qpc/lightwalletd.yml:ro
+      - ${QPC_REGTEST_DIR:?set by scripts/run-zcash-regtest.sh}/lightwalletd-data:/var/lib/lightwalletd
+    depends_on:
+      zcashd:
+        condition: service_healthy
+    expose: ["9067"]
+    networks: [qpc-regtest]
+    restart: "no"
+
+networks:
+  qpc-regtest:
+    name: qpc-regtest-${QPC_REGTEST_PROJECT:?set by script}
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.8.0/24

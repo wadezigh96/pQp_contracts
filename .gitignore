@@ -1,0 +1,4 @@
+# Local compiler/build artifacts
+/out/
+/cache/
+**/target/
