@@ -44,6 +44,8 @@ connect=0
 dnsseed=0
 discover=0
 txindex=1
+# zcashd v6.20.0 disables this legacy RPC by default; allow it only in disposable Regtest.
+allowdeprecated=z_getnewaddress
 nuparams=5ba81b19:1
 nuparams=76b809bb:1
 nuparams=2bb40e60:1
