@@ -1,6 +1,6 @@
 # QPC Audit Package
 
-**Status:** Prepared for independent review. **Not** an external professional audit.  
+**Status:** Prepared for independent review. **Not** an external professional audit.
 No production readiness, quantum-resistance, or live-payment claims are made.
 
 ## 1. System architecture and trust boundaries
@@ -70,18 +70,22 @@ Key attack trees (see `SECURITY.md` for full model):
 
 Lockfiles are present. No full vulnerability scan is claimed here.
 
-## 6. Reproducible test commands (current branch)
+## 6. Reproducible test commands and current CI evidence
 
 ```bash
-node --test agent-router/test/*.test.mjs          # 517
-npm test --prefix agent-router/pq-auth            # 26
-cargo test --manifest-path near/qpc-near-agent-finance/Cargo.toml --locked   # current source: 32 test declarations; run result is revision-specific
-cargo test --manifest-path zcash/qpc-zcash-agent/Cargo.toml --locked         # 46
+node --test agent-router/test/*.test.mjs          # 517 local tests
+node --test agent-router/test/cross-l1-envelope.test.mjs # 60 local tests
+node --test agent-router/test/intent-store-recovery.test.mjs # 10 local tests
+npm test --prefix agent-router/pq-auth            # 26 local tests
+cargo test --manifest-path near/qpc-near-agent-finance/Cargo.toml --locked   # 32 in current code-revision CI
+cargo test --manifest-path zcash/qpc-zcash-agent/Cargo.toml --locked         # 46 in current code-revision CI
 # Solana host + SBF + LiteSVM: see solana/qpc-native-executor/scripts/
 # Foundry: forge test --summary
 ```
 
-The starting revision's CI ran 31 NEAR unit tests and 5 separate offline-VM tests. History reconciles 27 pre-owner-hardening tests plus four owner tests to 31; this change adds one unauthorized-predecessor test, so the current source declares 32. The current-revision Rust result must be read from its CI run. Cargo and the NEAR Sandbox toolchain are unavailable in the local execution environment; offline VM is not Sandbox. Exact counts and network-test boundaries are recorded in `ENGINEERING_EVIDENCE.md`.
+At code revision `db9f7178f593a10096a8d40f61fe60d77ae583ca`, [NEAR CI run 43545644121](https://github.com/wadezigh96/pQp_contracts/actions/runs/43545644121) reports 32/32 Rust unit tests passing and, separately, 5/5 offline-VM tests passing after a compatible WASM build. Offline VM is not NEAR Sandbox. [Zcash CI run 43545644024](https://github.com/wadezigh96/pQp_contracts/actions/runs/43545644024) reports 46/46 adapter unit tests passing; it is not Zcash regtest. [PR #1](https://github.com/wadezigh96/pQp_contracts/pull/1) reported 11/11 status checks successful at that code revision. The local environment lacks Cargo/Rust and the Sandbox/Zcash node tools, so local Rust, NEAR Sandbox, and Zcash regtest were not run.
+
+The starting revision had 31 NEAR unit tests, reconciled as 27 pre-owner-hardening tests plus four owner tests. This change adds one unauthorized-predecessor regression; current source and CI both report 32 tests. Exact scope limits and replay-store migration release gate are recorded in `ENGINEERING_EVIDENCE.md`.
 
 ## 7. Known limitations and unresolved risks
 

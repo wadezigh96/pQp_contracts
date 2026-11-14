@@ -2,31 +2,35 @@
 
 Last updated: 2026-11-14
 
-## Current working-tree verification
+## Verification evidence
 
 | Area | Result | Scope |
 |---|---:|---|
-| JavaScript agent-router | **517/517 PASS** | Fresh local run on the modified source; unit tests only. |
-| Cross-L1 envelope/replay tests | **60/60 PASS** | Fresh local focused run; canonical fixture remains unchanged. |
-| Optional hybrid-auth prototype | **26/26 PASS** | Fresh local run after installing lockfile-pinned npm dependencies. |
-| NEAR Rust tests | **32 test declarations; execution pending current-revision CI** | Starting-revision CI ran 31. This branch adds one predecessor-authorization regression. Cargo/rustc are absent locally. |
-| NEAR offline VM | **5/5 PASS on starting revision only** | Current-revision workflow must be checked after push. Offline VM is not Sandbox. |
-| Zcash adapter | **46/46 PASS on starting revision only** | CI unit tests; no Zcash regtest or transaction. Local Cargo unavailable. |
-| NEAR Sandbox ↔ Zcash regtest demo | **BLOCKED / NOT RUN** | Missing node/toolchain and missing shielded transaction/sync/receipt-verification implementation. |
+| JavaScript agent-router | **517/517 PASS** | Fresh local complete unit-test run. |
+| Cross-L1 envelope/replay tests | **60/60 PASS** | Fresh local focused suite; canonical authorization commitment unchanged. |
+| Replay-store recovery | **10/10 PASS** | Includes fail-closed handling of a persisted V1 replay index under V2. |
+| Optional hybrid-auth prototype | **26/26 PASS** | Fresh local run with lockfile-pinned dependencies. |
+| NEAR Rust unit tests | **32/32 PASS** | GitHub Actions on code revision `db9f7178f593a10096a8d40f61fe60d77ae583ca`; [run 43545644121](https://github.com/wadezigh96/pQp_contracts/actions/runs/43545644121). |
+| NEAR offline WASM VM | **5/5 PASS** | Separate mocked-host/offline-VM suite in [run 43545644121](https://github.com/wadezigh96/pQp_contracts/actions/runs/43545644121); this is not NEAR Sandbox. |
+| Zcash adapter unit tests | **46/46 PASS** | GitHub Actions [run 43545644024](https://github.com/wadezigh96/pQp_contracts/actions/runs/43545644024); not regtest. |
+| PR #1 required/status checks | **11/11 PASS** | All checks successful on code revision `db9f717`; [PR #1](https://github.com/wadezigh96/pQp_contracts/pull/1). |
+| NEAR Sandbox ↔ Zcash regtest demo | **BLOCKED / NOT RUN** | Missing local runtimes and missing shielded-payment, wallet-sync, and independent receipt-verification implementation. |
 
-The historical **29 baseline / 33 expected** NEAR count was incorrect. Source history supports 27 tests before the owner-hardening tests, then 31 after four were added. The current source has 32 test declarations after this change adds one unauthorized-predecessor regression test. Only actual CI output for this revision can establish how many pass.
+The historical **29 baseline / 33 expected** NEAR count was incorrect. Repository history supports 27 tests before owner hardening, then 31 after four owner tests. This branch adds one predecessor-authorization regression, for 32 source tests; the current code revision's CI reports all 32 passing.
+
+The CI run above executed a compatible WASM build/offline VM test suite. It does **not** establish a nearcore Sandbox deployment, signed transaction, live receipt graph, or Zcash payment. `cargo`, `rustc`, `rustfmt`, `near-sandbox`, `zcashd`, `zebrad`, `lightwalletd`, and Docker are absent locally. The CI Rust result is the evidence for current Rust source tests; local Rust tests were not run.
 
 ## Workstream status
 
 | Workstream | Status | Notes |
 |---|---|---|
-| NEAR owner initialization | IMPLEMENTED; current-revision CI pending | Requires empty state, caller equal to supplied owner, and exact owner `wkams.testnet`; test forbids attacker initialization with the correct owner argument. |
+| NEAR owner initialization | IMPLEMENTED; 32/32 Rust tests pass in current code-revision CI | Requires empty state, predecessor equal to supplied owner, and exact owner `wkams.testnet`; regression rejects an attacker even when the attacker supplies the intended owner argument. |
 | NEAR state migration | NOT IMPLEMENTED; fails closed | Unsupported layout headers reject. There is no contract `migrate` method or migration test suite, and no authentic historical deployed-state fixture. |
-| Cross-L1 replay domain | IMPLEMENTED; JS tests pass | V2 key binds source adapter identity; a V1 persisted index is rejected fail-closed. No persistent-store migration is implemented. Authorization commitment remains the required literal. |
-| Zcash shielded payments | NOT IMPLEMENTED | Address parsing, receiver policy, replay guard, local wallet DB and selected read-only probes exist; no transaction construction/signing/broadcast, scanning/sync, or receipt proof. |
+| Cross-L1 replay domain | IMPLEMENTED; JS tests pass | V2 key binds source adapter identity. A V1 persisted index is rejected fail-closed; no persistent-store migration is implemented. This is a release gate before upgrading an existing store. |
+| Zcash shielded payments | NOT IMPLEMENTED | Address parsing, receiver policy, replay guard, local wallet DB, and selected read-only probes exist; transaction construction/signing/broadcast, wallet sync, and independent receipt verification do not. |
 | Post-quantum protocol | PROTOTYPE / NOT END-TO-END | Optional off-chain Ed25519 + ML-DSA-65 hybrid verifier exists. ML-KEM, full protocol/key lifecycle, and on-chain enforcement are not implemented. |
-| NEAR Sandbox | BLOCKED / NOT RUN | No local Rust toolchain or near-sandbox; CI offline VM is a separate mocked-host check. |
+| NEAR Sandbox | BLOCKED / NOT RUN | No local Rust toolchain or `near-sandbox`; CI offline VM is a separate mocked-host check. |
 | Zcash regtest | BLOCKED / NOT RUN | No local Zcash node/lightwalletd/Docker and no implemented outbound/receive flow. |
 | Intended deployment account | NOT DEPLOYED | `funzest6203.testnet` remains only the intended target. No public account, key, deployment, or transaction was modified. |
 
-No production readiness, live payments, public cross-chain settlement, active post-quantum security, or external-audit claims are made.
+No production readiness, live payments, public cross-chain settlement, active post-quantum security, or external-audit claims are made. No Mainnet or public Testnet deployment or transaction was attempted.
