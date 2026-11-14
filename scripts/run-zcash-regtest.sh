@@ -48,7 +48,6 @@ nuparams=e9ff75a6:1
 nuparams=c2d6d0b4:1
 nuparams=c8e71055:1
 nuparams=4dec4df0:1
-nuparams=b4d0d6c2:1
 rpcuser=$user
 rpcpassword=$password
 rpcbind=0.0.0.0
