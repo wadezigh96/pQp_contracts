@@ -32,6 +32,16 @@ def credentials(path):
     return values["rpcuser"], values["rpcpassword"]
 
 
+def verify_docker_mapping(raw):
+    try:
+        ports = json.loads(raw)
+    except json.JSONDecodeError:
+        raise RuntimeError("Docker returned malformed port mapping data") from None
+    expected = [{"HostIp": "127.0.0.1", "HostPort": "18232"}]
+    if not isinstance(ports, dict) or ports.get("18232/tcp") != expected:
+        raise RuntimeError("full-node RPC Docker mapping is not exactly host-loopback TCP 18232")
+
+
 def check(path, timeout=45, report=True):
     user, password = credentials(path)
     token = base64.b64encode(f"{user}:{password}".encode()).decode()
@@ -76,7 +86,12 @@ def check(path, timeout=45, report=True):
 
 if __name__ == "__main__":
     try:
-        check(os.environ["QPC_ZCASH_CONF"])
+        if len(sys.argv) == 3 and sys.argv[1] == "--verify-docker-mapping":
+            verify_docker_mapping(sys.argv[2])
+        elif len(sys.argv) == 1:
+            check(os.environ["QPC_ZCASH_CONF"])
+        else:
+            raise RuntimeError("invalid RPC preflight invocation")
     except Exception as error:
         print(str(error), file=sys.stderr)
         sys.exit(1)

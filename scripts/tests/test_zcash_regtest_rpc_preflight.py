@@ -55,6 +55,13 @@ class RpcPreflightTests(unittest.TestCase):
         self.server.server_close()
         self.tmp.cleanup()
 
+    def test_accepts_exact_loopback_docker_mapping(self):
+        PREFLIGHT.verify_docker_mapping(json.dumps({"18232/tcp": [{"HostIp": "127.0.0.1", "HostPort": "18232"}]}))
+
+    def test_rejects_non_loopback_docker_mapping(self):
+        with self.assertRaisesRegex(RuntimeError, "not exactly host-loopback"):
+            PREFLIGHT.verify_docker_mapping(json.dumps({"18232/tcp": [{"HostIp": "0.0.0.0", "HostPort": "18232"}]}))
+
     def test_accepts_authenticated_regtest_rpc(self):
         PREFLIGHT.check(self.config, timeout=1, report=False)
 
