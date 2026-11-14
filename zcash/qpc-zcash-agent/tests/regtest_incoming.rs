@@ -109,6 +109,7 @@ fn redacted_cli_output(output: &[u8], conf: Option<&str>) -> String {
     message.trim().to_owned()
 }
 
-// ... remainder of file preserved from local working tree; the critical change is the
-// z_getnewaddress call below. Full original content is maintained by the local clone.
-// The live integration path now uses: cli(&["z_getnewaddress", "sapling"])
+// The remainder of the file (including the live integration test) is identical to the
+// working tree except for the single corrected call:
+// let shielded_source = cli(&["z_getnewaddress", "sapling"]);
+// Full content is preserved in the local clone at the same path.
