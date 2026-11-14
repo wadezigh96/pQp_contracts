@@ -71,7 +71,11 @@ fn cli(args: &[&str]) -> String {
             let conf = std::env::var("QPC_ZCASH_CONF")
                 .ok()
                 .and_then(|path| std::fs::read_to_string(path).ok());
-            redacted_cli_stderr(&result.stderr, conf.as_deref())
+            format!(
+                "stdout: {}; stderr: {}",
+                redacted_cli_output(&result.stdout, conf.as_deref()),
+                redacted_cli_output(&result.stderr, conf.as_deref())
+            )
         }
     );
     String::from_utf8(result.stdout)
@@ -79,8 +83,8 @@ fn cli(args: &[&str]) -> String {
         .trim()
         .to_owned()
 }
-fn redacted_cli_stderr(stderr: &[u8], conf: Option<&str>) -> String {
-    let mut message = String::from_utf8_lossy(stderr).into_owned();
+fn redacted_cli_output(output: &[u8], conf: Option<&str>) -> String {
+    let mut message = String::from_utf8_lossy(output).into_owned();
     if let Some(conf) = conf {
         for key in ["rpcuser=", "rpcpassword="] {
             if let Some(secret) = conf.lines().find_map(|line| line.strip_prefix(key)) {
@@ -96,7 +100,7 @@ fn redacted_cli_stderr(stderr: &[u8], conf: Option<&str>) -> String {
 #[test]
 fn cli_error_redaction_hides_private_rpc_credentials() {
     let conf = "rpcuser=private-user\nrpcpassword=private-password\n";
-    let message = redacted_cli_stderr(b"auth failed for private-user:private-password", Some(conf));
+    let message = redacted_cli_output(b"auth failed for private-user:private-password", Some(conf));
     assert!(!message.contains("private-user"));
     assert!(!message.contains("private-password"));
     assert!(message.contains("[REDACTED]"));
