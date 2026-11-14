@@ -82,7 +82,11 @@ def check(path, timeout=45, report=True):
             if result.get("chain") != "regtest" or not isinstance(result.get("blocks"), int):
                 raise RuntimeError("RPC identity failure: endpoint did not report Regtest")
             if report:
-                print(f"Authenticated full-node RPC reachable at {ENDPOINT}; chain=regtest, height={result['blocks']}")
+                upgrades = result.get("upgrades", {})
+                summary = {}
+                if isinstance(upgrades, dict):
+                    summary = {key: value.get("activationheight") for key, value in upgrades.items() if isinstance(value, dict)}
+                print(f"Authenticated full-node RPC reachable at {ENDPOINT}; chain=regtest, height={result['blocks']}; upgrades={summary}")
             return
         except urllib.error.HTTPError as error:
             if error.code in (401, 403):
