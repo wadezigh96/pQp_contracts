@@ -109,6 +109,7 @@ pub struct ExecutionResult {
 // evidence of compatibility. There is deliberately no automatic migration.
 const STATE_MAGIC: [u8; 16] = *b"QPCNEAR\0LAYOUT\0\0";
 const STATE_LAYOUT_VERSION: u32 = 1;
+const INTENDED_OWNER: &str = "wkams.testnet";
 
 struct StateLayout;
 
@@ -158,6 +159,7 @@ impl QPCNear {
     #[init]
     pub fn new(owner: AccountId) -> Self {
         assert!(!env::state_exists(), "already initialized");
+        assert_eq!(owner.as_str(), INTENDED_OWNER, "unexpected owner");
         Self {
             layout: StateLayout,
             owner,
@@ -174,6 +176,12 @@ impl QPCNear {
     /// fails in the generated ABI wrapper before this method is entered.
     pub fn get_state_layout_version(&self) -> u32 {
         STATE_LAYOUT_VERSION
+    }
+
+    /// Read-only verification of contract-storage ownership. This does not
+    /// grant or revoke NEAR account keys and cannot control deployment rights.
+    pub fn get_owner(&self) -> AccountId {
+        self.owner.clone()
     }
 
     pub fn configure_agent(

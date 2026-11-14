@@ -19,6 +19,7 @@ Revocation disables the policy and deletes its profile. Reconfiguration incremen
 
 ## Breaking compatibility and limitations
 
+- **Owner initialization is testnet-pinned for this hardening branch.** `new` is one-time, rejects any existing state, rejects owner substitution, and accepts only `wkams.testnet`. `get_owner()` is a read-only verification method. Contract-storage ownership is enforced by `env::predecessor_account_id()` for administrative methods; the initializer does not control the NEAR account's access keys.
 - **`dispatch_action` is globally disabled**, retained only as an ABI tombstone that always rejects. The old narrow payment-argument hash is not an alternative authorization route. Its old hash fixture remains only as a compatibility test.
 - **State is explicitly versioned and incompatible state fails closed.** Every serialized root starts with the 16-byte `QPCNEAR\0LAYOUT\0\0` magic and little-endian `u32` layout version `1`. Borsh validates this header before loading any root collection handle, including in generated ABI wrappers. `get_state_layout_version()` returns `1` only after a supported state root is decoded. Missing/corrupt headers, unsupported versions and truncated roots reject; `new` cannot replace any existing `STATE`. There is no reset, upgrade or migration entrypoint.
 - This guarded layout is **not compatible with prior unversioned deployments**, including the structurally identical unversioned root at `b7eddc19aaa65b0e63eb93b701f7aa3c8544c087`. No legacy migration is claimed: `LookupMap` stores key/value encodings outside the root, and the earlier global-intent namespace cannot be safely inferred from root decoding alone. Do not deploy this code over legacy state: normal reads, execution and pending recovery callbacks would reject, not migrate. A separately reviewed migration must identify the actual deployed layout/code and preserve every replay reservation, policy, receipt, in-flight execution and refund before such an upgrade. No deployment or migration is performed here. Future incompatible root **or collection encoding** changes must bump the layout version.
@@ -27,6 +28,12 @@ Revocation disables the policy and deletes its profile. Reconfiguration incremen
 - An `AUTHORIZED` receipt is only a policy authorization commitment. It is not an execution, source finality, destination receipt, settlement, bridge or cross-chain atomicity claim.
 - Native NEAR account authentication remains classical. No post-quantum signature, hybrid authentication, ZK proof, cross-chain escrow/refund or external destination verifier is implemented. Same-chain failed-transfer refund recovery is separate and does not release consumed replay state.
 - Unit tests use the NEAR SDK host mock. WASM compilation is checked, but no sandbox deployment, RPC integration, gas/storage economics audit or mainnet activation is claimed.
+
+## Owner and upgrade authority procedure
+
+`get_owner()` reports the contract-storage owner only. It does not report or control the NEAR account's FullAccess keys, function-call keys, deployment permission, or account recovery. A FullAccess key on `funzest6203.testnet` can deploy replacement code at the account layer if the account protocol permits that action; the contract cannot revoke or constrain that key from inside WASM. No agent, router, or contract method should receive that key.
+
+Before any future upgrade, require two independent operators to review the exact WASM hash, state-layout version, migration plan, owner account, and deployment account. Operator A prepares and records the artifact; Operator B independently recomputes the hash and approves the same artifact and transaction parameters. Deployment is then performed only with a separately managed deployment authority, followed by read-only verification of `get_owner()`, `get_state_layout_version()`, and critical policy state. This repository does not implement an in-contract upgrade method or ownership transfer because neither can safely govern account-level deployment authority.
 
 ## Checks
 

@@ -36,11 +36,13 @@ Key attack trees (see `SECURITY.md` for full model):
 
 | Invariant | Enforced by | Test evidence |
 |-----------|-------------|---------------|
+| Contract initializes only once with intended owner `wkams.testnet` | `env::state_exists()` plus owner pin in `new` | `initialized_owner_is_exactly_the_intended_testnet_account`, `initializer_rejects_owner_substitution_before_state_creation`, `initializer_is_one_time_even_when_reinitialized_with_intended_owner` |
 | Agent never becomes owner | Contract access control | Foundry + NEAR unit tests |
 | Exact calldata hash required for EVM calls | `QPCAgentFinance` | Foundry security tests |
 | NEAR predecessor (not claimed identity) authenticates | `authorize_envelope` | NEAR unit tests |
 | Unversioned / wrong-version NEAR state rejected | `StateLayout` magic + version | `incompatible_unversioned_state_is_rejected...`, `versioned_state_roundtrips...` |
 | Migration is owner-only and idempotent for current version | `migrate` | `migrate_is_idempotent...`, `migrate_cannot_be_reached_on_incompatible_state` |
+| Administrative calls cannot be made by agent/attacker | `assert_owner` on configuration methods | `non_owner_cannot_administer_even_when_claiming_owner_in_request_metadata`, `owner_only_configuration_and_recipient_changes` |
 | Generic evidence cannot settle | `FileIntentStore` + verifiers | JS settlement-boundary tests |
 | Zcash route cannot produce settlement | `verifyNearToZcashRoute` returns `NOT_IMPLEMENTED` | `zcash-route.test.mjs` |
 | Hybrid auth requires both Ed25519 and ML-DSA-65 | `agent-router/pq-auth` | 26 hybrid tests |
@@ -72,13 +74,13 @@ Lockfiles are present. No full vulnerability scan is claimed here.
 ```bash
 node --test agent-router/test/*.test.mjs          # 516
 npm test --prefix agent-router/pq-auth            # 26
-cargo test --manifest-path near/qpc-near-agent-finance/Cargo.toml --locked   # 29 (after migration tests)
+cargo test --manifest-path near/qpc-near-agent-finance/Cargo.toml --locked   # 33 expected after owner hardening; execution currently blocked
 cargo test --manifest-path zcash/qpc-zcash-agent/Cargo.toml --locked         # 46
 # Solana host + SBF + LiteSVM: see solana/qpc-native-executor/scripts/
 # Foundry: forge test --summary
 ```
 
-Exact counts and historical checkpoints are recorded in `ENGINEERING_EVIDENCE.md`.
+Exact counts and historical checkpoints are recorded in `ENGINEERING_EVIDENCE.md`. The owner-hardening branch is currently blocked from executing Rust/Sandbox checks when the required toolchain is unavailable.
 
 ## 7. Known limitations and unresolved risks
 
@@ -87,6 +89,7 @@ Exact counts and historical checkpoints are recorded in `ENGINEERING_EVIDENCE.md
 - ML-KEM key establishment and full hybrid protocol with rotation/recovery are not implemented. Off-chain ML-DSA hybrid is a prototype only.
 - Solana evidence is host + SBF + unsigned LiteSVM, not local validator or live cluster.
 - No external professional audit has been performed.
+- Account-level FullAccess/deployment authority remains outside WASM control; no contract method can revoke it.
 - Filesystem intent store is single-host and not rollback-resistant against a malicious local writer.
 - No production custody, key recovery, or operational monitoring is in place.
 

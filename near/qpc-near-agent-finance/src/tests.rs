@@ -16,8 +16,8 @@ fn fixture() -> Value {
     near_sdk::serde_json::from_str(include_str!("../../../docs/fixtures/cross-l1-v1.json")).unwrap()
 }
 fn setup() -> (QPCNear, Value) {
-    context("owner.testnet", NOW);
-    let mut contract = QPCNear::new(account("owner.testnet"));
+    context("wkams.testnet", NOW);
+    let mut contract = QPCNear::new(account("wkams.testnet"));
     contract.configure_agent(
         account("agent.testnet"),
         "policy-1".into(),
@@ -35,6 +35,53 @@ fn setup() -> (QPCNear, Value) {
     context("agent.testnet", NOW);
     (contract, envelope)
 }
+
+#[test]
+fn initialized_owner_is_exactly_the_intended_testnet_account() {
+    let (contract, _) = setup();
+    assert_eq!(contract.get_owner(), account("wkams.testnet"));
+    assert_eq!(contract.get_state_layout_version(), 1);
+}
+
+#[test]
+fn initializer_rejects_owner_substitution_before_state_creation() {
+    context("attacker.testnet", NOW);
+    rejects(|| {
+        QPCNear::new(account("attacker.testnet"));
+    });
+    assert!(env::storage_read(b"STATE").is_none());
+}
+
+#[test]
+fn initializer_is_one_time_even_when_reinitialized_with_intended_owner() {
+    let (contract, _) = setup();
+    let bytes = borsh::to_vec(&contract).unwrap();
+    env::storage_write(b"STATE", &bytes);
+    rejects(|| {
+        QPCNear::new(account("wkams.testnet"));
+    });
+    assert_eq!(env::storage_read(b"STATE").unwrap(), bytes);
+}
+
+#[test]
+fn non_owner_cannot_administer_even_when_claiming_owner_in_request_metadata() {
+    let (mut contract, envelope) = setup();
+    context("attacker.testnet", NOW);
+    rejects(|| {
+        contract.configure_agent(
+            account("attacker.testnet"),
+            "attacker-policy".into(),
+            account("router.testnet"),
+            NOW + 10_000,
+            U128(1),
+            U128(1),
+        );
+    });
+    rejects(|| {
+        contract.configure_envelope_profile(account("agent.testnet"), envelope);
+    });
+}
+
 fn authorize(contract: &mut QPCNear, envelope: Value) -> Value {
     let hash = envelope_commitment(&envelope);
     contract.authorize_envelope(envelope, hash)
@@ -126,7 +173,7 @@ fn existing_incompatible_state_cannot_be_reset_by_new() {
 
 #[test]
 fn shared_js_rust_bytes_and_hash_match() {
-    context("owner.testnet", NOW);
+    context("wkams.testnet", NOW);
     let vector = fixture();
     validate_envelope(&vector["envelope"]);
     assert_eq!(
@@ -177,7 +224,7 @@ fn actual_public_authorization_entrypoint_consumes_durable_state_only() {
 fn independent_agents_can_authorize_the_same_intent_id() {
     let (mut contract, envelope) = setup();
     authorize(&mut contract, envelope.clone());
-    context("owner.testnet", NOW);
+    context("wkams.testnet", NOW);
     let other = account("other.testnet");
     contract.configure_agent(
         other.clone(),
@@ -203,7 +250,7 @@ fn same_intent_executions_callbacks_getters_and_refunds_are_agent_isolated() {
     let intent = string(&first["intentId"]).to_owned();
     let first_hash = envelope_commitment(&first);
     execute(&mut contract, first.clone(), recipient.clone());
-    context("owner.testnet", NOW);
+    context("wkams.testnet", NOW);
     let other = account("other.testnet");
     contract.configure_agent(
         other.clone(),
@@ -433,7 +480,7 @@ fn native_predecessor_not_signer_metadata_authenticates() {
     rejects(|| {
         authorize(&mut contract, envelope.clone());
     });
-    context("owner.testnet", NOW);
+    context("wkams.testnet", NOW);
     rejects(|| {
         contract.configure_envelope_profile(account("attacker.testnet"), envelope);
     });
@@ -458,7 +505,7 @@ fn recipient_revocation_and_time_checks_enforced() {
             authorize(&mut contract, changed);
         });
     }
-    context("owner.testnet", NOW);
+    context("wkams.testnet", NOW);
     contract.revoke_agent(account("agent.testnet"));
     context("agent.testnet", NOW);
     rejects(|| {
@@ -486,7 +533,7 @@ fn nonce_intent_caps_and_reconfiguration_cannot_reset_replay() {
     rejects(|| {
         authorize(&mut contract, envelope.clone());
     });
-    context("owner.testnet", NOW);
+    context("wkams.testnet", NOW);
     contract.revoke_agent(account("agent.testnet"));
     contract.configure_agent(
         account("agent.testnet"),
@@ -511,7 +558,7 @@ fn nonce_intent_caps_and_reconfiguration_cannot_reset_replay() {
 #[test]
 fn per_payment_limit_expired_policy_and_nonce_overflow_fail_without_consumption() {
     let (mut contract, mut envelope) = setup();
-    context("owner.testnet", NOW);
+    context("wkams.testnet", NOW);
     envelope["amount"]["destinationAtomic"] = json!("5001");
     contract.configure_envelope_profile(account("agent.testnet"), envelope.clone());
     context("agent.testnet", NOW);
@@ -529,7 +576,7 @@ fn per_payment_limit_expired_policy_and_nonce_overflow_fail_without_consumption(
     rejects(|| {
         authorize(&mut contract, envelope.clone());
     });
-    context("owner.testnet", NOW);
+    context("wkams.testnet", NOW);
     envelope["amount"]["destinationAtomic"] = json!("1000");
     contract.configure_envelope_profile(account("agent.testnet"), envelope.clone());
     let mut policy = contract.agents.get(&account("agent.testnet")).unwrap();
@@ -570,7 +617,7 @@ fn execution_context(caller: &str, now: u64, deposit: u128, gas_tgas: u64) {
 fn near_execution_setup() -> (QPCNear, Value, AccountId) {
     let (mut contract, mut envelope) = setup();
     let recipient = account("recipient.testnet");
-    context("owner.testnet", NOW);
+    context("wkams.testnet", NOW);
     contract.configure_agent(
         account("agent.testnet"),
         "policy-1".into(),
@@ -809,7 +856,7 @@ fn failed_native_transfer_refund_is_agent_only_exact_once_and_retry_safe() {
     rejects(|| {
         drop(contract.claim_failed_near_refund(intent.clone()));
     });
-    context("owner.testnet", NOW + 1);
+    context("wkams.testnet", NOW + 1);
     contract.revoke_agent(account("agent.testnet"));
     context("agent.testnet", NOW + 1);
     drop(contract.claim_failed_near_refund(intent.clone()));
@@ -948,7 +995,7 @@ fn reconfiguration_invalidates_stale_execution_but_does_not_rewrite_inflight_res
     let intent = string(&envelope["intentId"]).to_owned();
     let hash = envelope_commitment(&envelope);
     execute(&mut contract, envelope.clone(), recipient.clone());
-    context("owner.testnet", NOW);
+    context("wkams.testnet", NOW);
     contract.revoke_agent(account("agent.testnet"));
     contract.configure_agent(
         account("agent.testnet"),
@@ -995,7 +1042,7 @@ fn native_execution_enforces_expiry_policy_and_recipient_revocation() {
         100,
     );
     rejects(|| execute(&mut contract, envelope.clone(), recipient.clone()));
-    context("owner.testnet", NOW);
+    context("wkams.testnet", NOW);
     contract.set_recipient_permission(
         account("agent.testnet"),
         string(&envelope["destination"]["recipientCommitment"]).to_owned(),
@@ -1003,7 +1050,7 @@ fn native_execution_enforces_expiry_policy_and_recipient_revocation() {
     );
     execution_context("agent.testnet", NOW, 1000, 100);
     rejects(|| execute(&mut contract, envelope.clone(), recipient.clone()));
-    context("owner.testnet", NOW);
+    context("wkams.testnet", NOW);
     contract.revoke_agent(account("agent.testnet"));
     execution_context("agent.testnet", NOW, 1000, 100);
     rejects(|| execute(&mut contract, envelope.clone(), recipient.clone()));
