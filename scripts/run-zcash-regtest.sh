@@ -13,8 +13,17 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/qpc-zcash-regtest.XXXXXX")
 chmod 700 "$work"
 project="qpc-regtest-$$"
 cleanup() {
+  result=$?
+  if [ "$result" -ne 0 ]; then
+    # Preserve actionable startup/test diagnostics while redacting the generated
+    # RPC credentials before they can enter CI logs.
+    QPC_REGTEST_DIR="$work" QPC_REGTEST_PROJECT="$project" \
+      docker compose -p "$project" -f "$compose" logs --no-color 2>&1 |
+      sed -e "s/$user/[REDACTED]/g" -e "s/$password/[REDACTED]/g" >&2 || true
+  fi
   QPC_REGTEST_DIR="$work" QPC_REGTEST_PROJECT="$project" docker compose -p "$project" -f "$compose" down --volumes --remove-orphans >/dev/null 2>&1 || true
   rm -rf -- "$work"
+  return "$result"
 }
 trap cleanup EXIT HUP INT TERM
 mkdir -p "$work/node" "$work/lightwalletd-data"
