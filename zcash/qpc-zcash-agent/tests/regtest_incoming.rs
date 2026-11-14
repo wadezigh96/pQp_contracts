@@ -342,9 +342,8 @@ async fn wait_operation(opid: &str) -> String {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(240);
     let ids = serde_json::json!([opid]).to_string();
     loop {
-        let status: serde_json::Value =
-            serde_json::from_str(&cli(&["z_getoperationstatus", &ids]))
-                .expect("z_getoperationstatus returned malformed JSON");
+        let status: serde_json::Value = serde_json::from_str(&cli(&["z_getoperationstatus", &ids]))
+            .expect("z_getoperationstatus returned malformed JSON");
         match classify_operation_status(&status) {
             Ok(OperationState::Success) => {
                 let done: serde_json::Value =
@@ -388,10 +387,16 @@ fn operation_status_surfaces_node_failure_reason() {
 fn operation_status_handles_pending_success_missing_and_unknown() {
     for pending in ["queued", "executing"] {
         let status = serde_json::json!([{"id": "opid-1", "status": pending}]);
-        assert_eq!(classify_operation_status(&status), Ok(OperationState::Pending));
+        assert_eq!(
+            classify_operation_status(&status),
+            Ok(OperationState::Pending)
+        );
     }
     let success = serde_json::json!([{"id": "opid-1", "status": "success"}]);
-    assert_eq!(classify_operation_status(&success), Ok(OperationState::Success));
+    assert_eq!(
+        classify_operation_status(&success),
+        Ok(OperationState::Success)
+    );
     assert!(classify_operation_status(&serde_json::json!([])).is_err());
     assert!(classify_operation_status(&serde_json::json!({"status": "success"})).is_err());
     assert!(classify_operation_status(&serde_json::json!([{"status": "mystery"}])).is_err());
