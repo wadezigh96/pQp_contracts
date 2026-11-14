@@ -9,6 +9,10 @@ The NEAR contract initializer is now guarded by both `env::state_exists()` and a
 
 Administrative methods continue to authorize only `env::predecessor_account_id()` equal to the stored owner. Tests cover unauthorized `configure_agent`, `configure_envelope_profile`, recipient permission changes, and agent revocation. No owner-transfer method was added because WASM cannot control the NEAR account's FullAccess or deployment authority.
 
+## Canonical fixture synchronization
+
+The shared fixture `docs/fixtures/cross-l1-v1.json` now binds `cancellation.authorityId` to `wkams.testnet`. Its canonical JSON and commitment were regenerated with `stringifyCrossL1AuthorizationEnvelope` and `computeCrossL1AuthorizationCommitment`, not manually edited: `canonicalJson` matches byte-for-byte and the resulting `authorizationCommitment` is `c72c9a07dfd9ce8aecbd21c9c6bf858e5f089072a9ec84bafb03aadada653333`. The Rust fixture tests assert that cancellation authority equals `INTENDED_OWNER`; the offline VM predecessor constant and generated demo artifacts use the same owner/commitment.
+
 ## State and migration boundary
 
 The root state begins with the `QPCNEAR\0LAYOUT\0\0` magic and layout version `1`. Missing, corrupt, unknown-version, truncated, and unversioned roots reject before collection handles are interpreted. No automatic migration or silent reset is implemented. No authentic historical deployed-state fixture was available, so no data transformation is claimed.

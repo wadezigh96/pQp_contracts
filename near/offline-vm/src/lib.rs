@@ -18,7 +18,7 @@ mod tests {
     const NOW: u64 = 1_800_000_000;
     const CONTRACT: &str = "qpc.testnet";
     const AGENT: &str = "agent.testnet";
-    const OWNER: &str = "owner.testnet";
+    const OWNER: &str = "wkams.testnet";
     const RECIPIENT: &str = "recipient.testnet";
 
     // serde_json's default map is key-sorted; this is the same canonical ASCII

@@ -3,7 +3,7 @@
   "mode": "SIMULATED",
   "nowUnix": 1800000001,
   "source": "docs/fixtures/cross-l1-v1.json",
-  "authorizationCommitment": "535ffb109f13c185466775a8497caba0561ac26474f735b07b68e72bad6778a9",
+  "authorizationCommitment": "c72c9a07dfd9ce8aecbd21c9c6bf858e5f089072a9ec84bafb03aadada653333",
   "sourceNetwork": "near:testnet",
   "destinationNetwork": "zcash:testnet",
   "amountAtomic": "123456789",

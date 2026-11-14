@@ -27,6 +27,11 @@ fn setup() -> (QPCNear, Value) {
         U128(10_000),
     );
     let mut envelope = fixture()["envelope"].clone();
+    assert_eq!(
+        string(&envelope["cancellation"]["authorityId"]),
+        INTENDED_OWNER,
+        "fixture cancellation authority must match contract owner"
+    );
     envelope["policy"]["version"] = json!(1);
     envelope["nonce"] = json!("0");
     envelope["amount"]["destinationAtomic"] = json!("1000");
@@ -176,6 +181,11 @@ fn shared_js_rust_bytes_and_hash_match() {
     context("wkams.testnet", NOW);
     let vector = fixture();
     validate_envelope(&vector["envelope"]);
+    assert_eq!(
+        string(&vector["envelope"]["cancellation"]["authorityId"]),
+        INTENDED_OWNER,
+        "fixture cancellation authority must match contract owner"
+    );
     assert_eq!(
         canonical_json(&vector["envelope"]),
         string(&vector["canonicalJson"])
