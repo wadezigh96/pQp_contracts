@@ -69,7 +69,7 @@ python3 -m unittest discover -s "$root/scripts/tests" -p 'test_*.py'
 docker compose -p "$project" -f "$compose" up -d --wait
 container_id=$(docker compose -p "$project" -f "$compose" ps -q zcashd)
 [ -n "$container_id" ] || { echo "Regtest full-node container is missing." >&2; exit 1; }
-ports=$(docker inspect --format '{{json .NetworkSettings.Ports}}' "$container_id")
+ports=$(docker inspect --format '{{json .Config.ExposedPorts}}|{{json .HostConfig.PortBindings}}|{{json .NetworkSettings.Ports}}' "$container_id")
 python3 "$root/scripts/check-zcash-regtest-rpc.py" --verify-docker-mapping "$ports"
 export QPC_ZCASH_CONF="$work/zcashd.conf"
 python3 "$root/scripts/check-zcash-regtest-rpc.py"

@@ -56,11 +56,20 @@ class RpcPreflightTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_accepts_exact_loopback_docker_mapping(self):
-        PREFLIGHT.verify_docker_mapping(json.dumps({"18232/tcp": [{"HostIp": "127.0.0.1", "HostPort": "18232"}]}))
+        exposed = {"18232/tcp": {}}
+        mapped = {"18232/tcp": [{"HostIp": "127.0.0.1", "HostPort": "18232"}]}
+        PREFLIGHT.verify_docker_mapping("|".join(map(json.dumps, (exposed, mapped, mapped))))
 
     def test_rejects_non_loopback_docker_mapping(self):
-        with self.assertRaisesRegex(RuntimeError, "not exactly host-loopback"):
-            PREFLIGHT.verify_docker_mapping(json.dumps({"18232/tcp": [{"HostIp": "0.0.0.0", "HostPort": "18232"}]}))
+        exposed = {"18232/tcp": {}}
+        wildcard = {"18232/tcp": [{"HostIp": "0.0.0.0", "HostPort": "18232"}]}
+        with self.assertRaisesRegex(RuntimeError, "mapping mismatch"):
+            PREFLIGHT.verify_docker_mapping("|".join(map(json.dumps, (exposed, wildcard, wildcard))))
+
+    def test_rejects_declared_but_unpublished_rpc_port(self):
+        exposed = {"18232/tcp": {}}
+        with self.assertRaisesRegex(RuntimeError, "mapping mismatch"):
+            PREFLIGHT.verify_docker_mapping("|".join(map(json.dumps, (exposed, {}, None))))
 
     def test_accepts_authenticated_regtest_rpc(self):
         PREFLIGHT.check(self.config, timeout=1, report=False)

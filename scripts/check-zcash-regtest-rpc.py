@@ -34,12 +34,23 @@ def credentials(path):
 
 def verify_docker_mapping(raw):
     try:
-        ports = json.loads(raw)
-    except json.JSONDecodeError:
+        exposed_raw, bindings_raw, active_raw = raw.split("|", 2)
+        exposed = json.loads(exposed_raw)
+        bindings = json.loads(bindings_raw)
+        active = json.loads(active_raw)
+    except (ValueError, json.JSONDecodeError):
         raise RuntimeError("Docker returned malformed port mapping data") from None
     expected = [{"HostIp": "127.0.0.1", "HostPort": "18232"}]
-    if not isinstance(ports, dict) or ports.get("18232/tcp") != expected:
-        raise RuntimeError(f"full-node RPC Docker mapping is not exactly host-loopback TCP 18232; observed {ports.get('18232/tcp')!r}")
+    if (
+        not isinstance(exposed, dict)
+        or "18232/tcp" not in exposed
+        or not isinstance(bindings, dict)
+        or bindings.get("18232/tcp") != expected
+        or not isinstance(active, dict)
+        or active.get("18232/tcp") != expected
+    ):
+        observed = {"exposed": exposed, "bindings": bindings, "active": active}
+        raise RuntimeError(f"Docker RPC port mapping mismatch (loopback only required): {observed!r}")
 
 
 def check(path, timeout=45, report=True):
