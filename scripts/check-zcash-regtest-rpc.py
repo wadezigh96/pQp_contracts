@@ -39,7 +39,7 @@ def verify_docker_mapping(raw):
         raise RuntimeError("Docker returned malformed port mapping data") from None
     expected = [{"HostIp": "127.0.0.1", "HostPort": "18232"}]
     if not isinstance(ports, dict) or ports.get("18232/tcp") != expected:
-        raise RuntimeError("full-node RPC Docker mapping is not exactly host-loopback TCP 18232")
+        raise RuntimeError(f"full-node RPC Docker mapping is not exactly host-loopback TCP 18232; observed {ports.get('18232/tcp')!r}")
 
 
 def check(path, timeout=45, report=True):
