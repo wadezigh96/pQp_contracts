@@ -63,12 +63,45 @@ fn cli(args: &[&str]) -> String {
         .args(args)
         .output()
         .expect("run local zcash-cli");
-    assert!(result.status.success(), "local zcash-cli command failed");
+    assert!(
+        result.status.success(),
+        "local zcash-cli method {} failed: {}",
+        args.first().copied().unwrap_or("unknown"),
+        {
+            let conf = std::env::var("QPC_ZCASH_CONF")
+                .ok()
+                .and_then(|path| std::fs::read_to_string(path).ok());
+            redacted_cli_stderr(&result.stderr, conf.as_deref())
+        }
+    );
     String::from_utf8(result.stdout)
         .expect("CLI output UTF-8")
         .trim()
         .to_owned()
 }
+fn redacted_cli_stderr(stderr: &[u8], conf: Option<&str>) -> String {
+    let mut message = String::from_utf8_lossy(stderr).into_owned();
+    if let Some(conf) = conf {
+        for key in ["rpcuser=", "rpcpassword="] {
+            if let Some(secret) = conf.lines().find_map(|line| line.strip_prefix(key)) {
+                if !secret.is_empty() {
+                    message = message.replace(secret, "[REDACTED]");
+                }
+            }
+        }
+    }
+    message.trim().to_owned()
+}
+
+#[test]
+fn cli_error_redaction_hides_private_rpc_credentials() {
+    let conf = "rpcuser=private-user\nrpcpassword=private-password\n";
+    let message = redacted_cli_stderr(b"auth failed for private-user:private-password", Some(conf));
+    assert!(!message.contains("private-user"));
+    assert!(!message.contains("private-password"));
+    assert!(message.contains("[REDACTED]"));
+}
+
 fn state_from_rpc(v: &serde_json::Value) -> TreeState {
     TreeState {
         network: v["network"]
