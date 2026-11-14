@@ -50,7 +50,7 @@ nuparams=c8e71055:1
 nuparams=4dec4df0:1
 rpcuser=$user
 rpcpassword=$password
-rpcbind=0.0.0.0
+rpcbind=0.0.0.0:18232
 rpcallowip=172.30.8.0/24
 EOF_CONF
 cat > "$work/lightwalletd.yml" <<EOF_CONF
@@ -65,7 +65,15 @@ data-dir: /var/lib/lightwalletd
 EOF_CONF
 chmod 600 "$work/zcashd.conf" "$work/lightwalletd.yml"
 export QPC_REGTEST_DIR="$work" QPC_REGTEST_PROJECT="$project" QPC_CONTAINER_UID="$(id -u):$(id -g)" QPC_REGTEST_COMPOSE="$compose"
+python3 -m unittest discover -s "$root/scripts/tests" -p 'test_*.py'
 docker compose -p "$project" -f "$compose" up -d --wait
+mapping=$(docker compose -p "$project" -f "$compose" port zcashd 18232)
+[ "$mapping" = "127.0.0.1:18232" ] || {
+  echo "Full-node RPC port is not published exclusively on host loopback." >&2
+  exit 1
+}
+export QPC_ZCASH_CONF="$work/zcashd.conf"
+python3 "$root/scripts/check-zcash-regtest-rpc.py"
 cat > "$work/zcash-cli" <<'EOF_CLI'
 #!/bin/sh
 exec docker compose -p "$QPC_REGTEST_PROJECT" -f "$QPC_REGTEST_COMPOSE" exec -T zcashd zcash-cli -regtest -conf=/run/qpc/zcashd.conf -datadir=/var/lib/zcash "$@"
@@ -73,7 +81,7 @@ EOF_CLI
 chmod 700 "$work/zcash-cli"
 QPC_ZCASH_CLI="$work/zcash-cli"
 export QPC_REGTEST_EVIDENCE="$work/evidence.json"
-export QPC_ZCASH_CLI QPC_ZCASH_CONF="$work/zcashd.conf" QPC_ZCASH_RPC_ENDPOINT=http://127.0.0.1:18232 QPC_LIGHTWALLETD_ENDPOINT=http://127.0.0.1:9067
+export QPC_ZCASH_CLI QPC_ZCASH_RPC_ENDPOINT=http://127.0.0.1:18232 QPC_LIGHTWALLETD_ENDPOINT=http://127.0.0.1:9067
 cd "$root/zcash/qpc-zcash-agent"
 # Fail closed if the named real integration test was accidentally removed,
 # renamed, or no longer ignored (Cargo otherwise exits successfully on zero tests).
